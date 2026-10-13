@@ -55,7 +55,12 @@ function onScroll() {
   requestAnimationFrame(() => {
     ticking = false;
     const y = window.scrollY || doc.scrollTop || 0;
-    header?.classList.toggle('is-scrolled', y > 8);
+    // Histerezis: eşik çevresinde gidip gelmesin (açılış 24px, kapanış 4px).
+    if (header) {
+      const scrolled = header.classList.contains('is-scrolled');
+      if (!scrolled && y > 24) header.classList.add('is-scrolled');
+      else if (scrolled && y < 4) header.classList.remove('is-scrolled');
+    }
     if (toTop) { toTop.hidden = y < 600; toTop.classList.toggle('is-visible', y >= 600); }
   });
 }
