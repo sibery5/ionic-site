@@ -1,0 +1,12 @@
+# Yükleme klasöründe yalnızca görsel dosyaları sunulur; betik çalıştırılamaz.
+Options -Indexes -ExecCGI
+Require all denied
+<FilesMatch "(?i)^[a-z0-9_-]+\.(webp|jpe?g|png|avif)$">
+  Require all granted
+</FilesMatch>
+RemoveHandler .php .phtml .phar .php3 .php4 .php5 .php7 .php8 .cgi .pl .py .sh
+RemoveType .php .phtml .phar .php3 .php4 .php5 .php7 .php8
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Content-Security-Policy "default-src 'none'; img-src 'self'; sandbox"
+</IfModule>

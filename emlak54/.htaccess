@@ -1,0 +1,86 @@
+# Emlak 54 — Apache 2.4 yapılandırması (kök dizinde veya /emlak54/ gibi alt klasörde çalışır)
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# Kurulu dizini otomatik bul (ör. "/" veya "/emlak54/") → %{ENV:BASE}
+RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
+RewriteRule ^(.*)$ - [E=BASE:%1]
+
+# (İsteğe bağlı) SSL kurulduktan sonra tüm trafiği HTTPS'e yönlendirmek için alttaki 3 satırın başındaki # işaretini kaldırın.
+# RewriteCond %{HTTPS} !=on
+# RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L,NE]
+
+# Gizli dosyalar (.git, .env, .htpasswd …) ve uygulama klasörleri doğrudan açılamaz (.well-known hariç).
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+RewriteRule ^(?:database|includes|partials|templates|storage|api|deploy)(?:/|$) - [F,L]
+
+# Ana sayfa tek adreste: /index.php → / (yinelenen URL oluşmaz, sorgu parametreleri korunur).
+RewriteCond %{REQUEST_METHOD} =GET
+RewriteCond %{THE_REQUEST} \s/(?:[^?\s]*/)?index\.php[?\s]
+RewriteRule ^index\.php$ %{ENV:BASE} [R=301,L]
+
+# Eski statik demo adresleri → yeni sayfalar.
+RewriteRule ^index\.html$ %{ENV:BASE} [R=301,L]
+RewriteRule ^hakkimizda\.html$ %{ENV:BASE}hakkimizda.php [R=301,L]
+RewriteRule ^iletisim\.html$ %{ENV:BASE}iletisim.php [R=301,L]
+RewriteRule ^ilanlar/([a-z0-9-]+)\.html$ %{ENV:BASE}ilan/$1/ [R=301,L,NE]
+
+# İlan detayları: tek kanonik biçim /ilan/slug/ (eğik çizgisiz ve ilan.php?slug= adresleri yönlendirilir).
+RewriteCond %{REQUEST_METHOD} =GET
+RewriteCond %{THE_REQUEST} \s/(?:[^?\s]*/)?ilan\.php\?slug=([a-z0-9-]+)[&\s]
+RewriteRule ^ilan\.php$ %{ENV:BASE}ilan/%1/ [R=301,L,QSD]
+RewriteRule ^ilan/([a-z0-9-]+)$ %{ENV:BASE}ilan/$1/ [R=301,L]
+RewriteRule ^ilan/([a-z0-9-]+)/$ ilan.php?slug=$1 [QSA,L]
+
+# Dinamik SEO dosyaları
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^robots\.txt$ robots.php [L]
+
+# Bulunamayan adresler temalı 404 sayfasına (gerçek 404 durum koduyla) gider.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ 404.php [L]
+</IfModule>
+
+# Kaynak, yapılandırma, yedek ve belge dosyaları web'den indirilemez.
+<FilesMatch "(?i)^(config\.php|properties\.json|package(-lock)?\.json|composer\.(json|lock)|.+\.(md|sql|conf|lock|log|bak|old|orig|swp|dist|ini|sh|tpl|ya?ml|env))$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header unset X-Powered-By
+  # CSS/JS adresleri dosya değiştikçe ?v= ile yenilenir; bu yüzden uzun süre önbelleğe alınabilir.
+  <FilesMatch "(?i)\.(css|js)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+  <FilesMatch "(?i)\.(webp|jpe?g|png|avif|svg|ico|woff2?)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 30 days"
+  ExpiresByType application/javascript "access plus 30 days"
+  ExpiresByType text/javascript "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/avif "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+
+# Metin yanıtlarını sıkıştır (modül yoksa sessizce atlanır).
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json application/xml image/svg+xml
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/xml image/svg+xml
+</IfModule>
