@@ -21,6 +21,7 @@ import { cemalLook } from './entities/Player';
 import { makePerson, mat, type PersonRig } from './world/models';
 import { floorTexture } from './world/textures';
 import { buildGallery } from './dev/gallery';
+import { Post } from './world/post';
 import { playBot, type BotPolicy } from './dev/bot';
 import { applyRunToSave, ensureDaily, isUnlocked, recordEnding } from './meta/profile';
 import { upgrade, type CosmeticSlot } from './meta/progress';
@@ -96,6 +97,7 @@ class MenuScene {
 
 class Game {
   renderer: THREE.WebGLRenderer;
+  post: Post;
   input: Input;
   hud: Hud;
   menus: Menus;
@@ -114,6 +116,7 @@ class Game {
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     root.appendChild(this.renderer.domElement);
+    this.post = new Post(this.renderer);
     this.input = new Input(this.renderer.domElement);
     this.hud = new Hud(root);
     this.menus = new Menus(root);
@@ -170,6 +173,7 @@ class Game {
     const q: Quality = this.save.settings.quality;
     this.renderer.shadowMap.enabled = q !== 'low';
     this.renderer.setPixelRatio(q === 'high' ? Math.min(2, window.devicePixelRatio) : q === 'medium' ? Math.min(1.25, window.devicePixelRatio) : 0.85);
+    this.post.setQuality(q);
     this.resize();
   }
 
@@ -177,6 +181,7 @@ class Game {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
+    this.post?.setSize(w, h);
     if (this.menuScene) {
       this.menuScene.camera.aspect = w / h;
       this.menuScene.camera.updateProjectionMatrix();
@@ -201,15 +206,15 @@ class Game {
     }
     if (this.state === 'cutscene' && this.cutscene) {
       this.cutscene.update(dt, this.input);
-      if (this.cutscene) this.renderer.render(this.cutscene.scene, this.cutscene.camera);
+      if (this.cutscene) this.post.render(this.cutscene.scene, this.cutscene.camera, dt);
     } else if (this.state === 'playing' && this.run) {
       this.run.update(dt, this.input);
-      if (this.run) this.renderer.render(this.run.scene, this.run.camera);
+      if (this.run) this.post.render(this.run.scene, this.run.camera, dt);
     } else if (this.run && (this.state === 'paused' || this.state === 'overlay')) {
-      this.renderer.render(this.run.scene, this.run.camera);
+      this.post.render(this.run.scene, this.run.camera, dt);
     } else {
       this.menuScene.update(dt);
-      this.renderer.render(this.menuScene.scene, this.menuScene.camera);
+      this.post.render(this.menuScene.scene, this.menuScene.camera, dt);
     }
     this.input.endFrame();
     requestAnimationFrame((t) => this.loop(t));
@@ -234,13 +239,17 @@ class Game {
       this.save.scenes.push(id);
       this.persist();
     }
+    // önceki sahne hâlâ açıksa kapat; bitince yalnızca kendi sahnesini kapatsın
+    this.cutscene?.dispose();
     this.state = 'cutscene';
-    this.cutscene = new Cutscene(def, document.getElementById('app')!, this.save.look, window.innerWidth / window.innerHeight, () => {
-      this.cutscene?.dispose();
+    const cs: Cutscene = new Cutscene(def, document.getElementById('app')!, this.save.look, window.innerWidth / window.innerHeight, () => {
+      if (this.cutscene !== cs) return;
+      cs.dispose();
       this.cutscene = null;
       this.state = 'overlay';
       then();
     });
+    this.cutscene = cs;
   }
 
   /** Bir sahne henüz izlenmediyse oynat, yoksa doğrudan devam et. */

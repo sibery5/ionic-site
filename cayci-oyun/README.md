@@ -1,6 +1,6 @@
 # ÇAYCI — Don't Spill the Tea
 
-Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın altı katına çay yetiştirdiğin, fizik tabanlı bir risk-ödül oyunu. Sürüm **0.3**.
+Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın altı katına çay yetiştirdiğin, fizik tabanlı bir risk-ödül ve dedikodu oyunu: çıraklıktan çay ocağının patronluğuna. Sürüm **0.4**.
 
 ![Ana menü](docs/gorseller/01-ana-menu.jpg)
 
@@ -13,9 +13,11 @@ Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın alt
 Tepsiye istediğin kadar bardak koy: çok bardak çok bahşiş, ama tepsi ağırlaştıkça huysuzlaşır ve 6 bardaktan sonra kule başlar. Bahşişler tepsideki kavanozda durur, ancak ocağa dönünce kasaya geçer. Tepsi uçarsa kavanozdaki para da gider.
 
 - **Kariyer:** 6 mekân (Giriş Salonu → Zemin Kat → 1. Kat → 2. Kat → 3. Kat → Teras). Her mekânın kendi engeli (kalabalık, paspaslı ıslak zemin, açık/demli siparişler, kedi Paşa, elektrik kesintisi, rüzgâr), iki görevi, üç yıldızı ve yenilecek rakipleri var. Bir mekânda 1 yıldız sonrakini açar.
-- **Hikâye:** VIP siparişlerini eksiksiz götürdükçe müşteriler dedikodu anlatır. 12 dedikodudan 10'unu topla, terastaki han toplantısında hanın kaderine karar ver (3 son).
+- **Dedikodu ekonomisi:** VIP'ler ve memnun müşteriler kulağına laf fısıldar; hepsi cep defterine yazılır. Mor balonlu müşteri "dedikodu var mı?" diye sorar: doğru laf doğru kişiye bahşiş, itibar ve han tarafına kanıt getirir. Yalan, alakasız ya da kişinin kendisi hakkındaki laf ise bardak kırdırır ya da müşteriyi masasından kaldırıp seni kovalatır; Rıza Usta'nın ocağına kaçarsan kurtulursun. Kötü adamlar iki kat öder ama bu ihanettir.
+- **Sinir ve tepsi:** Yolunu kesen, tepsine çarpan, ayağına dolanan oldukça sinir göstergen dolar; dolunca R ile tepsiyle vurursun. Patron Nadir Bey kameradan izliyor: telefonuna mesaj düşer, itibarın düşer, üçüncüsünde maaşından keser.
+- **Çaycının yükselişi:** Çırak → Ocakçı → Kat Çaycısı → Baş Çaycı → Han Çaycıbaşı → Çay Ocağı Patronu. Her terfi bir ara sahne ve maaş getirir. Terastaki han toplantısında kanıtlarınla gerçeği anlat, sus ya da Selim'in teklifini kabul et (4 son).
 - **Günlük Mücadele:** Her gün herkese aynı mekân ve aynı tohum, yükseltmeler kapalı.
-- **İlerleme:** XP ve 30 seviye, 7 rütbe, seviyeyle açılan kıyafetler (dolap), bahşişle alınan yükseltmeler (çarşı), her gün 3 yeni görev, 21 başarım, mekân ve gün başına yerel sıralama.
+- **İlerleme:** XP ve 30 seviye, 6 unvan ve maaş, itibar, seviyeyle açılan kıyafetler (dolap), bahşişle alınan yükseltmeler (çarşı), her gün 3 yeni görev, 30 başarım, mekân ve gün başına yerel sıralama.
 
 ## Çalıştırma
 
@@ -50,6 +52,8 @@ npm run dev        # tarayıcıda http://localhost:5173 açılır
 | E (ocakta basılı) | A | Demli çay doldur |
 | Q (ocakta basılı) | X | Açık çay doldur (1. kattan itibaren) |
 | E (masada) | A | Teslim et |
+| 1-9 / 0 | Yön ↑↓ + A | Dedikodu seç / bilmiyorum |
+| R (sinir dolunca) | RT | Tepsiyle vur |
 | F, sonra yeşilde F | B | Fırıldak: tutarsa sonraki teslim ×2 |
 | Boşluk | Y | Tepsiyi kaldır |
 | Sol tık basılı + fare | | Ustalar için: eli kendin döndür |
@@ -84,9 +88,10 @@ src/
   config.ts        bütün ayar sayıları
   core/            girdi (klavye, fare, oyun kolu), dil (TR/EN), kayıt, Steam köprüsü, tohumlu rastgele sayı
   physics/         tepsi simülasyonu, Fırıldak, ızgara çarpışması ve yol bulma
-  game/            mekânlar, hikâye, kat haritaları, bahşiş kuralları, vardiya sahnesi (Run.ts)
-  meta/            XP/seviye, kozmetik, yükseltme, günlük görevler, başarımlar, sıralama, tur sonu işleme
-  world/           modeller, dokular, ışık ve gökyüzü, kat inşası
+  game/            mekânlar, hikâye, dedikodular (rumors.ts), entrika (Intrigue.ts: dedikodu paneli, kovalama,
+                   sinir, patron mesajları), ara sahneler (Cutscene.ts, scenes.ts), vardiya sahnesi (Run.ts)
+  meta/            XP/seviye, unvanlar (titles.ts), kozmetik, yükseltme, günlük görevler, başarımlar, sıralama, tur sonu işleme
+  world/           modeller, dekor (decor.ts), dokular, ışık ve gökyüzü, son işlem (post.ts), kat inşası
   entities/        Cemal, han sakinleri, müşteriler, Paşa, tepsi görünümü
   fx/              damlalar, cam kırıkları, buhar, gölcükler
   audio/           ses sentezi ve müzik

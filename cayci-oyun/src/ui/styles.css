@@ -1160,7 +1160,7 @@ kbd {
 
 
 /* ---------- v0.4: dedikodu, kovalama, sinir, telefon, unvan ---------- */
-.ticket.gossip {
+.ticket.ask {
   background: #efe2ff;
   border-left: 6px solid #6b3fa0;
 }
@@ -1516,4 +1516,8 @@ kbd {
   right: 16px;
   width: auto;
   margin: 0;
+}
+.small-note {
+  font-size: 12px;
+  margin: 2px 0 8px;
 }

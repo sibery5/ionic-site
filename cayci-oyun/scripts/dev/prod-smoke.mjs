@@ -13,6 +13,13 @@ console.log('hook yok:', await page.evaluate(() => typeof window.__cayci === 'un
 await page.locator('.btn.primary').first().click(); // kariyer
 await page.waitForTimeout(400);
 await page.locator('.venue-card:not(.locked)').first().click();
+await page.waitForTimeout(1500);
+// ilk gün: Rıza Usta sahnesi oynar. Bir repliği tıkla, kareyi al, atla.
+console.log('giriş sahnesi:', await page.locator('.dialogue').count() > 0);
+await page.locator('.dlg-box').click();
+await page.waitForTimeout(1200);
+await page.screenshot({ path: 'shots/prod-scene.png' });
+await page.locator('.dlg-skip').click();
 await page.waitForTimeout(400);
 await page.locator('.btn.primary').first().click(); // başla
 await page.waitForTimeout(400);

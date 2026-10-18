@@ -1,5 +1,5 @@
 # ÇAYCI — Don't Spill the Tea
-## Oyun Tasarım Belgesi (GDD) · sürüm 0.3
+## Oyun Tasarım Belgesi (GDD) · sürüm 0.4
 
 > Askılı çay tepsisini sallayarak, tek damla dökmeden İstanbul'un en kaotik iş hanına çay yetiştir.
 
@@ -57,7 +57,7 @@ Zorluk eğrisi (`npm run tune:greed`, 0.3 fiziğiyle): 3 bardak normal yürüyü
 | Hikâye | Rıza Usta'nın notları, VIP müşterilerin anlattığı 12 dedikodu, terasta han toplantısı ve 3 son. |
 | Her gün dönmek | Günlük Mücadele (herkese aynı tohum) ve her gün 3 yeni görev. 7 farklı gün tamamlanınca başarım. |
 | Bağlanma | Cemal'in dolabı (5 tepsi, 5 yelek, 5 şapka, 3 bardak; seviyeyle açılır), rütbeler (Çırak → Efsane Çaycı), mekân başına yerel sıralama ve geçilecek han sakinleri. |
-| Ödül | XP ve 30 seviye, bahşişle alınan 6 yükseltme, 21 başarım (Steam başarımlarıyla aynı adlar). |
+| Ödül | XP ve 30 seviye, bahşişle alınan 6 yükseltme, 30 başarım (Steam başarımlarıyla aynı adlar; 0.4 ile 21 → 30). |
 
 ### Mekânlar
 
@@ -68,7 +68,7 @@ Zorluk eğrisi (`npm run tune:greed`, 0.3 fiziğiyle): 3 bardak normal yürüyü
 | 1. Kat | 110 sn | açık/demli, Gülsüm Abla siliyor | 10 renkli bardak, hiç kayma | 40 / 85 / 140 |
 | 2. Kat | 110 sn | açık/demli, kedi Paşa | Paşa'ya takılma, ×2 çarpan | 30 / 60 / 95 |
 | 3. Kat | 110 sn | açık/demli, karanlık (el feneri) | 1 kusursuz VIP, tek seferde 50₺ | 30 / 65 / 110 |
-| Teras | 120 sn | açık/demli, rüzgâr, kedi | 2 Fırıldak, 8+ bardakla teslim | 70 / 130 / 220 |
+| Teras | 120 sn | açık/demli, rüzgâr, kedi | 2 Fırıldak, 8+ bardakla teslim | 55 / 105 / 180 |
 
 ### Denge: bot ile ölçüm
 
@@ -111,6 +111,63 @@ Kural: 1 yıldız ≈ temkinli oyuncunun ortalamasının altı, 2 yıldız ≈ �
 - Sıralama yerel: steamworks.js 0.4'te Steam Leaderboards yok.
 - Masaüstü (Electron + Steam) sarmalayıcı bu ortamda çalıştırılamadı; yazıldı ama denenmedi.
 - Denge bota göre ayarlandı; gerçek oyuncu testi (en az 5–10 kişi) yapılmadı.
+
+## 1.7 Sürüm 0.4: dedikodu, kovalama ve çaycının yükselişi
+
+0.3 oynanınca istek şu oldu: kurgu daha güçlü olsun, dedikodular bir ekonomiye dönüşsün, yanlış laf komik bir kovalamacaya yol açsın, kalabalığa sinirlenen çaycı tepsiyle vurabilsin ve bunun bir bedeli olsun; oyun bir çıraklıktan patronluğa yükseliş hikâyesi olsun.
+
+### Dedikodu ekonomisi (`src/game/rumors.ts`, `src/game/Intrigue.ts`)
+
+| Öğe | Kural |
+|---|---|
+| Dedikodu | 20 tane. Her birinin konusu (📜 tapu, 💰 para, 📋 rapor, 📷 fotoğraf, 💬 kulis, 🐈 Paşa), kaynağı, kimin hakkında olduğu, doğru mu yalan mı ve değeri var. 11'i hanın kaderine dair hikâye kanıtı. |
+| Duymak | VIP siparişini eksiksiz götürünce müşteri kendi dedikodusunu anlatır (kariyer). Kusursuz teslimden sonra %20 şansla fısıltı (kariyer ve serbest). Hepsi cep defterine yazılır. |
+| Sormak | Bazı müşteriler çay söylerken "dedikodu var mı?" diye sorar (mor balon, kulak ve konu işareti). Vardiyada en çok 3, aralarında 16 sn. |
+| Anlatmak | Çay teslim edilince panel açılır, dünya durur: cepteki dedikodulardan biri ya da "bilmiyorum". |
+| Doğru kişi | Konuyu merak eden, han tarafından biri: dedikodunun değeri kadar bahşiş (sorulan konu değilse %60), itibar +3/+6, hikâye kanıtıysa kanıt han tarafına ulaşır. Aynı kişiye ikinci kez satılmaz. |
+| Kötü adam | Selim, Turgut, Gökdelen Yapı: iki kat para ama itibar −15, kanıt yanar (artık toplantıda işe yaramaz), Rıza Usta mesaj atar. |
+| Yalan | Konuyu merak edene yalan (falcının, hayalperestin lafları): "Yalan bu!", iki bardak kırılır, %45 ihtimalle kovalar, itibar −8. |
+| Kendisi hakkında | Kovalar. İtibar −10. |
+| Alakasız | "Bana ne!", %50 bir bardak kırılır, itibar −2. |
+| Kaynağına geri | "Onu sana ben anlattım!" Komik, zararsız. |
+
+### Kovalama
+
+Kızan müşteri masasından kalkar, kolları havada, yolu bularak koşar (3,1 m/s: yürüyüşten hızlı, koşudan yavaş). Kırmızı kenar ve uyarı yazısı çıkar, müzik hızlanır. Kaçmanın yolu Rıza Usta'nın ocağıdır ("ocağa kimse giremez"); 16 sn sonra yorulup vazgeçer. Yakalarsa tepsiye şaplak atar: tepsi savrulur, bardaklar uçar, kavanoz gider. Yani kovalamaca da tepsi fiziğiyle oynanır: koşarsan dökersin, yürürsen yakalanırsın.
+
+### Sinir ve tepsiyle vurma
+
+Sinir göstergesi yolu tıkanınca (ileri basıp yürüyemeyince), biri tepsiye çarpınca, kediye takılınca, kayınca ve sipariş kaçınca dolar, yavaşça iner. Dolunca R (oyun kolunda RT) ile önündeki kişiye tepsiyle vurulur: metal "DANK", ağır çekim, kişi yere yığılıp söylenerek kalkar. Bedeli: itibar −5 (Gülsüm Abla'ysa −8), patron Nadir Bey telefondan kızar, aynı vardiyada üçüncüsünden itibaren maaştan 10₺ keser. Kovalayan müşteriye sinir dolmadan da vurulabilir: kovalama biter ama patron yine kızar.
+
+### Çaycının yükselişi (`src/meta/titles.ts`)
+
+| Unvan | Şart | Maaş/vardiya |
+|---|---|---|
+| Çırak | başlangıç | 0₺ |
+| Ocakçı | Giriş Salonu 1★ | 5₺ |
+| Kat Çaycısı | Zemin Kat ve 1. Kat 1★ | 10₺ |
+| Baş Çaycı | 2. Kat 1★, itibar 45+ | 18₺ |
+| Han Çaycıbaşı | 3. Kat 1★, itibar 50+, 2 kanıt | 28₺ |
+| Çay Ocağı Patronu | toplantıda gerçeği anlat | 45₺ |
+
+İtibar (0–100, başlangıç 50) bahşişi ×0,9 ile ×1,1 arasında değiştirir. Toplantıda inanılmak için 6 kanıt (yanmamış) ve 35 itibar gerekir. Dört son: Patron Cemal (gerçek), Kimse İnanmadı (kanıt ya da itibar eksik), Susmak Altın (sus), AVM Müdürü (Selim'in 500₺'lik teklifi).
+
+### Ara sahneler (`src/game/Cutscene.ts`, `src/game/scenes.ts`)
+
+Oyun içi 3B sahneler: küçük setler (ocak, ofis, karanlık ofis, teras), dizilen karakterler, konuşana seyirci tarafından yaklaşan kamera, daktilo gibi yazılan konuşma kutusu, atlanabilir. Sekiz sahne: ilk gün (Rıza Usta tepsiyi verir), dört terfi, Selim'in teklifi (3. kata ilk çıkış), han toplantısı ve Patron Cemal sonu (ocağın anahtarı). Vardiya başında unvana göre telefona mesaj düşer.
+
+### Görsel
+
+- Yeni dekor (`src/world/decor.ts`): Galata, vapur, lale çini ve sepya fotoğraflı duvar resimleri, semaver, bardak rafı, "Çay Ocağı" fiyat afişi, ilan panosu ("Han toplantısı Cuma 18:00"), duvar saati, kilim yollukları, tavan vantilatörleri, terasta ip lambalar. Katlara kurallı (tohumlu) yerleşir, çarpışma yaratmaz.
+- Son işlem (`src/world/post.ts`): yüksek kalitede ışıma (bloom), sıcak renk ayarı, kenar karartma ve ince gren; ortada bloom kapalı; düşükte kapalı.
+
+### Ayarlar
+
+Tepsi zorluğu: Rahat (döküm açısı ×1,35, kule +5°, sönüm ×1,45; skor ×0,8), Normal (dengelenen), Usta (döküm ×0,8, kule −3°, sönüm ×0,85; skor ×1,25). Günlük mücadelede hep Normal. Kamera mesafesi 0,75–1,35.
+
+### Denge (0.4 ölçümü, 8 tohum × 5 oyuncu tipi)
+
+Yeni sistemler bot ölçümünü bozmadı; sadece Teras düştü (medyan 95 → 72) ve yıldızları 55 / 105 / 180'e indirildi. Bot dedikodu sorularına "bilmiyorum" der; dedikodu bahşişleri ölçülen skorların üstüne eklenir.
 
 ## 2. Kurgu
 
@@ -320,6 +377,7 @@ desktop/             Electron sarmalayıcı (Steam sürümü)
 |---|---|
 | 0.1 | 5 gün, tüm engeller, sipariş/bahşiş, dedikodu ve 3 son, dükkân, Serbest Vardiya, Günlük Mücadele, TR/EN, sentez ses ve müzik |
 | 0.2 | Açgözlü Çaycı: kavanoz, kule, tek tuş Fırıldak |
-| 0.3 (bu sürüm) | 6 mekânlı kariyer, görevler ve yıldızlar, günlük görevler, 21 başarım, XP/seviye/rütbe, dolap, çarşı, yerel sıralama ve rakipler, yeni karakter modelleri, oyun kolu, grafik kalitesi, Steam köprüsü (başarım, bulut, oyuncu adı), mağaza kiti, bot ile denge |
+| 0.3 | 6 mekânlı kariyer, görevler ve yıldızlar, günlük görevler, 21 başarım, XP/seviye/rütbe, dolap, çarşı, yerel sıralama ve rakipler, yeni karakter modelleri, oyun kolu, grafik kalitesi, Steam köprüsü (başarım, bulut, oyuncu adı), mağaza kiti, bot ile denge |
+| 0.4 (bu sürüm) | Dedikodu ekonomisi, kovalama, sinir ve tepsiyle vurma, patron mesajları, unvanlar ve maaş, itibar, 8 ara sahne, yeni son, yeni dekor, son işlem, tepsi zorluğu |
 | 1.0 (Steam) | Gerçek oyuncu testi ve denge, Electron paketinin kendi bilgisayarında denenmesi, çevrimiçi sıralama (Greenworks ya da küçük sunucu), fragman |
 | 1.1 | **Çay Ocağı co-op:** 2-4 kişi online, biri demler diğerleri dağıtır, yakınlık sesli sohbeti |

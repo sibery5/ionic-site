@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeCeilingFan, makeFrame, makeGlassShelf, makeNoticeBoard, makePriceSign, makeRug, makeSemaver, makeWallClock, type PaintingKind } from './decor';
 import { CELL, WALL_HEIGHT } from '../config';
 import { Grid } from '../physics/grid';
 import type { LevelDef } from '../game/levels';
@@ -37,6 +38,8 @@ export interface BuiltLevel {
   wet: Set<string>;
   bulbs: THREE.Mesh[];
   size: { w: number; d: number };
+  /** dönen süsler (vantilatör pervaneleri, saat yelkovanı) */
+  spinners: { obj: THREE.Object3D; speed: number }[];
 }
 
 const DIRS: [number, number][] = [
@@ -265,7 +268,98 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
       }
   }
 
-  return { group, desks, ocak, steamPoints, wet, bulbs, size: { w: W, d: D } };
+  const spinners = decorate(group, grid, def, ocak, teras, at);
+  return { group, desks, ocak, steamPoints, wet, bulbs, size: { w: W, d: D }, spinners };
+}
+
+/** Hanı süsle: duvar resimleri, ilan panoları, saat, ocak köşesi (semaver, raf, afiş), kilimler, vantilatörler. */
+function decorate(group: THREE.Group, grid: Grid, def: LevelDef, ocak: THREE.Vector3[], teras: boolean, at: (x: number, z: number) => THREE.Vector3) {
+  const lv = grid.level;
+  const spinners: { obj: THREE.Object3D; speed: number }[] = [];
+  const lang = getLang();
+  const kinds: PaintingKind[] = ['galata', 'vapur', 'lale', 'eski', 'portre'];
+  const wallAt = (x: number, z: number, d: [number, number]) => {
+    const n = lv.cells[z + d[1]]?.[x + d[0]];
+    return n === '#';
+  };
+  const place = (obj: THREE.Object3D, x: number, z: number, d: [number, number], y: number) => {
+    obj.position.copy(at(x, z)).add(new THREE.Vector3(d[0] * (CELL / 2 - 0.03), y, d[1] * (CELL / 2 - 0.03)));
+    obj.rotation.y = Math.atan2(-d[0], -d[1]);
+    group.add(obj);
+  };
+  // ocak köşesi
+  if (ocak.length) {
+    const [ox, oz] = Grid.cellOf(ocak[0].x, ocak[0].z);
+    const back = DIRS.find((d) => grid.char(ox + d[0], oz + d[1]) === '#');
+    if (back) {
+      const sem = makeSemaver();
+      const side: [number, number] = [-back[1], back[0]];
+      sem.position.copy(at(ox, oz)).add(new THREE.Vector3(side[0] * 0.3 + back[0] * 0.25, 0.97, side[1] * 0.3 + back[1] * 0.25));
+      group.add(sem);
+      if (!teras) {
+        place(makeGlassShelf(1.1), ox, oz, back, 0);
+        place(makePriceSign(lang), ox, oz, back, 2.25);
+      }
+    }
+    const [sx, sz] = Grid.cellOf(ocak[ocak.length - 1].x, ocak[ocak.length - 1].z);
+    if (!teras) {
+      const clockWall = DIRS.find((d) => grid.char(sx + d[0], sz + d[1]) === '#');
+      if (clockWall) {
+        const clock = makeWallClock();
+        clock.scale.setScalar(1.2);
+        place(clock, sx, sz, clockWall, 2.45);
+        const minute = clock.getObjectByName('minute');
+        if (minute) spinners.push({ obj: minute, speed: -0.12 });
+      }
+    }
+    // ocağın önüne kilim
+    const front = DIRS.find((d) => !grid.solid(ox + d[0], oz + d[1]));
+    if (front && !teras) {
+      const rug = makeRug(CELL * 2, CELL * 0.9);
+      rug.position.copy(at(ox + front[0], oz + front[1])).setY(0.006);
+      rug.rotation.z = front[0] !== 0 ? Math.PI / 2 : 0;
+      group.add(rug);
+    }
+  }
+  if (teras) {
+    // ip lambalar: korkuluk boyunca
+    const bulb = mat(0xfff1c8, { emissive: 0xffc86a });
+    for (let x = 1; x < lv.w - 1; x += 1) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), bulb);
+      b.position.set((x + 0.5) * CELL, 2.6 - Math.sin((x / lv.w) * Math.PI * 4) * 0.15, CELL * 0.6);
+      group.add(b);
+    }
+    return spinners;
+  }
+  let boards = 0;
+  for (let z = 1; z < lv.h - 1; z++)
+    for (let x = 1; x < lv.w - 1; x++) {
+      if (lv.cells[z][x] !== '.') continue;
+      const h = (x * 13 + z * 7 + def.grid.length * 3) % 11;
+      for (const d of DIRS) {
+        if (!wallAt(x, z, d)) continue;
+        if (h === 0) place(makeFrame(kinds[(x + z) % kinds.length], 0.62), x, z, d, 1.95);
+        else if (h === 6 && boards < 2) {
+          place(makeNoticeBoard(lang), x, z, d, 1.75);
+          boards++;
+        }
+        break;
+      }
+      // geniş alanlara vantilatör, koridor boyunca kilim
+      if ((x * 5 + z * 11) % 17 === 0 && !grid.solid(x + 1, z) && !grid.solid(x - 1, z)) {
+        const fan = makeCeilingFan();
+        fan.position.copy(at(x, z)).setY(WALL_HEIGHT);
+        group.add(fan);
+        const blades = fan.getObjectByName('blades');
+        if (blades) spinners.push({ obj: blades, speed: 3.5 + ((x + z) % 3) });
+      }
+      if ((x * 3 + z * 17) % 23 === 0 && lv.cells[z][x + 1] === '.' && lv.cells[z][x + 2] === '.') {
+        const rug = makeRug(CELL * 2.6, CELL * 0.7);
+        rug.position.copy(at(x + 1, z)).setY(0.006);
+        group.add(rug);
+      }
+    }
+  return spinners;
 }
 
 function buildDoor(group: THREE.Group, grid: Grid, x: number, z: number, offices: Map<string, Office>) {

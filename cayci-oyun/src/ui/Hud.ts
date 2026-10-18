@@ -231,7 +231,7 @@ export class Hud {
     for (const tk of list) {
       const d = el('div', 'ticket', this.tickets);
       if (tk.urgency > 0.75) d.classList.add('late');
-      if (tk.kind && tk.kind !== 'normal') d.classList.add(tk.kind);
+      if (tk.kind && tk.kind !== 'normal') d.classList.add(tk.kind === 'gossip' ? 'ask' : tk.kind);
       el('div', 'ticket-office', d, `${tk.kind === 'vip' ? '★ VIP · ' : tk.kind === 'rush' ? '! ' : ''}${tk.office}`);
       const counts = { acik: 0, demli: 0 } as Record<string, number>;
       tk.items.forEach((i) => counts[i]++);

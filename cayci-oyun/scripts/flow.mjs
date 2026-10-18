@@ -21,12 +21,39 @@ await page.addInitScript((lang) => {
     Object.defineProperty(navigator, 'language', { get: () => (lang === 'tr' ? 'tr-TR' : 'en-US') });
   }
 }, lang);
+await page.addInitScript(() => {
+  window.__flowRumors = async (r) => {
+    const { vipRumor, RUMOR } = await import('/src/game/rumors.ts');
+    for (const o of r.venue.offices) {
+      const v = vipRumor(o.pid);
+      if (!v) continue;
+      r.stats.heard.push(v.id);
+      if (v.story && v.truth) {
+        r.stats.evidence.push(v.id);
+        r.stats.sales.push({ rumor: v.id, buyer: 'rifat', verdict: 'reward', pay: RUMOR[v.id].value });
+      }
+    }
+    r.stats.repDelta += 4;
+  };
+});
 await page.goto('http://localhost:5193/');
 await page.waitForTimeout(1500);
 const ev = (f, a) => page.evaluate(f, a);
 const shot = async (name, wait = 500) => { await page.waitForTimeout(wait); await page.screenshot({ path: `shots/flow-${name}.png` }); };
 const click = async (sel) => { await page.locator(sel).first().click(); await page.waitForTimeout(250); };
 const fail = (msg) => { console.log('HATA:', msg); process.exitCode = 1; };
+const scenesSeen = [];
+// ara sahne açıksa: bir repliği tıkla (kutu çalışıyor mu), sonra atla
+const skipScenes = async () => {
+  for (let k = 0; k < 4; k++) {
+    if (!(await page.locator('.dialogue').count())) return;
+    scenesSeen.push(await page.locator('.dlg-title').textContent());
+    await page.locator('.dlg-box').click();
+    await page.waitForTimeout(150);
+    await page.locator('.dlg-skip').click();
+    await page.waitForTimeout(400);
+  }
+};
 
 await page.mouse.click(900, 300); // ses başlat
 await shot('00-title');
@@ -40,18 +67,20 @@ for (let i = 0; i < 6; i++) {
   const n = await cards.count();
   if (n !== i + 1) fail(`mekân ${i}: açık kart sayısı ${n}, beklenen ${i + 1}`);
   await cards.nth(0).click(); // en üstteki açık = en yeni
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(400);
+  await skipScenes(); // ilk gün Rıza Usta, 3. katta Selim
   if (i === 0) await shot('02-intro');
   await click('.btn.primary'); // başla
   await click('.btn.primary'); // oynamak için tıkla
   // biraz gerçek oynanış: ocakta doldur
   await ev(() => window.__cayci.sim([[0.3, []], [1.5, ['KeyE']], [0.2, []]]));
   if (i === 0) await shot('03-run', 1200);
-  await ev((score) => {
+  await ev(async (score) => {
     const r = window.__cayci.game.run;
     r.bank = score;
     Object.assign(r.stats, { delivered: 20, maxDeliveryTower: 10, spins: 3, maxCombo: 5, coloredServed: 12, vipPerfect: 1, maxBank: 150, banks: 3 });
-    for (const o of r.venue.offices) if (o.gossip) r.stats.gossip.push(`${r.venue.id}:${o.id}`);
+    // bu katın VIP dedikoduları duyuldu ve hikâye kanıtları han tarafına ulaştı
+    await window.__flowRumors(r);
     r.forceEnd();
   }, STAR3[i] + 5);
   await page.waitForTimeout(400);
@@ -59,20 +88,28 @@ for (let i = 0; i < 6; i++) {
   const stars = await page.locator('.big-stars').textContent();
   if (!stars?.includes('★★★')) fail(`mekân ${i}: 3 yıldız yok (${stars})`);
   if (i < 5) {
-    // harita
+    // harita (terfi olduysa önce terfi sahnesi)
     await page.locator('button', { hasText: lang === 'tr' ? 'Harita' : 'Map' }).first().click();
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(400);
+    await skipScenes();
   }
 }
-// teras bitti → han toplantısı
+// teras bitti → han toplantısı sahnesi → seçim
 await click('.btn.primary');
+await page.waitForTimeout(400);
+await skipScenes();
 await shot('05-choice');
 await click('.btn.primary'); // çayı dök
+await page.waitForTimeout(400);
+await skipScenes(); // patron sahnesi
 await shot('06-ending');
 let save = await ev(() => JSON.parse(localStorage.getItem('cayci-save-v2')));
-console.log('kariyer sonrası', { xp: save.xp, wallet: save.wallet, gossip: save.gossip.length, endings: save.endings, ach: save.achievements.length, stars: Object.fromEntries(Object.entries(save.venues).map(([k, v]) => [k, v.stars])) });
+console.log('kariyer sonrası', { xp: save.xp, wallet: save.wallet, pocket: save.pocket.length, evidence: save.evidence.length, rep: save.rep, title: save.title, endings: save.endings, ach: save.achievements.length, stars: Object.fromEntries(Object.entries(save.venues).map(([k, v]) => [k, v.stars])) });
 if (save.endings[0] !== 'saved') fail('son "saved" olmalıydı');
-if (!save.achievements.includes('END_SAVED') || !save.achievements.includes('ALL_3STAR') || !save.achievements.includes('GOSSIP_ALL')) fail('başarımlar eksik');
+if (save.title !== 5) fail(`unvan patron olmalıydı: ${save.title}`);
+console.log('izlenen sahneler:', scenesSeen.join(' | '), '· kayıttaki:', save.scenes.join(','));
+for (const id of ['intro', 'promo_1', 'promo_2', 'promo_3', 'promo_4', 'villain', 'meeting', 'end_saved']) if (!save.scenes.includes(id)) fail(`sahne oynamadı: ${id}`);
+if (!save.achievements.includes('END_SAVED') || !save.achievements.includes('ALL_3STAR') || !save.achievements.includes('SALE_1') || !save.achievements.includes('TITLE_BAS')) fail('başarımlar eksik: ' + save.achievements.join(','));
 
 // ana menü: günlük
 await click('.btn.primary'); // harita

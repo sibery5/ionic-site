@@ -7,8 +7,10 @@ GLYPH = {
     'BANK_100': '100₺', 'RUN_250': '250₺', 'CLEAN_RUN': '0', 'VIP_5': '★5', 'ALL_1STAR': '★', 'ALL_3STAR': '★★★',
     'GOSSIP_ALL': '“ ”', 'END_SAVED': '♥', 'END_SILENT': '…', 'END_DISBELIEVED': '?', 'CAT_10': '=^.^=',
     'BROKEN_100': '100', 'DAILY_7': '7', 'LEVEL_10': '10', 'LEVEL_30': '30',
+    'SALE_1': '“!”', 'SALE_10': '10“', 'LIAR_5': '?!', 'ESCAPE_1': '»»', 'CAUGHT_3': '3!', 'BONK_1': 'DANK',
+    'BETRAY_1': '30', 'TITLE_BAS': '↑', 'END_SOLD': '$',
 }
-RING = {'END_SAVED': (233, 207, 122), 'ALL_3STAR': (233, 207, 122), 'LEVEL_30': (233, 207, 122), 'TOWER_12': (233, 207, 122)}
+RING = {'END_SAVED': (233, 207, 122), 'TITLE_BAS': (233, 207, 122), 'BETRAY_1': (120, 120, 120), 'END_SOLD': (120, 120, 120), 'ALL_3STAR': (233, 207, 122), 'LEVEL_30': (233, 207, 122), 'TOWER_12': (233, 207, 122)}
 FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf'
 SYMBOLS = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 os.makedirs('steam/achievement-icons', exist_ok=True)

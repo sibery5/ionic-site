@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 const server = await createServer({ server: { port: 5207 }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: Number(process.env.W || 1280), height: Number(process.env.H || 720) } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -12,7 +12,7 @@ await page.addInitScript(() => localStorage.setItem('cayci-save-v2', JSON.string
 await page.goto('http://localhost:5207/');
 await page.waitForTimeout(1500);
 const ev = (f, a) => page.evaluate(f, a);
-const shot = async (n) => { await page.waitForTimeout(1400); await page.screenshot({ path: `shots/intrigue-${n}.png` }); };
+const shot = async (n) => { await page.waitForTimeout(1400); await page.screenshot({ path: `shots/${process.env.PREFIX || 'intrigue'}-${n}.png` }); };
 // 1. Av. Rıfat'a dedikodu siparişi
 const setup = (office, topic) => ev(([office, topic]) => {
   const r = window.__cayci.game.run;

@@ -171,12 +171,12 @@
   {
     "apiName": "END_SAVED",
     "displayName": {
-      "turkish": "Han Kurtuldu",
-      "english": "The Han Is Saved"
+      "turkish": "Patron Oldun",
+      "english": "You Are the Boss"
     },
     "description": {
-      "turkish": "Hanı kurtar",
-      "english": "Save the han"
+      "turkish": "Hanı kurtar, çay ocağının patronu ol",
+      "english": "Save the han and become boss of the tea house"
     },
     "hidden": true,
     "icon": "steam/achievement-icons/END_SAVED.png"
@@ -271,5 +271,122 @@
     },
     "hidden": false,
     "icon": "steam/achievement-icons/LEVEL_30.png"
+  },
+  {
+    "apiName": "SALE_1",
+    "displayName": {
+      "turkish": "İlk Haber",
+      "english": "First Scoop"
+    },
+    "description": {
+      "turkish": "Doğru dedikoduyu doğru kişiye sat",
+      "english": "Sell the right gossip to the right person"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/SALE_1.png"
+  },
+  {
+    "apiName": "SALE_10",
+    "displayName": {
+      "turkish": "Haber Ajansı",
+      "english": "News Agency"
+    },
+    "description": {
+      "turkish": "Toplam 10 dedikodu sat",
+      "english": "Sell 10 pieces of gossip"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/SALE_10.png"
+  },
+  {
+    "apiName": "LIAR_5",
+    "displayName": {
+      "turkish": "Yalancı Çoban",
+      "english": "The Boy Who Cried Wolf"
+    },
+    "description": {
+      "turkish": "5 kez yalan dedikodu anlat",
+      "english": "Tell 5 false rumors"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/LIAR_5.png"
+  },
+  {
+    "apiName": "ESCAPE_1",
+    "displayName": {
+      "turkish": "Kaçak Çaycı",
+      "english": "Fugitive Tea Boy"
+    },
+    "description": {
+      "turkish": "Seni kovalayan müşteriden ocağa kaç",
+      "english": "Escape an angry customer back to the stove"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/ESCAPE_1.png"
+  },
+  {
+    "apiName": "CAUGHT_3",
+    "displayName": {
+      "turkish": "Şaplak",
+      "english": "Smack"
+    },
+    "description": {
+      "turkish": "3 kez yakalanıp tepsine şaplak ye",
+      "english": "Get caught and smacked 3 times"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/CAUGHT_3.png"
+  },
+  {
+    "apiName": "BONK_1",
+    "displayName": {
+      "turkish": "Sabrın Sonu",
+      "english": "Last Straw"
+    },
+    "description": {
+      "turkish": "Yolunu kesen birine tepsiyle vur",
+      "english": "Bonk someone blocking your way with the tray"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/BONK_1.png"
+  },
+  {
+    "apiName": "BETRAY_1",
+    "displayName": {
+      "turkish": "Satılık Çaycı",
+      "english": "Tea Boy for Sale"
+    },
+    "description": {
+      "turkish": "Bir kanıtı kötü adamlara sat",
+      "english": "Sell a piece of evidence to the villains"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/BETRAY_1.png"
+  },
+  {
+    "apiName": "TITLE_BAS",
+    "displayName": {
+      "turkish": "Baş Çaycı",
+      "english": "Head Tea Boy"
+    },
+    "description": {
+      "turkish": "Baş Çaycı unvanını al",
+      "english": "Earn the Head Tea Boy title"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/TITLE_BAS.png"
+  },
+  {
+    "apiName": "END_SOLD",
+    "displayName": {
+      "turkish": "AVM Müdürü",
+      "english": "Mall Manager"
+    },
+    "description": {
+      "turkish": "Selim'in teklifini kabul et",
+      "english": "Accept Selim's offer"
+    },
+    "hidden": true,
+    "icon": "steam/achievement-icons/END_SOLD.png"
   }
 ]

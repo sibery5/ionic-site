@@ -4,7 +4,7 @@ import { EVIDENCE_NEEDED, PEOPLE, RUMOR, RUMORS, TOPICS, type PersonId } from '.
 import { TITLES, liveEvidence, nextTitleNeeds } from '../meta/titles';
 import { SOLD_PRICE } from '../meta/profile';
 import { VENUES, objectiveText, type Venue } from '../game/venues';
-import type { SaveData, Quality } from '../core/save';
+import type { SaveData, Quality, TrayAssist } from '../core/save';
 import type { RunStats } from '../meta/stats';
 import { objectiveKey, isUnlocked, type RunReport } from '../meta/profile';
 import { ACHIEVEMENTS } from '../meta/achievements';
@@ -232,6 +232,7 @@ export class Menus {
     row(t('broken'), String(s.broken));
     row(t('jarsLost'), String(s.jarsLost));
     if (s.chases) row(t('statChases'), `${s.chases} · ${t('statEscapes')} ${s.escapes} · ${t('statCaught')} ${s.caught}`);
+    if (s.mode !== 'daily' && save.settings.trayAssist !== 'normal') row(t('trayAssist'), save.settings.trayAssist === 'easy' ? `${t('trayEasy')} ×0,8` : `${t('trayMaster')} ×1,25`);
     if (s.bonks) row(t('statBonks'), `${s.bonks}${s.fines ? ` (−${s.fines}₺)` : ''}`);
     if (r.boardRank) row(t('rank'), `#${r.boardRank}`);
 
@@ -389,7 +390,7 @@ export class Menus {
     const p = this.open();
     const s = save.settings;
     h('h2', '', t('settings'), p);
-    const slider = (label: string, key: 'volume' | 'music' | 'sensitivity', min: number, max: number) => {
+    const slider = (label: string, key: 'volume' | 'music' | 'sensitivity' | 'camDist', min: number, max: number) => {
       const r = h('label', 'slider-row', `<span>${label}</span>`, p);
       const inp = h('input', '', '', r) as HTMLInputElement;
       inp.type = 'range';
@@ -406,6 +407,26 @@ export class Menus {
     slider(t('volume'), 'volume', 0, 1);
     slider(t('music'), 'music', 0, 1);
     slider(t('sensitivity'), 'sensitivity', 0.3, 2.5);
+    slider(t('camDist'), 'camDist', 0.75, 1.35);
+    const ta = h('div', 'slider-row', `<span>${t('trayAssist')}</span>`, p);
+    const tas = h('div', '', '', ta);
+    for (const [k, label] of [
+      ['easy', t('trayEasy')],
+      ['normal', t('trayNormal')],
+      ['master', t('trayMaster')],
+    ] as [TrayAssist, string][]) {
+      button(
+        label,
+        () => {
+          s.trayAssist = k;
+          onChange();
+          this.settings(save, onChange, onReset, onBack);
+        },
+        tas,
+        `btn small ${s.trayAssist === k ? 'active' : ''}`,
+      );
+    }
+    h('p', 'dim small-note', t('trayAssistNote'), p);
     const q = h('div', 'slider-row', `<span>${t('quality')}</span>`, p);
     const qs = h('div', '', '', q);
     for (const [k, label] of [

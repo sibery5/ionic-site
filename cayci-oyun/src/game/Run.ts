@@ -459,6 +459,7 @@ export class Run {
       this.flashlight.intensity = 70 * (Math.sin(now * 37) > 0.995 ? 0.3 : 1);
     }
     if (this.ferry) this.ferry.position.x += dt * 0.6;
+    for (const sp of this.built.spinners) sp.obj.rotation[sp.obj.name === 'minute' ? 'z' : 'y'] += sp.speed * dt;
     audio.setIntensity(Math.min(1, Math.max(this.tray.glasses.length / 11 + (this.rushHour ? 0.35 : 0), this.intrigue.chaseLevel + 0.4 * Math.sign(this.intrigue.chaseLevel))));
 
     // ---- HUD ----
@@ -466,10 +467,10 @@ export class Run {
     this.hud.setGreed({ bank: this.bank, jar: this.jar, hasJar: this.tray.hasJar, combo: this.combo, tower: this.tray.glasses.length, spinBoost: now < this.spinBoostUntil });
     this.hud.setTickets(
       [...this.orders.entries()].map(([id, o]) => ({
-        office: tx(this.customers.get(id)!.office.name),
+        office: `${o.topic ? `👂${TOPICS[o.topic].icon} ` : ''}${tx(this.customers.get(id)!.office.name)}`,
         items: o.items,
         kind: o.kind,
-        label: o.topic ? `👂${TOPICS[o.topic].icon} ${o.items.length} ${t('greedOrder')}` : this.venue.rules.colored ? undefined : `${o.items.length} ${t('greedOrder')}`,
+        label: this.venue.rules.colored ? undefined : `${o.items.length} ${t('greedOrder')}`,
         urgency: (now - o.createdAt) / o.patience,
       })),
     );

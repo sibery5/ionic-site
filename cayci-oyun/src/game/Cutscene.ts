@@ -321,7 +321,8 @@ export class Cutscene {
   update(dt: number, input: Input) {
     if (this.done) return;
     this.time += dt;
-    if (input.wasPressed('Escape')) return this.finish();
+    // önceki ekrandan kalan tuş basışı yeni sahneyi atlatmasın
+    if (this.time > 0.4 && input.wasPressed('Escape')) return this.finish();
     if (input.wasPressed('KeyE') || input.wasPressed('Space') || input.wasPressed('Enter')) this.dlg.next();
     this.dlg.update(dt);
     const k = 1 - Math.exp(-2.2 * dt);
@@ -361,6 +362,7 @@ export class Cutscene {
   }
 
   dispose() {
+    this.done = true;
     this.dlg.close();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry?.dispose();

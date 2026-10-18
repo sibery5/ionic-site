@@ -162,16 +162,16 @@ export const VENUES: Venue[] = [
       en: "There's a han meeting on the roof today. The wind is strong, keep the tray low. VIP orders from Nadir Bey, the guests and the tenants hold the last pieces. After the shift, you decide what to say. — Master Rıza",
     },
     duration: 120,
-    stars: [70, 130, 220],
+    stars: [55, 105, 180],
     rules: R(true, { wind: true, cat: true }),
     objectives: [
       { kind: 'spins', target: 2 },
       { kind: 'towerDelivery', target: 8 },
     ],
     rivals: [
-      { name: 'Gökdelen Yapı', score: 70 },
-      { name: 'Nadir Bey', score: 120 },
-      { name: 'Rıza Usta', score: 260 },
+      { name: 'Gökdelen Yapı', score: 55 },
+      { name: 'Nadir Bey', score: 100 },
+      { name: 'Rıza Usta', score: 215 },
     ],
   },
 ];
