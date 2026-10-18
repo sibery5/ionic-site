@@ -1,0 +1,28 @@
+{
+  "name": "cayci-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ÇAYCI masaüstü (Steam) sürümü",
+  "main": "main.cjs",
+  "scripts": {
+    "copy": "node -e \"require('fs').cpSync('../dist','app',{recursive:true})\"",
+    "start": "npm run copy && electron .",
+    "dist": "npm run copy && electron-builder --win --linux"
+  },
+  "build": {
+    "appId": "com.cayci.game",
+    "productName": "CAYCI",
+    "files": ["main.cjs", "preload.cjs", "app/**"],
+    "directories": { "output": "out" },
+    "win": { "target": "dir" },
+    "linux": { "target": "dir" },
+    "mac": { "target": "dir" }
+  },
+  "dependencies": {
+    "steamworks.js": "0.4.0"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  }
+}
