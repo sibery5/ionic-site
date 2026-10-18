@@ -618,3 +618,159 @@ kbd {
     bottom: 96px;
   }
 }
+
+/* ---------- açgözlü mod ---------- */
+.greed-mode .money {
+  display: none;
+}
+.greed {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 14px;
+  align-items: center;
+  text-align: right;
+  text-shadow: 0 2px 6px #000;
+}
+.greed span {
+  display: block;
+  font-size: 12px;
+  opacity: 0.75;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.g-bank b {
+  font-size: 30px;
+}
+.g-jar b {
+  font-size: 22px;
+  color: #f2c230;
+}
+.g-jar.lost b {
+  color: #ff7a60;
+}
+.g-combo {
+  grid-column: 1 / 3;
+  font-family: Georgia, serif;
+  font-weight: bold;
+  font-size: 44px;
+  color: var(--paper);
+}
+.g-combo.hot {
+  color: #f2c230;
+  animation: pulse-text 0.9s infinite;
+}
+@keyframes pulse-text {
+  50% {
+    transform: scale(1.08);
+  }
+}
+.g-tower {
+  grid-column: 1 / 3;
+  font-size: 16px;
+}
+.g-tower i {
+  color: #f2c230;
+  font-style: normal;
+  font-weight: bold;
+}
+.spin-meter {
+  position: absolute;
+  bottom: 150px;
+  left: 50%;
+  width: 360px;
+  height: 22px;
+  margin-left: -180px;
+  border: 3px solid var(--paper);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.spin-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #5fbf5a;
+}
+.spin-needle {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 5px;
+  margin-left: -2px;
+  background: #fff;
+  box-shadow: 0 0 6px #000;
+}
+.spin-label {
+  position: absolute;
+  top: -30px;
+  width: 100%;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 0 2px 4px #000;
+}
+.big-text {
+  position: absolute;
+  top: 22%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: Georgia, serif;
+  font-weight: bold;
+  font-size: clamp(48px, 9vw, 110px);
+  color: #ff7a60;
+  text-shadow:
+    0 6px 0 rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(0, 0, 0, 0.6);
+  animation: slam 1.8s ease-out forwards;
+}
+.big-text small {
+  display: block;
+  font-size: 0.35em;
+  color: var(--paper);
+}
+@keyframes slam {
+  0% {
+    transform: scale(2.4) rotate(-6deg);
+    opacity: 0;
+  }
+  10% {
+    transform: scale(1) rotate(-3deg);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.05) rotate(-3deg);
+    opacity: 0;
+  }
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: #f2c230;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.score {
+  font-family: Georgia, serif;
+  font-size: 72px;
+  font-weight: bold;
+  color: #f2c230;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+}
+.record {
+  color: #9fe08a;
+  font-weight: bold;
+  font-size: 22px;
+  letter-spacing: 0.1em;
+  animation: pulse-text 0.9s infinite;
+}

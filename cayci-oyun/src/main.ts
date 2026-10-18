@@ -6,6 +6,7 @@ import { defaultSave, hasProgress, loadSave, SaveData, writeSave } from './core/
 import { dateSeed } from './core/rng';
 import { audio } from './audio/Audio';
 import { Shift, ShiftConfig, ShiftResult } from './game/Shift';
+import { GreedResult, GreedShift } from './game/Greed';
 import { GOSSIP_NEEDED } from './game/story';
 import { Hud } from './ui/Hud';
 import { Menus } from './ui/Menus';
@@ -80,7 +81,8 @@ class Game {
   menus: Menus;
   save: SaveData;
   state: State = 'menu';
-  shift: Shift | null = null;
+  shift: Shift | GreedShift | null = null;
+  private lastGreed = false;
   private menuScene = new MenuScene();
   private lastCfg: ShiftConfig | null = null;
   private last = performance.now();
@@ -170,6 +172,7 @@ class Game {
         this.storyDay();
       },
       onContinue: () => this.storyDay(),
+      onGreed: () => this.menus.greedIntro(this.save.greedBest, () => this.startGreed(), () => this.showTitle()),
       onFree: () => this.menus.freePlay(this.save, (d) => this.startShift({ dayIndex: d, mode: 'free', seed: Date.now() }), () => this.showTitle()),
       onDaily: () => {
         const seed = dateSeed();
@@ -214,6 +217,7 @@ class Game {
       sensitivity: this.save.settings.sensitivity,
     };
     this.lastCfg = cfg;
+    this.lastGreed = false;
     this.hud.reset();
     this.shift = new Shift(cfg, this.hud, (r) => this.onShiftEnd(r), window.innerWidth / window.innerHeight);
     this.state = 'overlay';
@@ -234,9 +238,32 @@ class Game {
     this.input.exitLock();
     this.menus.pause(
       () => this.resume(),
-      () => this.lastCfg && this.startShift(this.lastCfg),
+      () => (this.lastGreed ? this.startGreed() : this.lastCfg && this.startShift(this.lastCfg)),
       () => this.showTitle(),
     );
+  }
+
+  startGreed() {
+    this.endShift();
+    this.lastGreed = true;
+    this.hud.reset();
+    const first = !this.save.greedPlays;
+    this.shift = new GreedShift(this.hud, (r) => this.onGreedEnd(r), window.innerWidth / window.innerHeight, this.save.settings.sensitivity, Date.now() & 0xffff, first);
+    this.state = 'overlay';
+    this.menus.clickToPlay(() => this.resume());
+  }
+
+  onGreedEnd(r: GreedResult) {
+    this.state = 'overlay';
+    this.input.exitLock();
+    this.hud.hide();
+    const prev = this.save.greedBest ?? 0;
+    const record = r.score > prev;
+    this.save.greedBest = Math.max(prev, r.score);
+    this.save.greedPlays = (this.save.greedPlays ?? 0) + 1;
+    this.persist();
+    if (record) audio.jingle();
+    this.menus.greedSummary(r, { best: this.save.greedBest, record, onRetry: () => this.startGreed(), onMenu: () => this.showTitle() });
   }
 
   endShift() {
@@ -317,6 +344,10 @@ const game = new Game(document.getElementById('app')!);
   game,
   startDay: (d: number) => {
     game.startShift({ dayIndex: d, mode: 'free', seed: 42 });
+    game.resume();
+  },
+  startGreed: () => {
+    game.startGreed();
     game.resume();
   },
   /** Tanıtım görseli çiz (karakterler / eşyalar). */

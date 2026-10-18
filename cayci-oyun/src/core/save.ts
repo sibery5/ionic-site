@@ -11,6 +11,8 @@ export interface SaveData {
   stars: number[]; // gün başına en iyi yıldız
   dailyBest: Record<string, number>;
   ending?: string;
+  greedBest?: number;
+  greedPlays?: number;
   settings: { lang: Lang; volume: number; music: number; sensitivity: number };
 }
 

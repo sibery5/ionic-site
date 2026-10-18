@@ -26,13 +26,25 @@ export interface TrayEvents {
   flewOff: number; // uçan bardak sayısı
   jerk: number; // tepsinin ani hareket şiddeti (ses için)
   loop: boolean; // tam Fırıldak tamamlandı
+  fallen: number; // kuleden düşen üst kat bardakları
+  jarLost: boolean; // bahşiş kavanozu devrildi
 }
 
 export interface TrayParams {
   damping: number;
   /** Bilek sürtünmesi: 0 = serbest askı (ideal), 1 = tepsi hep yatay kalır. */
   grip: number;
+  /** İzin verilen döküm açısının çarpanı (ağır tepsi < 1). */
+  spillScale: number;
+  /** Üst kattaki bardakların düştüğü çalkalanma açısı (derece). */
+  towerAngle: number;
+  /** Fırıldak sonunda usta bileği tepsiyi yakalarken kavanoz devrilmez. */
+  catchAssist?: boolean;
 }
+
+/** Bir kattaki bardak sayısı (kule: 6'şar kat). */
+export const LAYER_SIZE = 6;
+export const LAYER_HEIGHT = 0.155;
 
 const tmp1 = new Vector3();
 const tmp2 = new Vector3();
@@ -56,8 +68,12 @@ export class TraySim {
   readonly felt = new Vector3(0, -9.81, 0);
   glasses: Glass[] = [];
   capacity: number = TRAY.baseCapacity;
-  params: TrayParams = { damping: TRAY.damping, grip: TRAY.grip };
+  params: TrayParams = { damping: TRAY.damping, grip: TRAY.grip, spillScale: 1, towerAngle: 18 };
   externalAccel = new Vector3(); // rüzgâr vb.
+  /** Tepsinin ortasında bahşiş kavanozu var mı (açgözlü mod). Varsa bardaklar etrafına dizilir. */
+  hasJar = false;
+  private jarSurface = new Vector3();
+  private jarSurfaceVel = new Vector3();
 
   private prevVel = new Vector3();
   private liftTimer = 0;
@@ -78,6 +94,8 @@ export class TraySim {
     }
     this.loopPhase = 0;
     this.liftTimer = 0;
+    this.jarSurface.set(0, 0, 0);
+    this.jarSurfaceVel.set(0, 0, 0);
   }
 
   addGlass(type: Glass['type'], fill: number, temp: number, colorScore: number): boolean {
@@ -96,15 +114,13 @@ export class TraySim {
 
   /** Bardağın tepsideki yerel konumu (tepsi düzleminde, merkezden). */
   slotOffset(i: number, n = this.glasses.length): [number, number] {
-    if (n <= 1) return [0, 0];
-    const r = n <= 3 ? 0.095 : 0.12;
-    const a = (i / n) * Math.PI * 2 + Math.PI / 2;
-    return [Math.cos(a) * r, Math.sin(a) * r];
+    const p = slotPos(i, n, this.hasJar);
+    return [p[0], p[2]];
   }
 
   /** Pivot'u (eli) yeni konuma taşıyıp simülasyonu dt kadar ilerletir. */
   step(newPivot: Vector3, dt: number): TrayEvents {
-    const ev: TrayEvents = { spilled: 0, flewOff: 0, jerk: 0, loop: false };
+    const ev: TrayEvents = { spilled: 0, flewOff: 0, jerk: 0, loop: false, fallen: 0, jarLost: false };
     if (dt <= 0) return ev;
     const L = TRAY.rodLength;
     const sub = Math.max(1, Math.ceil(dt / (1 / 240)));
@@ -150,12 +166,16 @@ export class TraySim {
 
     // havalanma: hissedilen yerçekimi tepsiye bastırmıyorsa
     const press = this.normal.dot(this.felt); // negatifse bardaklar tepsiye bastırılıyor
-    if (press > TRAY.liftThreshold && this.glasses.length > 0) {
+    if (press > TRAY.liftThreshold && (this.glasses.length > 0 || this.hasJar)) {
       this.liftTimer += dt;
       if (this.liftTimer > TRAY.liftTime) {
         ev.flewOff = this.glasses.length;
         this.glasses = [];
         this.liftTimer = 0;
+        if (this.hasJar) {
+          this.hasJar = false;
+          ev.jarLost = true;
+        }
       }
     } else {
       this.liftTimer = Math.max(0, this.liftTimer - dt * 2);
@@ -181,12 +201,43 @@ export class TraySim {
       g.surfaceVel.addScaledVector(this.normal, -g.surfaceVel.dot(this.normal));
       const sinA = Math.min(1, g.surface.length());
       const ang = (Math.asin(sinA) * 180) / Math.PI;
-      const allow = allowedAngle(g.fill);
+      const allow = allowedAngle(g.fill) * this.params.spillScale;
       if (ang > allow && g.fill > 0) {
         const loss = Math.min(g.fill, (ang - allow) * TRAY.spillRate * dt);
         g.fill -= loss;
         ev.spilled += loss;
         if (loss > 0.002) g.spilled = true;
+      }
+    }
+
+    // kavanoz: bardak gibi çalkalanır ama dökülmez; çok sert sallantıda devrilir
+    if (this.hasJar) {
+      const js = this.jarSurface;
+      const jv = this.jarSurfaceVel;
+      for (let i = 0; i < sub; i++) {
+        jv.x += (k * (target.x - js.x) - c * jv.x) * h;
+        jv.y += (k * (target.y - js.y) - c * jv.y) * h;
+        jv.z += (k * (target.z - js.z) - c * jv.z) * h;
+        js.addScaledVector(jv, h);
+      }
+      js.addScaledVector(this.normal, -js.dot(this.normal));
+      jv.addScaledVector(this.normal, -jv.dot(this.normal));
+      const ang = (Math.asin(Math.min(1, js.length())) * 180) / Math.PI;
+      if (ang > this.params.towerAngle + 20 && !this.params.catchAssist) {
+        this.hasJar = false;
+        ev.jarLost = true;
+      }
+    }
+
+    // kule: üst katlardaki bardaklar sert sallantıda devrilir
+    if (this.glasses.length > LAYER_SIZE) {
+      for (let i = this.glasses.length - 1; i >= LAYER_SIZE; i--) {
+        const g = this.glasses[i];
+        const ang = (Math.asin(Math.min(1, g.surface.length())) * 180) / Math.PI;
+        if (ang > this.params.towerAngle) {
+          this.glasses.splice(i, 1);
+          ev.fallen++;
+        }
       }
     }
 
@@ -222,6 +273,19 @@ export class TraySim {
       }
     }
   }
+}
+
+/** Kule düzeni: 6'şar bardaklık halkalar üst üste. [x, y, z] tepsi uzayında. */
+export function slotPos(i: number, n: number, centerFree = false): [number, number, number] {
+  const layer = Math.floor(i / LAYER_SIZE);
+  const j = i % LAYER_SIZE;
+  const m = Math.min(LAYER_SIZE, n - layer * LAYER_SIZE);
+  const y = layer * LAYER_HEIGHT;
+  const ring = centerFree && layer === 0;
+  if (m <= 1 && !ring) return [0, y, 0];
+  const r = ring ? 0.13 : m <= 3 ? 0.095 : 0.12;
+  const a = (j / m) * Math.PI * 2 + Math.PI / 2 + layer * 0.5;
+  return [Math.cos(a) * r, y, Math.sin(a) * r];
 }
 
 export function clamp(x: number, a: number, b: number) {

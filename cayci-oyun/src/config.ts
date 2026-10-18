@@ -8,6 +8,8 @@ export const PLAYER = {
   walkSpeed: 2.4,
   runSpeed: 4.1,
   accel: 6, // normal zeminde ivme (m/s²)
+  tiptoeSpeed: 1.5, // Ctrl / C: parmak ucunda
+  tiptoeAccel: 3,
   slipperyAccel: 1.8, // kaygan zeminde ivme
   turnSensitivity: 0.0026, // fare → radyan
   stepLength: 0.62, // bir adımın boyu (ayak sesi)

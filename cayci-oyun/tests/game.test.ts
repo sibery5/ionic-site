@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { OrderBook, completionMultiplier, glassTip, pickGlasses, starsFor, tempFactor } from '../src/game/orders';
 import { Rng } from '../src/core/rng';
-import { LEVELS, parseLevel } from '../src/game/levels';
+import { ARENA, LEVELS, parseLevel } from '../src/game/levels';
 import { Grid } from '../src/physics/grid';
 import { DAYS } from '../src/game/story';
 import type { Glass } from '../src/physics/tray';
@@ -71,6 +71,15 @@ describe('OrderBook', () => {
 });
 
 describe('kat haritaları', () => {
+  it('açgözlü arena oynanabilir', () => {
+    const lv = parseLevel(ARENA);
+    const grid = new Grid(lv);
+    for (const row of ARENA.grid) expect(row.length).toBe(lv.w);
+    for (const id of ['a', 'b', 'c', 'd']) {
+      const [x, z] = lv.desks.get(id)!;
+      expect(grid.neighborsWalkable(x, z).some((n) => grid.path(lv.start, n) !== null)).toBe(true);
+    }
+  });
   LEVELS.forEach((def, i) => {
     it(`${i + 1}. gün haritası oynanabilir`, () => {
       const lv = parseLevel(def);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TRAY } from '../config';
-import type { TraySim } from '../physics/tray';
-import { GLASS_HEIGHT, GlassModel, makeGlass, makeTray, TEA_COLORS } from '../world/models';
+import { LAYER_HEIGHT, LAYER_SIZE, slotPos, type TraySim } from '../physics/tray';
+import { GLASS_HEIGHT, GlassModel, makeGlass, makeTipJar, makeTray, TEA_COLORS } from '../world/models';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -11,6 +11,9 @@ export class TrayView {
   private tray: THREE.Group;
   private glasses: GlassModel[] = [];
   private glassTypes: string[] = [];
+  private plates: THREE.Mesh[] = [];
+  /** Tepsinin ortasındaki bahşiş kavanozu (açgözlü mod). */
+  jar: THREE.Group | null = null;
 
   constructor() {
     this.tray = makeTray();
@@ -29,10 +32,22 @@ export class TrayView {
       for (const g of this.glasses) this.tray.add(g.group);
       this.glassTypes = types;
     }
+    // kule katları arasındaki ara tepsiler
+    const layers = Math.ceil(sim.glasses.length / LAYER_SIZE);
+    while (this.plates.length < layers - 1) {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.008, 20), new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 0.85, roughness: 0.3 }));
+      p.castShadow = true;
+      this.tray.add(p);
+      this.plates.push(p);
+    }
+    this.plates.forEach((p, k) => {
+      p.visible = k < layers - 1;
+      p.position.set(0, (k + 1) * LAYER_HEIGHT - 0.004, 0);
+    });
     sim.glasses.forEach((g, i) => {
       const m = this.glasses[i];
-      const [ox, oz] = sim.slotOffset(i);
-      m.group.position.set(ox, 0.006, oz);
+      const [ox, oy, oz] = slotPos(i, sim.glasses.length, sim.hasJar);
+      m.group.position.set(ox, 0.006 + oy, oz);
       m.tea.scale.y = Math.max(0.02, g.fill);
       m.tea.visible = g.fill > 0.01;
       // çay yüzeyi eğimi: yüzey vektörünü tepsi uzayına çevirip hafif eğ
@@ -43,6 +58,25 @@ export class TrayView {
       const cold = Math.max(0, Math.min(1, (70 - g.temp) / 40));
       m.teaMat.color.copy(base).lerp(new THREE.Color(0x6b4a3a), cold * 0.35);
     });
+  }
+
+  /** Bahşiş kavanozunu göster/gizle; içindeki para yüksekliği tutara göre. */
+  setJar(visible: boolean, amount: number) {
+    if (!this.jar) {
+      this.jar = makeTipJar();
+      this.tray.add(this.jar);
+    }
+    this.jar.visible = visible;
+    const coins = this.jar.getObjectByName('coins');
+    if (coins) {
+      const h = Math.min(1, Math.log10(1 + amount) / 2.4);
+      coins.scale.y = Math.max(0.02, h);
+      coins.visible = amount > 0;
+    }
+  }
+
+  get trayGroup() {
+    return this.tray;
   }
 
   /** Bardakların dünya konumları (buhar parçacıkları için). */

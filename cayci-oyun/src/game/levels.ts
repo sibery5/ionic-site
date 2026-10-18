@@ -103,6 +103,27 @@ export const LEVELS: LevelDef[] = [
   },
 ];
 
+/** Açgözlü Çaycı arenası: tek büyük salon, ocak solda, dört masa köşelerde. */
+export const ARENA: LevelDef = {
+  theme: 'han',
+  npcCount: 4,
+  cat: true,
+  grid: [
+    '####################',
+    '#k...a......p...b.k#',
+    '#..................#',
+    '#..n.....n....n....#',
+    '#P.................#',
+    '#O...pp......pp....#',
+    '#O...pp..ww..pp...v#',
+    '#O..........K......#',
+    '#..n.....n....n....#',
+    '#..................#',
+    '#k...c......p...d.k#',
+    '####################',
+  ],
+};
+
 export interface ParsedLevel {
   w: number;
   h: number;

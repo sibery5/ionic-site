@@ -25,6 +25,23 @@
 
 ---
 
+## 1.5 Açgözlü Çaycı (ana mod, 0.2)
+
+İlk sürüm oynandığında sıkıcı bulundu: gerilim yoktu, döngü angaryaydı, karar yoktu. 0.2 sürümü oyunu bir **risk-ödül** (push your luck) döngüsü etrafında yeniden kurar.
+
+| Kural | Neden |
+|---|---|
+| 90 saniyelik tur, tek salon, 4 müşteri | Kısa tur, "bir daha" hissi |
+| Ocakta **E basılı tut**: tepsiye istediğin kadar bardak (en fazla 12, 6'şar katlı kule) | Karar: kaç bardak? |
+| Bardak sayısı arttıkça tepsi huysuzlaşır: bilek sürtünmesi artar, döküm açısı küçülür, üst kat bardakları devrilir | Açgözlülüğün bedeli (`src/game/greedRules.ts`) |
+| Bahşişler tepsideki **kavanoza** girer, ancak ocağa dönünce **kasaya** geçer | Gerçek risk: tepsi uçarsa kavanozdaki para gider |
+| 7+ bardakla teslim ×2 **kule bonusu**; kusursuz teslimler **çarpanı** ×0,5 artırır (en çok ×5) | Büyük risk = büyük ödül |
+| **F → yeşilde F**: tek tuş Fırıldak. Tutarsa sonraki teslim ×2, kaçarsa tepede her şey uçar | Gösteri anı, net sonuç |
+| **Ctrl / C**: parmak ucunda yürüme (yavaş ama güvenli) | Hız ile güvenlik arasında seçim |
+| Felakette ağır çekim, kamera sarsıntısı, havada takla atan bardaklar, dev "ŞANGIRRR!" | Klip anı |
+
+Zorluk eğrisi (`npm run tune:greed`): 3 bardak normal yürüyüşte %4 kayıp; 8 bardak normal yürüyüşte %45 kayıp ve 2 bardak devrilir, parmak ucunda %1; 12 bardak parmak ucunda bile %56.
+
 ## 2. Kurgu
 
 ### Mekân

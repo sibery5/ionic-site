@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CELL, NPC, ORDERS, SHIFT, TEA, TRAY, WIND } from '../config';
+import { CELL, ORDERS, SHIFT, TEA, TRAY, WIND } from '../config';
 import { Grid } from '../physics/grid';
 import { TraySim } from '../physics/tray';
 import { LEVELS, LevelDef, parseLevel } from './levels';
@@ -17,6 +17,7 @@ import { Cat } from '../entities/Cat';
 import { TrayView } from '../entities/TrayView';
 import { Particles } from '../fx/Particles';
 import { TEA_COLORS, mat } from '../world/models';
+import { collideTray, followCamera } from './common';
 import { skyTexture } from '../world/textures';
 import type { Hud } from '../ui/Hud';
 
@@ -48,7 +49,6 @@ interface Pour {
   sound: { update: (p: number) => void; stop: () => void };
 }
 
-const UP = new THREE.Vector3(0, 1, 0);
 
 export class Shift {
   scene = new THREE.Scene();
@@ -542,32 +542,8 @@ export class Shift {
     }
   }
 
-  /** Tepsi duvara, masaya ya da insana çarpar. */
   private collideTray() {
-    const pos = this.tray.pos;
-    const hit = this.grid.resolveCircle(pos, TRAY.radius, pos.y);
-    let bump = 0;
-    if (hit.hit) {
-      const n = new THREE.Vector3(hit.nx, 0, hit.nz).normalize();
-      const vn = this.tray.vel.dot(n);
-      if (vn < 0) this.tray.push(n, -vn * (1 + TRAY.collideRestitution));
-      bump = Math.max(bump, -vn);
-    }
-    if (pos.y < NPC.trayHitHeight) {
-      for (const npc of this.npcs) {
-        const d = new THREE.Vector3(pos.x - npc.pos.x, 0, pos.z - npc.pos.z);
-        const min = TRAY.radius + npc.radius;
-        const l = d.length();
-        if (l < min && l > 1e-4) {
-          d.divideScalar(l);
-          pos.addScaledVector(d, min - l);
-          const rel = this.tray.vel.clone().sub(npc.vel);
-          const vn = rel.dot(d);
-          this.tray.push(d, Math.max(0.5, -vn * (1 + TRAY.collideRestitution)));
-          bump = Math.max(bump, 1.5);
-        }
-      }
-    }
+    const bump = collideTray(this.tray, this.grid, this.npcs);
     if (bump > 0.4 && this.tray.glasses.length) audio.clink(Math.min(1, bump / 3));
   }
 
@@ -593,23 +569,7 @@ export class Shift {
   }
 
   private updateCamera(dt: number) {
-    const p = this.player;
-    const f = p.forward(new THREE.Vector3(), p.camYaw);
-    const dist = p.armMode ? 2.6 : 3.2;
-    const height = this.def.theme === 'teras' ? 2.4 : 2.1;
-    const desired = p.pos.clone().addScaledVector(UP, height).addScaledVector(f, -dist);
-    const head = p.pos.clone().addScaledVector(UP, 1.5);
-    const frac = this.grid.rayFraction(head.x, head.z, desired.x, desired.z, desired.y);
-    // arkada duvar varsa kamera yaklaşır ve yükselir (kafaya girmesin)
-    const k = Math.max(0.12, frac - 0.06);
-    desired.x = head.x + (desired.x - head.x) * k;
-    desired.z = head.z + (desired.z - head.z) * k;
-    desired.y += (1 - frac) * (this.def.theme === 'teras' ? 0 : 0.75);
-    if (dt >= 1) this.camPos.copy(desired);
-    else this.camPos.lerp(desired, 1 - Math.exp(-10 * dt));
-    this.camera.position.copy(this.camPos);
-    const look = p.pos.clone().addScaledVector(UP, 1.0 - (1 - frac) * 0.3).addScaledVector(f, 0.9 + (1 - frac) * 0.8);
-    this.camera.lookAt(look);
+    followCamera({ camera: this.camera, pos: this.camPos }, this.player, this.grid, this.def.theme === 'teras', dt);
   }
 
   /** HUD için dünya → ekran. */

@@ -318,3 +318,11 @@ export const ENDINGS = {
     },
   },
 };
+
+/** Açgözlü moddaki dört müşteri (hikâyeden tanıdık yüzler). */
+export const ARENA_OFFICES: Office[] = [
+  { ...DAYS[0].offices[0], id: 'a' },
+  { ...DAYS[0].offices[1], id: 'b' },
+  { ...DAYS[1].offices[2], id: 'c' },
+  { ...DAYS[2].offices[0], id: 'd' },
+];

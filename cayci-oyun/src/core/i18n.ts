@@ -47,6 +47,28 @@ const UI = {
   stayQuiet: { tr: 'Sus', en: 'Stay quiet' },
   theEnd: { tr: 'Son', en: 'The End' },
   credits: { tr: 'ÇAYCI · Bütün modeller, sesler ve müzik koddan üretildi.', en: 'ÇAYCI · Every model, sound and note generated in code.' },
+  // açgözlü mod
+  greedMode: { tr: 'Açgözlü Çaycı', en: 'Greedy Tea Boy' },
+  greedNew: { tr: 'yeni', en: 'new' },
+  greedInfo: {
+    tr: '90 saniye. Tepsiye istediğin kadar bardak koy: çok bardak = çok bahşiş, ama tepsi huysuzlaşır. Bahşişler tepsideki kavanoza girer; ocağa dönünce kasaya geçer. Tepsi uçarsa kavanoz da gider.',
+    en: '90 seconds. Stack as many glasses as you dare: more glasses, bigger tips, wilder tray. Tips go into the jar on your tray and are banked when you get back to the stove. Crash the tray and the jar goes with it.',
+  },
+  bank: { tr: 'Kasa', en: 'Bank' },
+  jar: { tr: 'Kavanoz', en: 'Jar' },
+  tower: { tr: 'Kule', en: 'Tower' },
+  banked: { tr: 'kasaya!', en: 'banked!' },
+  jarLost: { tr: 'Kavanoz gitti!', en: 'The jar is gone!' },
+  newJar: { tr: 'Yeni kavanoz', en: 'New jar' },
+  spinPress: { tr: 'Yeşilde F!', en: 'F on green!' },
+  spinReady: { tr: 'Sonraki teslim ×2', en: 'Next delivery ×2' },
+  bestScore: { tr: 'Rekor', en: 'Best' },
+  newBest: { tr: 'YENİ REKOR!', en: 'NEW RECORD!' },
+  maxCombo: { tr: 'En yüksek çarpan', en: 'Best multiplier' },
+  maxTower: { tr: 'En yüksek kule', en: 'Tallest tower' },
+  jarsLost: { tr: 'Kaybedilen kavanoz', en: 'Jars lost' },
+  playAgain: { tr: 'Bir daha! (R)', en: 'Again! (R)' },
+  greedOrder: { tr: 'çay', en: 'tea' },
   // HUD
   ocakHint: { tr: '1 açık · 2 demli (basılı tut) · Q boşalt', en: '1 light · 2 strong (hold) · Q empty' },
   deliverHint: { tr: 'E: Teslim et', en: 'E: Deliver' },
@@ -88,6 +110,7 @@ const UI = {
       ['E', 'Masaya teslim et'],
       ['F', '"Çaaay!" diye bağır'],
       ['Esc', 'Duraklat'],
+      ['Ctrl / C', 'Parmak ucunda yürü (yavaş ama güvenli)'],
     ],
     en: [
       ['W A S D', 'Walk'],
@@ -100,6 +123,23 @@ const UI = {
       ['E', 'Deliver to a desk'],
       ['F', 'Shout "Teaaa!"'],
       ['Esc', 'Pause'],
+      ['Ctrl / C', 'Tiptoe (slow but safe)'],
+    ],
+  },
+  greedControls: {
+    tr: [
+      ['W A S D', 'Yürü · Shift koş · Ctrl/C parmak ucu'],
+      ['E (ocakta basılı tut)', 'Tepsiye bardak ekle'],
+      ['E (masada)', 'Teslim et'],
+      ['F, sonra yeşilde F', 'Fırıldak: sonraki teslim ×2'],
+      ['Boşluk', 'Tepsiyi kaldır'],
+    ],
+    en: [
+      ['W A S D', 'Walk · Shift run · Ctrl/C tiptoe'],
+      ['E (hold at stove)', 'Add glasses to the tray'],
+      ['E (at a desk)', 'Deliver'],
+      ['F, then F on green', 'Spin: next delivery ×2'],
+      ['Space', 'Raise the tray'],
     ],
   },
   rules: {
@@ -137,8 +177,8 @@ export function t(key: TextKeys): string {
   return (UI[key] as Text)[lang];
 }
 
-export function controlsList(): string[][] {
-  return UI.controls[lang];
+export function controlsList(greed = false): string[][] {
+  return greed ? UI.greedControls[lang] : UI.controls[lang];
 }
 
 export function up(key: keyof Dict['upgrades']): string {

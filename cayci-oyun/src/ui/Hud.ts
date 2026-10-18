@@ -14,6 +14,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', parent?: HT
 export interface TicketView {
   office: string;
   items: string[];
+  label?: string; // hazır yazı (açgözlü mod: "3 çay")
   urgency: number;
 }
 
@@ -37,6 +38,9 @@ export class Hud {
   private gossipEl: HTMLElement;
   private windEl: HTMLElement;
   private floatEl: HTMLElement;
+  private greedEl: HTMLElement;
+  private spinEl: HTMLElement;
+  private bigEl: HTMLElement;
   private lastTicketKey = '';
   private lastTrayKey = '';
   private speechTimer = 0;
@@ -68,6 +72,52 @@ export class Hud {
     this.speechEl = el('div', 'speech hidden', this.root);
     this.gossipEl = el('div', 'gossip hidden', this.root);
     el('div', 'crosshair', this.root);
+    this.greedEl = el('div', 'greed hidden', this.root);
+    this.spinEl = el('div', 'spin-meter hidden', this.root, '<div class="spin-zone"></div><div class="spin-needle"></div><div class="spin-label"></div>');
+    this.bigEl = el('div', 'big-text hidden', this.root);
+  }
+
+  /** Açgözlü mod paneli: kasa, kavanoz, çarpan, kule. */
+  setGreed(o: { bank: number; jar: number; hasJar: boolean; combo: number; tower: number; spinBoost: boolean }) {
+    this.greedEl.classList.remove('hidden');
+    const html =
+      `<div class="g-bank"><span>${t('bank')}</span><b>${Math.round(o.bank)}₺</b></div>` +
+      `<div class="g-jar ${o.hasJar ? '' : 'lost'}"><span>${t('jar')}</span><b>${o.hasJar ? Math.round(o.jar) + '₺' : '—'}</b></div>` +
+      `<div class="g-combo ${o.combo > 1 ? 'hot' : ''}">×${o.combo.toFixed(1)}</div>` +
+      `<div class="g-tower">${t('tower')}: <b>${o.tower}</b>${o.tower >= 7 ? ' <i>×2</i>' : ''}${o.spinBoost ? ' <i class="spin">' + t('spin') + ' ×2</i>' : ''}</div>`;
+    if (this.greedEl.innerHTML !== html) this.greedEl.innerHTML = html;
+  }
+
+  /** Fırıldak zamanlama göstergesi; null gizler. */
+  spinMeter(needle: number | null, zone: readonly [number, number] = [0.42, 0.58], label = '') {
+    if (needle === null) {
+      this.spinEl.classList.add('hidden');
+      return;
+    }
+    this.spinEl.classList.remove('hidden');
+    const z = this.spinEl.querySelector('.spin-zone') as HTMLElement;
+    z.style.left = `${zone[0] * 100}%`;
+    z.style.width = `${(zone[1] - zone[0]) * 100}%`;
+    (this.spinEl.querySelector('.spin-needle') as HTMLElement).style.left = `${needle * 100}%`;
+    (this.spinEl.querySelector('.spin-label') as HTMLElement).textContent = label;
+  }
+
+  /** Ekranın ortasında büyük, kısa yazı (felaket, rekor). */
+  big(text: string, sub = '') {
+    this.bigEl.innerHTML = `<div>${text}</div>${sub ? `<small>${sub}</small>` : ''}`;
+    this.bigEl.classList.remove('hidden');
+    this.bigEl.style.animation = 'none';
+    void this.bigEl.offsetWidth;
+    this.bigEl.style.animation = '';
+    clearTimeout(this.bigTimer);
+    this.bigTimer = window.setTimeout(() => this.bigEl.classList.add('hidden'), 1800);
+  }
+  private bigTimer = 0;
+
+  /** Hikâye modunda para göstergesi, açgözlü modda kasa paneli görünür. */
+  setMode(greed: boolean) {
+    this.root.classList.toggle('greed-mode', greed);
+    if (!greed) this.greedEl.classList.add('hidden');
   }
 
   show() {
@@ -100,7 +150,7 @@ export class Hud {
   }
 
   setTickets(list: TicketView[]) {
-    const key = list.map((x) => `${x.office}:${x.items.join('')}:${Math.round(x.urgency * 20)}`).join('|');
+    const key = list.map((x) => `${x.office}:${x.label ?? x.items.join('')}:${Math.round(x.urgency * 20)}`).join('|');
     if (key === this.lastTicketKey) return;
     this.lastTicketKey = key;
     this.tickets.innerHTML = '';
@@ -113,7 +163,7 @@ export class Hud {
       const parts: string[] = [];
       if (counts.acik) parts.push(`${counts.acik} ${t('acik')}`);
       if (counts.demli) parts.push(`${counts.demli} ${t('demli')}`);
-      el('div', 'ticket-items', d, parts.join(', '));
+      el('div', 'ticket-items', d, tk.label ?? parts.join(', '));
       const bar = el('div', 'ticket-bar', d);
       const fill = el('div', 'ticket-bar-fill', bar);
       fill.style.width = `${Math.max(0, 1 - tk.urgency) * 100}%`;
@@ -128,17 +178,23 @@ export class Hud {
     const W = this.trayBox.width;
     const H = this.trayBox.height;
     ctx.clearRect(0, 0, W, H);
-    const gap = 70;
+    const gap = Math.min(70, (W - 40) / capacity);
+    const sc = Math.min(1, gap / 62);
     const x0 = W / 2 - ((capacity - 1) * gap) / 2;
     for (let i = 0; i < capacity; i++) {
       const g = glasses[i];
       const x = x0 + i * gap;
+      ctx.save();
+      ctx.translate(x, 55);
+      ctx.scale(sc, sc);
+      ctx.translate(-x, -55);
       if (!g) {
         ctx.strokeStyle = 'rgba(255,255,255,0.35)';
         ctx.setLineDash([5, 5]);
         ctx.lineWidth = 2;
         ctx.strokeRect(x - 20, 20, 40, 60);
         ctx.setLineDash([]);
+        ctx.restore();
         continue;
       }
       drawGlassIcon(ctx, x, 50, g.type === 'demli' ? '#8e1d10' : '#d9822b', g.fill);
@@ -153,6 +209,7 @@ export class Hud {
         ctx.font = 'bold 16px sans-serif';
         ctx.fillText('★', x + 14, 26);
       }
+      ctx.restore();
     }
   }
 
@@ -230,5 +287,7 @@ export class Hud {
     this.hint(null);
     this.pourBar(null, 'acik');
     this.wind(null, 0);
+    this.spinMeter(null);
+    this.bigEl.classList.add('hidden');
   }
 }

@@ -35,6 +35,9 @@ export class Player {
   private stepDist = 0;
   private slipCooldown = 0;
   stunned = 0;
+  tiptoe = false;
+  /** Doluysa el bu ofsete kilitlenir (tek tuş Fırıldak). */
+  scriptedArm: [number, number] | null = null;
 
   constructor() {
     this.rig = makePerson({
@@ -83,8 +86,12 @@ export class Player {
   update(dt: number, input: Input, grid: Grid, env: PlayerEnv): PlayerStepInfo {
     const info: PlayerStepInfo = { step: null, slipped: false };
     // bakış
-    this.armMode = input.leftDown;
-    if (this.armMode) {
+    this.armMode = input.leftDown || this.scriptedArm !== null;
+    if (this.scriptedArm) {
+      // tek tuş Fırıldak: eli kod döndürür, fare sadece bakışı çevirir
+      this.armOffset.set(this.scriptedArm[0], this.scriptedArm[1]);
+      this.camYaw -= input.mouseDX * PLAYER.turnSensitivity * env.sensitivity * 0.3;
+    } else if (this.armMode) {
       this.armOffset.x += input.mouseDX * HAND.armSensitivity * env.sensitivity;
       this.armOffset.y -= input.mouseDY * HAND.armSensitivity * env.sensitivity;
       if (this.armOffset.length() > HAND.armRange) this.armOffset.setLength(HAND.armRange);
@@ -107,7 +114,8 @@ export class Player {
     if (input.isDown('KeyD') || input.isDown('ArrowRight')) wish.add(r);
     if (input.isDown('KeyA') || input.isDown('ArrowLeft')) wish.sub(r);
     const running = (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) && !this.armMode;
-    let speed = running ? PLAYER.runSpeed : PLAYER.walkSpeed;
+    this.tiptoe = (input.isDown('ControlLeft') || input.isDown('KeyC')) && !running;
+    let speed = running ? PLAYER.runSpeed : this.tiptoe ? PLAYER.tiptoeSpeed : PLAYER.walkSpeed;
     if (this.armMode) speed *= 0.6;
     if (this.stunned > 0) {
       this.stunned -= dt;
@@ -117,7 +125,8 @@ export class Player {
 
     const [cx, cz] = Grid.cellOf(this.pos.x, this.pos.z);
     const slip = env.slippery(cx, cz) * (env.shoes ? 0.4 : 1);
-    const accel = PLAYER.accel + (PLAYER.slipperyAccel - PLAYER.accel) * slip;
+    const baseAccel = this.tiptoe ? PLAYER.tiptoeAccel : PLAYER.accel;
+    const accel = baseAccel + (PLAYER.slipperyAccel - baseAccel) * slip;
     const dv = tmp.subVectors(wish, this.vel);
     const maxDv = accel * dt;
     if (dv.length() > maxDv) dv.setLength(maxDv);

@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "shots": "node scripts/demo.mjs",
     "smoke": "node scripts/flow.mjs",
-    "tune": "tsx scripts/tune.ts"
+    "tune": "tsx scripts/tune.ts",
+    "tune:greed": "tsx scripts/greed-tune.ts",
+    "tune:spin": "tsx scripts/spin-tune.ts",
+    "shots:greed": "node scripts/greed-demo.mjs"
   },
   "dependencies": {
     "three": "0.177.0"

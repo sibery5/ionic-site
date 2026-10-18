@@ -116,6 +116,33 @@ export function makeGlass(type: 'acik' | 'demli'): GlassModel {
   return { group, tea, teaMat };
 }
 
+// ---------------- bahşiş kavanozu ----------------
+
+export function makeTipJar(): THREE.Group {
+  const g = new THREE.Group();
+  const jarMat = new THREE.MeshStandardMaterial({ color: 0xe8f4f0, roughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.13, 16, 1, true), jarMat);
+  body.position.y = 0.072;
+  body.renderOrder = 2;
+  g.add(body);
+  const lid = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.006, 6, 16), mat(0xc9a54a, { metal: 0.8, rough: 0.3 }));
+  lid.rotation.x = Math.PI / 2;
+  lid.position.y = 0.137;
+  g.add(lid);
+  const coins = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.12, 14), mat(0xe9c046, { metal: 0.9, rough: 0.3, emissive: 0x3a2a00 }));
+  coins.name = 'coins';
+  coins.geometry.translate(0, 0.06, 0);
+  coins.position.y = 0.01;
+  g.add(coins);
+  const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0505, 0.0505, 0.03, 16, 1, true), mat(0xb3261e));
+  label.position.y = 0.08;
+  g.add(label);
+  g.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = true;
+  });
+  return g;
+}
+
 // ---------------- askılı tepsi ----------------
 
 export function makeTray(): THREE.Group {

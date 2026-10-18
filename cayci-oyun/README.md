@@ -7,6 +7,12 @@ Askılı çay tepsisiyle, tek damla dökmeden İstanbul'un en kaotik iş hanına
 - **Tasarım belgesi:** [docs/TASARIM.md](docs/TASARIM.md) (kurgu, karakterler, oynanış, ses, görsel, yol haritası)
 - **Demo görselleri:** [docs/gorseller/](docs/gorseller/)
 
+## Modlar
+
+- **Açgözlü Çaycı (ana mod):** 90 saniye. Tepsiye istediğin kadar bardak koy; çok bardak çok bahşiş ama tepsi huysuzlaşır. Bahşişler tepsideki kavanozda durur, ocağa dönünce kasaya geçer. Tepsi uçarsa kavanoz da gider.
+- **Hikâye:** 5 gün, 5 kat, dedikodu kartları ve 3 son.
+- **Serbest Vardiya** ve **Günlük Mücadele**.
+
 ## Çalıştırma
 
 Gerekenler: [Node.js](https://nodejs.org) 20 veya üstü (ücretsiz).

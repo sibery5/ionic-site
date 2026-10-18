@@ -1,6 +1,7 @@
 import { controlsList, getLang, t, tx, up } from '../core/i18n';
 import { DAYS, ENDINGS, GOSSIP_NEEDED, Lang } from '../game/story';
 import type { ShiftResult } from '../game/Shift';
+import type { GreedResult } from '../game/Greed';
 import type { SaveData } from '../core/save';
 import { audio } from '../audio/Audio';
 
@@ -68,6 +69,7 @@ export class Menus {
     hasSave: boolean;
     onNew: () => void;
     onContinue: () => void;
+    onGreed: () => void;
     onFree: () => void;
     onDaily: () => void;
     onHow: () => void;
@@ -79,8 +81,9 @@ export class Menus {
     h('div', 'logo-sub', t('subtitle'), p);
     h('div', 'tagline', t('tagline'), p);
     const list = h('div', 'btn-list', '', p);
-    if (o.hasSave) button(t('continue'), o.onContinue, list, 'btn primary');
-    button(t('newGame'), o.onNew, list, o.hasSave ? 'btn' : 'btn primary');
+    button(`${t('greedMode')} <span class="badge">${t('greedNew')}</span>`, o.onGreed, list, 'btn primary');
+    if (o.hasSave) button(t('continue'), o.onContinue, list);
+    button(t('newGame'), o.onNew, list);
     button(t('freePlay'), o.onFree, list);
     button(t('daily'), o.onDaily, list);
     button(t('howTo'), o.onHow, list);
@@ -159,6 +162,42 @@ export class Menus {
     if (best !== undefined) h('p', '', `${t('best')}: <b>${best}₺</b>`, p);
     button(t('start'), onStart, p, 'btn primary');
     button(t('back'), onBack, p, 'btn');
+  }
+
+  greedIntro(best: number | undefined, onStart: () => void, onBack: () => void) {
+    const p = this.open('note-screen');
+    h('div', 'note-day', t('greedMode'), p);
+    h('div', 'note-paper', t('greedInfo'), p);
+    const tbl = h('table', 'controls', '', p);
+    for (const [k, v] of controlsList(true)) h('tr', '', `<td><kbd>${k}</kbd></td><td>${v}</td>`, tbl);
+    if (best) h('p', 'big', `${t('bestScore')}: <b>${best}₺</b>`, p);
+    button(t('start'), onStart, p, 'btn primary');
+    button(t('back'), onBack, p);
+  }
+
+  greedSummary(r: GreedResult, o: { best: number; record: boolean; onRetry: () => void; onMenu: () => void }) {
+    const p = this.open();
+    h('h2', '', t('shiftOver'), p);
+    if (o.record) h('div', 'record', t('newBest'), p);
+    h('div', 'score', `${r.score}₺`, p);
+    const tbl = h('table', 'summary', '', p);
+    const row = (a: string, b: string) => h('tr', '', `<td>${a}</td><td>${b}</td>`, tbl);
+    row(t('bestScore'), `${o.best}₺`);
+    row(t('delivered'), String(r.delivered));
+    row(t('maxTower'), String(r.maxTower));
+    row(t('maxCombo'), `×${r.maxCombo.toFixed(1)}`);
+    row(t('spins'), String(r.spins));
+    row(t('broken'), String(r.broken));
+    row(t('jarsLost'), String(r.jarsLost));
+    button(t('playAgain'), o.onRetry, p, 'btn primary');
+    button(t('quit'), o.onMenu, p);
+    const key = (e: KeyboardEvent) => {
+      if (e.code === 'KeyR' && document.body.contains(p) && !this.root.classList.contains('hidden')) {
+        window.removeEventListener('keydown', key);
+        o.onRetry();
+      }
+    };
+    window.addEventListener('keydown', key);
   }
 
   clickToPlay(onClick: () => void) {
