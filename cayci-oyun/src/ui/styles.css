@@ -455,7 +455,7 @@ kbd {
 }
 .coach {
   position: absolute;
-  bottom: 178px;
+  top: 64px; /* üstte dursun: alttaki tepsiyi ve bardak şeridini kapatmasın */
   left: 50%;
   transform: translateX(-50%);
   max-width: 560px;

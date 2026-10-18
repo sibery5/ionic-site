@@ -1,0 +1,275 @@
+[
+  {
+    "apiName": "FIRST_TEA",
+    "displayName": {
+      "turkish": "İlk Çay",
+      "english": "First Tea"
+    },
+    "description": {
+      "turkish": "İlk bardağı teslim et",
+      "english": "Deliver your first glass"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/FIRST_TEA.png"
+  },
+  {
+    "apiName": "TOWER_8",
+    "displayName": {
+      "turkish": "Kule",
+      "english": "Tower"
+    },
+    "description": {
+      "turkish": "8 bardakla teslim yap",
+      "english": "Deliver while carrying 8 glasses"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/TOWER_8.png"
+  },
+  {
+    "apiName": "TOWER_12",
+    "displayName": {
+      "turkish": "Gökdelen",
+      "english": "Skyscraper"
+    },
+    "description": {
+      "turkish": "12 bardakla teslim yap",
+      "english": "Deliver while carrying 12 glasses"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/TOWER_12.png"
+  },
+  {
+    "apiName": "SPIN_1",
+    "displayName": {
+      "turkish": "Fırıldak",
+      "english": "The Spin"
+    },
+    "description": {
+      "turkish": "İlk Fırıldak",
+      "english": "Land your first Spin"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/SPIN_1.png"
+  },
+  {
+    "apiName": "SPIN_25",
+    "displayName": {
+      "turkish": "Döner Usta",
+      "english": "Spinning Master"
+    },
+    "description": {
+      "turkish": "Toplam 25 Fırıldak",
+      "english": "Land 25 Spins"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/SPIN_25.png"
+  },
+  {
+    "apiName": "COMBO_3",
+    "displayName": {
+      "turkish": "Beş Yıldızlı Hizmet",
+      "english": "Five-Star Service"
+    },
+    "description": {
+      "turkish": "×3 çarpana ulaş",
+      "english": "Reach a ×3 multiplier"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/COMBO_3.png"
+  },
+  {
+    "apiName": "BANK_100",
+    "displayName": {
+      "turkish": "Kumbara",
+      "english": "Piggy Bank"
+    },
+    "description": {
+      "turkish": "Tek seferde 100₺ kasaya geçir",
+      "english": "Bank 100₺ in one trip"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/BANK_100.png"
+  },
+  {
+    "apiName": "RUN_250",
+    "displayName": {
+      "turkish": "Bahşiş Kralı",
+      "english": "Tip King"
+    },
+    "description": {
+      "turkish": "Bir vardiyada 250₺",
+      "english": "Earn 250₺ in one shift"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/RUN_250.png"
+  },
+  {
+    "apiName": "CLEAN_RUN",
+    "displayName": {
+      "turkish": "Tek Damla Bile",
+      "english": "Not a Drop"
+    },
+    "description": {
+      "turkish": "Kavanoz kaybetmeden ve bardak kırmadan 15+ bardak teslim et",
+      "english": "Deliver 15+ glasses without losing the jar or breaking a glass"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/CLEAN_RUN.png"
+  },
+  {
+    "apiName": "VIP_5",
+    "displayName": {
+      "turkish": "Protokol",
+      "english": "Protocol"
+    },
+    "description": {
+      "turkish": "Toplam 5 VIP siparişini kusursuz ver",
+      "english": "Serve 5 VIP orders perfectly"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/VIP_5.png"
+  },
+  {
+    "apiName": "ALL_1STAR",
+    "displayName": {
+      "turkish": "Han Turu",
+      "english": "Grand Tour"
+    },
+    "description": {
+      "turkish": "Bütün katlarda en az 1 yıldız",
+      "english": "Earn a star on every floor"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/ALL_1STAR.png"
+  },
+  {
+    "apiName": "ALL_3STAR",
+    "displayName": {
+      "turkish": "Mükemmeliyetçi",
+      "english": "Perfectionist"
+    },
+    "description": {
+      "turkish": "Bütün katlarda 3 yıldız",
+      "english": "Earn three stars on every floor"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/ALL_3STAR.png"
+  },
+  {
+    "apiName": "GOSSIP_ALL",
+    "displayName": {
+      "turkish": "Her Şeyi Duyan",
+      "english": "Heard It All"
+    },
+    "description": {
+      "turkish": "Bütün dedikoduları topla",
+      "english": "Collect every piece of gossip"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/GOSSIP_ALL.png"
+  },
+  {
+    "apiName": "END_SAVED",
+    "displayName": {
+      "turkish": "Han Kurtuldu",
+      "english": "The Han Is Saved"
+    },
+    "description": {
+      "turkish": "Hanı kurtar",
+      "english": "Save the han"
+    },
+    "hidden": true,
+    "icon": "steam/achievement-icons/END_SAVED.png"
+  },
+  {
+    "apiName": "END_SILENT",
+    "displayName": {
+      "turkish": "Susmak Altın",
+      "english": "Silence Is Golden"
+    },
+    "description": {
+      "turkish": "Sus ve vapurda ocak aç",
+      "english": "Stay quiet and open a ferry stand"
+    },
+    "hidden": true,
+    "icon": "steam/achievement-icons/END_SILENT.png"
+  },
+  {
+    "apiName": "END_DISBELIEVED",
+    "displayName": {
+      "turkish": "Dedikoducu Çırak",
+      "english": "Gossip Boy"
+    },
+    "description": {
+      "turkish": "Kimse sana inanmasın",
+      "english": "Nobody believes you"
+    },
+    "hidden": true,
+    "icon": "steam/achievement-icons/END_DISBELIEVED.png"
+  },
+  {
+    "apiName": "CAT_10",
+    "displayName": {
+      "turkish": "Paşa'nın Kurbanı",
+      "english": "Paşa's Victim"
+    },
+    "description": {
+      "turkish": "Paşa'ya 10 kez takıl",
+      "english": "Trip over Paşa 10 times"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/CAT_10.png"
+  },
+  {
+    "apiName": "BROKEN_100",
+    "displayName": {
+      "turkish": "Bardak Katili",
+      "english": "Glass Breaker"
+    },
+    "description": {
+      "turkish": "Toplam 100 bardak kır",
+      "english": "Break 100 glasses"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/BROKEN_100.png"
+  },
+  {
+    "apiName": "DAILY_7",
+    "displayName": {
+      "turkish": "Müdavim",
+      "english": "Regular"
+    },
+    "description": {
+      "turkish": "7 farklı günde bütün günlük görevleri bitir",
+      "english": "Finish all daily missions on 7 different days"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/DAILY_7.png"
+  },
+  {
+    "apiName": "LEVEL_10",
+    "displayName": {
+      "turkish": "Tepsi Ustası",
+      "english": "Tray Master"
+    },
+    "description": {
+      "turkish": "10. seviyeye ulaş",
+      "english": "Reach level 10"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/LEVEL_10.png"
+  },
+  {
+    "apiName": "LEVEL_30",
+    "displayName": {
+      "turkish": "Efsane",
+      "english": "Legend"
+    },
+    "description": {
+      "turkish": "30. seviyeye ulaş",
+      "english": "Reach level 30"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/LEVEL_30.png"
+  }
+]

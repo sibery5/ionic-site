@@ -55,7 +55,7 @@ class MenuScene {
     this.rig = makePerson(cemalLook(look));
     this.scene.add(this.rig.root);
     this.rig.armR.rotation.x = -0.65;
-    this.rig.armR.rotation.z = 0.15;
+    this.rig.armR.rotation.z = -0.15;
     this.rig.root.updateMatrixWorld(true);
     this.view = new TrayView(look);
     this.tray.reset(this.rig.hand.getWorldPosition(new THREE.Vector3()));
@@ -436,8 +436,9 @@ class Game {
 
 const game = new Game(document.getElementById('app')!);
 
-// Otomatik test ve ekran görüntüsü için küçük bir kanca.
-(window as unknown as { __cayci: unknown }).__cayci = {
+// Otomatik test, denge ölçümü ve ekran görüntüsü için kanca. Sadece geliştirme sunucusunda var:
+// yayın derlemesinde (Steam, web) bot ve sahne atlama yok, yerel sıralama şişirilemez.
+if (import.meta.env.DEV) (window as unknown as { __cayci: unknown }).__cayci = {
   game,
   /** Bir mekânı doğrudan başlat (menüsüz). */
   startRun: (index: number, mode: RunStats['mode'] = 'free') => {
@@ -474,14 +475,30 @@ const game = new Game(document.getElementById('app')!);
       Math.random = rand;
     }
   },
+  /** Tanıtım görseli için: mekânı aç, botla 'until' saniye oynat, sahneyi dondurmadan bırak. */
+  botScene: (index: number, until: number, policy: BotPolicy, seed = 3) => {
+    game.save.tutorialDone = true;
+    game.startRun(index, 'free');
+    game.menus.hide();
+    game.state = 'overlay';
+    const rand = Math.random;
+    const rng = new Rng(seed * 7 + 3);
+    Math.random = () => rng.next();
+    try {
+      return playBot(game.run!, policy, seed, until);
+    } finally {
+      Math.random = rand;
+    }
+  },
   /** Tanıtım görseli çiz (karakterler / eşyalar). */
-  gallery: (kind: 'cast' | 'props') => {
+  gallery: (kind: 'cast' | 'props' | 'wardrobe' | 'keyart') => {
     game.state = 'overlay';
     game.frozen = true;
     game.endRun();
     game.menus.hide();
     game.hud.hide();
-    const g = buildGallery(kind);
+    game.renderer.setSize(window.innerWidth, window.innerHeight);
+    const g = buildGallery(kind, window.innerWidth / window.innerHeight);
     g.camera.aspect = window.innerWidth / window.innerHeight;
     g.camera.updateProjectionMatrix();
     game.renderer.render(g.scene, g.camera);

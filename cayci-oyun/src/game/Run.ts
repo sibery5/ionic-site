@@ -223,6 +223,25 @@ export class Run {
       this.hud.toast(t('slip'), 'warn');
     }
     for (const n of this.npcs) n.update(dt, this.player.pos, this.tray.pos);
+    // han sakinleri birbirinin içinden geçmez
+    for (let a = 0; a < this.npcs.length; a++)
+      for (let b = a + 1; b < this.npcs.length; b++) {
+        const A = this.npcs[a].pos;
+        const B = this.npcs[b].pos;
+        const dx = B.x - A.x;
+        const dz = B.z - A.z;
+        const l = Math.hypot(dx, dz);
+        const min = this.npcs[a].radius + this.npcs[b].radius;
+        if (l < min) {
+          const nx = l > 1e-4 ? dx / l : 1;
+          const nz = l > 1e-4 ? dz / l : 0;
+          const push = (min - l) / 2;
+          A.x -= nx * push;
+          A.z -= nz * push;
+          B.x += nx * push;
+          B.z += nz * push;
+        }
+      }
     if (this.mopper) {
       this.mopTimer -= dt;
       if (this.mopTimer <= 0 && this.mopper.vel.lengthSq() > 0.05) {

@@ -195,7 +195,8 @@ export class Player {
     const parentQ = arm.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     const local = dirWorld.normalize().applyQuaternion(parentQ);
     arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), local);
-    arm.scale.y = Math.min(1.25, Math.max(0.6, dist / 0.6));
+    // dirsek yok: el omza yaklaşınca (Fırıldak) kol kısalır ki eli aşmasın
+    arm.scale.y = Math.min(1.25, Math.max(0.32, dist / 0.6));
   }
 }
 

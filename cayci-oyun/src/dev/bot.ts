@@ -23,7 +23,8 @@ export interface BotPolicy {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type R = any;
 
-export function playBot(run: Run, policy: BotPolicy, seed = 1): RunStats {
+/** until: oyun saatinde bu saniyeye gelince durur (tanıtım görselleri için; tur bitmez). */
+export function playBot(run: Run, policy: BotPolicy, seed = 1, until = Infinity): RunStats {
   const r = run as R;
   const grid: Grid = r.grid;
   const inp = new ScriptedInput();
@@ -163,7 +164,7 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1): RunStats {
   let dumped = false;
   (globalThis as R).__botInfo = () => ({ modeTime, stuck, causes });
   (globalThis as R).__botTrace = trace;
-  for (let i = 0; i < 60 * 200 && !result; i++) {
+  for (let i = 0; i < 60 * 200 && !result && r.time < until; i++) {
     inp.down.delete('KeyW');
     inp.down.delete('ControlLeft');
     inp.down.delete('KeyE');
@@ -272,6 +273,7 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1): RunStats {
       trace.push(`${r.time.toFixed(1)} ${mode} g=${glasses.length} br+${r.stats.broken - b0} jar+${r.stats.jarsLost - j0} v=${Math.hypot(r.player.vel.x, r.player.vel.z).toFixed(2)} spin=${r.spin ? r.spin.stage : '-'} keys=${[...inp.down].join('+')} bumps=${bumps.filter((b) => b > 0).map((b) => b.toFixed(1)).join('/')} cat=${r.stats.catTrips} npc=${Math.min(9, ...r.npcs.map((n: R) => n.pos.distanceTo(r.tray.pos))).toFixed(2)} trayV=${r.tray.vel.length().toFixed(2)} pos=${r.player.pos.x.toFixed(1)},${r.player.pos.z.toFixed(1)}`);
     inp.endFrame();
   }
+  if (until !== Infinity) return r.stats;
   if (!result) run.forceEnd();
   return result ?? r.stats;
 }

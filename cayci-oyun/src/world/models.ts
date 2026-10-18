@@ -424,8 +424,9 @@ export function makePerson(o: PersonOpts): PersonRig {
     torso.add(g);
     return g;
   };
-  const armL = arm(-1);
-  const armR = arm(1);
+  // karakter +z'ye bakar: anatomik sağ kol -x tarafındadır (tepsiyi tutan el)
+  const armL = arm(1);
+  const armR = arm(-1);
   const hand = sphere(0.052, skin, 0, -0.56 * s, 0, 8, 6);
   armR.add(hand);
   armL.add(sphere(0.052, skin, 0, -0.56 * s, 0, 8, 6));

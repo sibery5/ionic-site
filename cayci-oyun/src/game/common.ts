@@ -53,7 +53,8 @@ export function followCamera(cam: CamState, p: Player, grid: Grid, outdoor: bool
   const desired = p.pos.clone().addScaledVector(UP, height).addScaledVector(f, -dist).addScaledVector(r, side * 1.3).addScaledVector(UP, -side * 0.45);
   const head = p.pos.clone().addScaledVector(UP, 1.5);
   const frac = grid.rayFraction(head.x, head.z, desired.x, desired.z, desired.y);
-  const k = Math.max(0.12, frac - 0.06);
+  // duvarın içine girmesin: engelden biraz önce dur (çok yakınsa baş hizasına gelir, kafa gizlenir)
+  const k = Math.max(0, frac - 0.1);
   desired.x = head.x + (desired.x - head.x) * k;
   desired.z = head.z + (desired.z - head.z) * k;
   desired.y += (1 - frac) * (outdoor ? 0 : 0.75);
@@ -61,7 +62,7 @@ export function followCamera(cam: CamState, p: Player, grid: Grid, outdoor: bool
   else cam.pos.lerp(desired, 1 - Math.exp(-10 * dt));
   cam.camera.position.copy(cam.pos);
   // duvara sıkışınca kamera başın içine girer: kafayı gizle ki tepsi görünsün
-  p.rig.head.visible = cam.pos.distanceTo(head) > 1.0;
+  p.rig.head.visible = cam.pos.distanceTo(head) > 1.6;
   if (shake > 0) cam.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake));
   const look = p.pos
     .clone()
