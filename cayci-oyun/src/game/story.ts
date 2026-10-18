@@ -11,7 +11,7 @@ export interface Office {
   name: Text;
   person: Text; // müşterinin adı
   look: CustomerLook;
-  gossip?: Text; // kusursuz teslimde duyulan dedikodu
+  gossip?: Text; // VIP siparişi eksiksiz teslim edilince duyulan dedikodu
   lines: Text[]; // teslimde söylenen rastgele sözler
 }
 
@@ -24,6 +24,8 @@ export interface CustomerLook {
   scarf?: number; // başörtüsü rengi
   glasses?: boolean;
   mustache?: boolean;
+  beard?: boolean;
+  hairStyle?: 'short' | 'side' | 'curly' | 'bun' | 'long' | 'bald';
   tie?: number;
 }
 
@@ -319,10 +321,10 @@ export const ENDINGS = {
   },
 };
 
-/** Açgözlü moddaki dört müşteri (hikâyeden tanıdık yüzler). */
+/** Giriş salonundaki dört müşteri (hikâyeden tanıdık yüzler, burada dedikodu yok). */
 export const ARENA_OFFICES: Office[] = [
-  { ...DAYS[0].offices[0], id: 'a' },
-  { ...DAYS[0].offices[1], id: 'b' },
-  { ...DAYS[1].offices[2], id: 'c' },
-  { ...DAYS[2].offices[0], id: 'd' },
+  { ...DAYS[0].offices[0], id: 'a', gossip: undefined },
+  { ...DAYS[0].offices[1], id: 'b', gossip: undefined },
+  { ...DAYS[1].offices[2], id: 'c', gossip: undefined },
+  { ...DAYS[2].offices[0], id: 'd', gossip: undefined },
 ];

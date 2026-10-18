@@ -60,6 +60,8 @@ export function followCamera(cam: CamState, p: Player, grid: Grid, outdoor: bool
   if (dt >= 1) cam.pos.copy(desired);
   else cam.pos.lerp(desired, 1 - Math.exp(-10 * dt));
   cam.camera.position.copy(cam.pos);
+  // duvara sıkışınca kamera başın içine girer: kafayı gizle ki tepsi görünsün
+  p.rig.head.visible = cam.pos.distanceTo(head) > 1.0;
   if (shake > 0) cam.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake));
   const look = p.pos
     .clone()

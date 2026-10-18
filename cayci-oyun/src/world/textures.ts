@@ -164,29 +164,46 @@ export function wetSignTexture(lang: 'tr' | 'en') {
   return tex(c, false);
 }
 
-/** Müşterinin üstündeki sipariş balonu. */
-export function bubbleTexture(items: string[], urgency: number) {
-  const [c, ctx] = canvas(256, 128);
-  ctx.clearRect(0, 0, 256, 128);
-  ctx.fillStyle = '#fffaf0';
-  ctx.strokeStyle = urgency > 0.75 ? '#b3261e' : '#3a2a1a';
-  ctx.lineWidth = 6;
-  const r = 26;
+/** Müşterinin üstündeki sipariş balonu. kind: normal / vip (altın) / rush (kırmızı, acele). */
+export function bubbleTexture(items: string[], urgency: number, kind: 'normal' | 'vip' | 'rush' = 'normal') {
+  const [c, ctx] = canvas(320, 140);
+  ctx.clearRect(0, 0, 320, 140);
+  const fill = kind === 'vip' ? '#fff1c4' : kind === 'rush' ? '#ffe0d8' : '#fffaf0';
+  const stroke = kind === 'vip' ? '#c9a54a' : urgency > 0.75 || kind === 'rush' ? '#b3261e' : '#3a2a1a';
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = kind === 'normal' ? 6 : 9;
   ctx.beginPath();
-  ctx.roundRect(8, 8, 240, 88, r);
+  ctx.roundRect(8, 8, 304, 96, 28);
   ctx.fill();
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(110, 94);
-  ctx.lineTo(128, 120);
-  ctx.lineTo(146, 94);
+  ctx.moveTo(142, 102);
+  ctx.lineTo(160, 132);
+  ctx.lineTo(178, 102);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
   const n = items.length;
-  const gap = 56;
-  const x0 = 128 - ((n - 1) * gap) / 2;
-  items.forEach((type, i) => drawGlassIcon(ctx, x0 + i * gap, 52, type === 'demli' ? '#8e1d10' : '#d9822b', 1));
+  const gap = Math.min(52, 240 / Math.max(1, n));
+  const x0 = 160 - ((n - 1) * gap) / 2 + (kind === 'normal' ? 0 : 14);
+  const sc = Math.min(1, gap / 50);
+  items.forEach((type, i) => {
+    ctx.save();
+    const x = x0 + i * gap;
+    ctx.translate(x, 56);
+    ctx.scale(sc, sc);
+    ctx.translate(-x, -56);
+    drawGlassIcon(ctx, x, 56, type === 'demli' ? '#8e1d10' : '#e3a04a', 1);
+    ctx.restore();
+  });
+  if (kind !== 'normal') {
+    ctx.fillStyle = kind === 'vip' ? '#c9a54a' : '#b3261e';
+    ctx.font = 'bold 34px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(kind === 'vip' ? '★' : '!', 34, 56);
+  }
   return tex(c, false);
 }
 

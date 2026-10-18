@@ -32,6 +32,12 @@ export class AudioEngine {
   private volume = 0.8;
   private musicVolume = 0.5;
   musicMood: 'calm' | 'tense' = 'calm';
+  /** 0..1: tepsideki kule ve çay saati yükseldikçe müzik hızlanır, ritim kalabalıklaşır. */
+  private intensity = 0;
+
+  setIntensity(v: number) {
+    this.intensity = Math.max(0, Math.min(1, v));
+  }
 
   init() {
     if (this.ctx) {
@@ -448,7 +454,7 @@ export class AudioEngine {
 
   private scheduleMusic() {
     const ctx = this.ctx!;
-    const bpm = this.musicMood === 'tense' ? 104 : 88;
+    const bpm = (this.musicMood === 'tense' ? 104 : 88) + this.intensity * 16;
     const eighth = 60 / bpm / 2;
     while (this.nextNoteTime < ctx.currentTime + 0.25) {
       const t = this.nextNoteTime;
@@ -456,6 +462,9 @@ export class AudioEngine {
       // düm-tek (Ayoub/çiftetelliye yakın sade bir ritim)
       if (s === 0 || s === 6 || s === 8) this.dum(t);
       if (s === 3 || s === 5 || s === 11 || s === 13 || s === 14) this.tek(t, s === 14 ? 0.5 : 1);
+      // gerilim katmanları: kule yükseldikçe ara vuruşlar ve kalp atışı
+      if (this.intensity > 0.4 && s % 2 === 1) this.tek(t, 0.35 + this.intensity * 0.3);
+      if (this.intensity > 0.75 && s % 4 === 2) this.dum(t);
       // ezgi
       const phraseEnd = s === 14;
       const rest = Math.random() < (this.musicMood === 'tense' ? 0.15 : 0.3) && !phraseEnd;

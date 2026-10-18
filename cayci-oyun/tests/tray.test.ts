@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { TraySim, allowedAngle } from '../src/physics/tray';
+import { greedParams } from '../src/game/greedRules';
 import { TRAY } from '../src/config';
 
 function makeTray(n = 3) {
   const t = new TraySim();
+  t.capacity = Math.max(t.capacity, n);
   t.reset(new Vector3(0, 1.05, 0));
   for (let i = 0; i < n; i++) t.addGlass('demli', 0.92, 85, 1);
   return t;
@@ -97,5 +99,59 @@ describe('TraySim', () => {
   it('doluluk arttıkça izin verilen açı küçülür', () => {
     expect(allowedAngle(1)).toBeLessThan(allowedAngle(0.6));
     expect(allowedAngle(0.3)).toBeGreaterThan(allowedAngle(0.5));
+  });
+
+  it('yeni kavanoz eski devrilmenin salınımını taşımaz', () => {
+    const t = makeTray(0);
+    t.hasJar = true;
+    const p = new Vector3(0, 1.05, 0);
+    // eli aşağı savur (serbest düşüşten hızlı): kavanoz havalanır ve düşer
+    let lost = false;
+    let vy = 0;
+    for (let i = 0; i < 40 && !lost; i++) {
+      vy += 30 * DT; // 3g ile aşağı
+      p.y -= vy * DT;
+      lost = t.step(p, DT).jarLost;
+    }
+    expect(lost).toBe(true);
+    // ocakta durgun beklerken yeni kavanoz verilir: tekrar devrilmemeli
+    for (let i = 0; i < 120; i++) t.step(p, DT);
+    t.hasJar = true;
+    let again = false;
+    for (let i = 0; i < 180; i++) again ||= t.step(p, DT).jarLost;
+    expect(again).toBe(false);
+  });
+
+  it('parmak ucunda (yavaş ivmeyle) yürünen 10 bardaklık kule devrilmez', () => {
+    const t = makeTray(10);
+    Object.assign(t.params, greedParams(10));
+    const p = new Vector3(0, 1.05, 0);
+    let fallen = 0;
+    let v = 0;
+    // 1,8 m/s² ile 1,5 m/s'ye çık, yürü, aynı ivmeyle dur
+    for (let i = 0; i < 400; i++) {
+      const target = i < 300 ? 1.5 : 0;
+      v += Math.sign(target - v) * Math.min(Math.abs(target - v), 1.8 * DT);
+      p.x += v * DT;
+      fallen += t.step(p, DT).fallen;
+    }
+    expect(fallen).toBe(0);
+    expect(t.glasses.length).toBe(10);
+  });
+
+  it('kuleyle normal ivmeyle ani kalkış üst katı devirir', () => {
+    const t = makeTray(10);
+    Object.assign(t.params, greedParams(10));
+    const p = new Vector3(0, 1.05, 0);
+    let fallen = 0;
+    let v = 0;
+    // 6 m/s² ile koşuya kalk ve aniden dur
+    for (let i = 0; i < 200; i++) {
+      const target = i < 70 ? 4.1 : 0;
+      v += Math.sign(target - v) * Math.min(Math.abs(target - v), 12 * DT);
+      p.x += v * DT;
+      fallen += t.step(p, DT).fallen;
+    }
+    expect(fallen).toBeGreaterThan(0);
   });
 });

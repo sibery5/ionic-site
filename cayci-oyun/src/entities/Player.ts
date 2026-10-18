@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { HAND, PLAYER } from '../config';
 import { Grid } from '../physics/grid';
-import { animateWalk, makePerson, PersonRig } from '../world/models';
+import { animateWalk, makePerson, PersonOpts, PersonRig, HatKind } from '../world/models';
+import { cosmetic, DEFAULT_LOOK, type CosmeticSlot } from '../meta/progress';
 import type { InputLike as Input } from '../core/input';
 
 export interface PlayerStepInfo {
@@ -14,6 +15,8 @@ export interface PlayerEnv {
   shoes: boolean;
   sensitivity: number;
   others: { pos: THREE.Vector3; radius: number }[];
+  /** gövdenin en hızlı dönüşü (rad/s); dolu tepsiyle usta yavaş döner, tepsi savrulmaz */
+  turnLimit?: number;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -25,6 +28,7 @@ export class Player {
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();
   camYaw = 0; // kameranın yönü (anında)
+  private yawVel = 0;
   yaw = 0; // gövdenin yönü (yumuşak takip)
   hand = new THREE.Vector3();
   armOffset = new THREE.Vector2(); // kol modunda: x ileri, y yukarı
@@ -39,15 +43,8 @@ export class Player {
   /** Doluysa el bu ofsete kilitlenir (tek tuş Fırıldak). */
   scriptedArm: [number, number] | null = null;
 
-  constructor() {
-    this.rig = makePerson({
-      shirt: 0xf4f1ea,
-      pants: 0x1c1c22,
-      skin: 0xe0ac7e,
-      hair: 0x1a120c,
-      vest: 0x15151a,
-      mustache: true,
-    });
+  constructor(look?: Partial<Record<CosmeticSlot, string>>) {
+    this.rig = makePerson(cemalLook(look));
   }
 
   place(x: number, z: number, yaw: number) {
@@ -103,7 +100,16 @@ export class Player {
     // gövde kamerayı yumuşakça takip eder: ani dönüşler tepsiyi daha az sarsar
     let dy = this.camYaw - this.yaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    this.yaw += dy * (1 - Math.exp(-10 * dt));
+    if (env.turnLimit === undefined) this.yaw += dy * (1 - Math.exp(-10 * dt));
+    else {
+      // yük arttıkça dönüş hem yavaşlar hem yumuşar (açısal ivme sınırı): tepsi savrulmaz
+      const lim = env.turnLimit;
+      const want = Math.max(-lim, Math.min(lim, dy * 10));
+      const acc = lim * 3 * dt;
+      this.yawVel += Math.max(-acc, Math.min(acc, want - this.yawVel));
+      if (Math.abs(this.yawVel * dt) > Math.abs(dy) && Math.sign(this.yawVel) === Math.sign(dy)) this.yawVel = dy / dt;
+      this.yaw += this.yawVel * dt;
+    }
 
     // hareket
     const f = this.forward(new THREE.Vector3(), this.camYaw);
@@ -152,6 +158,9 @@ export class Player {
       const l = d.length();
       if (l < min && l > 1e-4) {
         this.pos.addScaledVector(d, (min - l) / l);
+        // engelin içine doğru hız kalmasın (yoksa serbest kalınca tepsi sarsılır)
+        const vn = this.vel.dot(d) / l;
+        if (vn < 0) this.vel.addScaledVector(d, -vn / l);
       }
     }
 
@@ -188,4 +197,24 @@ export class Player {
     arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), local);
     arm.scale.y = Math.min(1.25, Math.max(0.6, dist / 0.6));
   }
+}
+
+/** Cemal'in görünüşü, seçili kozmetiklere göre. */
+export function cemalLook(look?: Partial<Record<CosmeticSlot, string>>): PersonOpts {
+  const l = { ...DEFAULT_LOOK, ...(look ?? {}) };
+  const vest = cosmetic(l.vest);
+  const hat = cosmetic(l.hat);
+  const hatKind: Record<string, HatKind> = { 'hat-cap': 'cap', 'hat-fez': 'fez', 'hat-chef': 'chef', 'hat-crown': 'crown' };
+  return {
+    shirt: 0xf4f1ea,
+    pants: 0x1c1c22,
+    skin: 0xe0ac7e,
+    hair: 0x1a120c,
+    hairStyle: 'side',
+    vest: vest?.color ?? 0x15151a,
+    mustache: true,
+    tie: 0xb3261e,
+    hat: hatKind[l.hat],
+    hatColor: hat?.color,
+  };
 }

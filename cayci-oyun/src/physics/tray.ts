@@ -71,7 +71,18 @@ export class TraySim {
   params: TrayParams = { damping: TRAY.damping, grip: TRAY.grip, spillScale: 1, towerAngle: 18 };
   externalAccel = new Vector3(); // rüzgâr vb.
   /** Tepsinin ortasında bahşiş kavanozu var mı (açgözlü mod). Varsa bardaklar etrafına dizilir. */
-  hasJar = false;
+  private jarOn = false;
+  /** Tepside bahşiş kavanozu var mı. Yeni kavanoz durgun başlar (eski devrilmenin salınımını taşımaz). */
+  get hasJar() {
+    return this.jarOn;
+  }
+  set hasJar(v: boolean) {
+    if (v && !this.jarOn) {
+      this.jarSurface.set(0, 0, 0);
+      this.jarSurfaceVel.set(0, 0, 0);
+    }
+    this.jarOn = v;
+  }
   private jarSurface = new Vector3();
   private jarSurfaceVel = new Vector3();
 
@@ -210,35 +221,33 @@ export class TraySim {
       }
     }
 
-    // kavanoz: bardak gibi çalkalanır ama dökülmez; çok sert sallantıda devrilir
-    if (this.hasJar) {
-      const js = this.jarSurface;
-      const jv = this.jarSurfaceVel;
-      for (let i = 0; i < sub; i++) {
-        jv.x += (k * (target.x - js.x) - c * jv.x) * h;
-        jv.y += (k * (target.y - js.y) - c * jv.y) * h;
-        jv.z += (k * (target.z - js.z) - c * jv.z) * h;
-        js.addScaledVector(jv, h);
-      }
-      js.addScaledVector(this.normal, -js.dot(this.normal));
-      jv.addScaledVector(this.normal, -jv.dot(this.normal));
-      const ang = (Math.asin(Math.min(1, js.length())) * 180) / Math.PI;
-      if (ang > this.params.towerAngle + 20 && !this.params.catchAssist) {
-        this.hasJar = false;
-        ev.jarLost = true;
-      }
+    // katı cisim eğimi (kavanoz ve üst kat bardakları): çay gibi dalga yapmaz, ağır sönümlü izler
+    const js = this.jarSurface;
+    const jv = this.jarSurfaceVel;
+    const cj = 2 * Math.sqrt(k) * TRAY.jarDampingRatio;
+    for (let i = 0; i < sub; i++) {
+      jv.x += (k * (target.x - js.x) - cj * jv.x) * h;
+      jv.y += (k * (target.y - js.y) - cj * jv.y) * h;
+      jv.z += (k * (target.z - js.z) - cj * jv.z) * h;
+      js.addScaledVector(jv, h);
+    }
+    js.addScaledVector(this.normal, -js.dot(this.normal));
+    jv.addScaledVector(this.normal, -jv.dot(this.normal));
+    const rigidAng = (Math.asin(Math.min(1, js.length())) * 180) / Math.PI;
+
+    // kavanoz: çok sert sallantıda devrilir
+    if (this.hasJar && rigidAng > this.params.towerAngle + 20 && !this.params.catchAssist) {
+      this.hasJar = false;
+      ev.jarLost = true;
     }
 
-    // kule: üst katlardaki bardaklar sert sallantıda devrilir
-    if (this.glasses.length > LAYER_SIZE) {
-      for (let i = this.glasses.length - 1; i >= LAYER_SIZE; i--) {
-        const g = this.glasses[i];
-        const ang = (Math.asin(Math.min(1, g.surface.length())) * 180) / Math.PI;
-        if (ang > this.params.towerAngle) {
-          this.glasses.splice(i, 1);
-          ev.fallen++;
-        }
-      }
+    // kule: üst katlardaki bardaklar sert sallantıda devrilir (en üstteki önce)
+    if (this.glasses.length > LAYER_SIZE && rigidAng > this.params.towerAngle && !this.params.catchAssist) {
+      const over = rigidAng - this.params.towerAngle;
+      const top = this.glasses.length - LAYER_SIZE;
+      const n = Math.min(top, Math.max(1, Math.floor(over / 4) + 1));
+      this.glasses.splice(this.glasses.length - n, n);
+      ev.fallen += n;
     }
 
     this.trackLoop(ev);

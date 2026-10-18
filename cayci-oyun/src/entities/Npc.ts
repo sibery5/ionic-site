@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { NPC } from '../config';
+import { NPC, PLAYER } from '../config';
 import { Grid } from '../physics/grid';
-import { animateWalk, makePerson, PersonRig } from '../world/models';
+import { animateWalk, makePerson, PersonOpts, PersonRig } from '../world/models';
 import type { Rng } from '../core/rng';
 
 const SHIRTS = [0x4f7cac, 0x9b3d6b, 0x3a8a6a, 0xc9b26b, 0x6b4226, 0x2d6a8a, 0x8a9a5b, 0xb3261e, 0x5b5b6b];
@@ -24,9 +24,11 @@ export class Npc {
     private grid: Grid,
     private points: [number, number][],
     private rng: Rng,
+    look?: PersonOpts,
+    public speed = NPC.speed,
   ) {
     const scarf = rng.next() < 0.25 ? rng.pick([0xb3261e, 0x2d6a8a, 0x8a9a5b, 0x5b2c83]) : undefined;
-    this.rig = makePerson({
+    this.rig = makePerson(look ?? {
       shirt: rng.pick(SHIRTS),
       pants: rng.pick(PANTS),
       skin: rng.pick(SKINS),
@@ -45,7 +47,7 @@ export class Npc {
     this.wait = rng.range(0, 2);
   }
 
-  update(dt: number, avoid: THREE.Vector3) {
+  update(dt: number, avoid: THREE.Vector3, tray?: THREE.Vector3) {
     if (this.wait > 0) {
       this.wait -= dt;
       this.vel.multiplyScalar(0.8);
@@ -61,15 +63,36 @@ export class Npc {
       const l = d.length();
       if (l < 0.15) this.path.shift();
       else {
-        d.multiplyScalar(NPC.speed / l);
+        d.multiplyScalar(this.speed / l);
         // oyuncudan hafifçe kaçın (ama tamamen değil: kalabalık olsun)
         const away = new THREE.Vector3().subVectors(this.pos, avoid).setY(0);
         const al = away.length();
         if (al < 1.0 && al > 1e-3) d.addScaledVector(away, (1.0 - al) * 0.8 / al);
+        // ustanın tepsisine çarpmamaya özen gösterirler (hep değil: kalabalıkta olur)
+        if (tray) {
+          const ta = new THREE.Vector3().subVectors(this.pos, tray).setY(0);
+          const tl = ta.length();
+          if (tl < 1.1 && tl > 1e-3) d.addScaledVector(ta, ((1.1 - tl) * 1.6) / tl);
+        }
+        // oyuncu tam önündeyse sağdan geçmek için yana adım at
+        if (al < 1.4 && al > 1e-3 && -away.dot(d) / (al * this.speed) > 0.7) {
+          const side = new THREE.Vector3(-d.z, 0, d.x).normalize();
+          d.addScaledVector(side, -this.speed * 0.9);
+        }
         this.vel.lerp(d, 1 - Math.exp(-6 * dt));
       }
     }
     this.pos.addScaledVector(this.vel, dt);
+    // oyuncunun içinden geçmez, onu da itmez: yol veren taraf han sakinidir
+    const off = new THREE.Vector3().subVectors(this.pos, avoid).setY(0);
+    const ol = off.length();
+    const min = this.radius + PLAYER.radius + 0.02;
+    if (ol < min && ol > 1e-4) {
+      off.divideScalar(ol);
+      this.pos.addScaledVector(off, min - ol);
+      const vn = this.vel.dot(off);
+      if (vn < 0) this.vel.addScaledVector(off, -vn);
+    }
     this.grid.resolveCircle(this.pos, this.radius, 0);
     const sp = Math.hypot(this.vel.x, this.vel.z);
     if (sp > 0.1) {

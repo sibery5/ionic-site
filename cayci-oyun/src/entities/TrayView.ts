@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TRAY } from '../config';
+import { cosmetic, DEFAULT_LOOK, type CosmeticSlot } from '../meta/progress';
 import { LAYER_HEIGHT, LAYER_SIZE, slotPos, type TraySim } from '../physics/tray';
 import { GLASS_HEIGHT, GlassModel, makeGlass, makeTipJar, makeTray, TEA_COLORS } from '../world/models';
 
@@ -15,8 +16,13 @@ export class TrayView {
   /** Tepsinin ortasındaki bahşiş kavanozu (açgözlü mod). */
   jar: THREE.Group | null = null;
 
-  constructor() {
-    this.tray = makeTray();
+  private rim: number | undefined;
+
+  constructor(look?: Partial<Record<CosmeticSlot, string>>) {
+    const l = { ...DEFAULT_LOOK, ...(look ?? {}) };
+    const tray = cosmetic(l.tray);
+    this.tray = makeTray(tray?.color, tray?.metal);
+    this.rim = cosmetic(l.glass)?.color;
     this.group.add(this.tray);
   }
 
@@ -28,7 +34,7 @@ export class TrayView {
     const types = sim.glasses.map((g) => g.type);
     if (types.join() !== this.glassTypes.join()) {
       for (const g of this.glasses) this.tray.remove(g.group);
-      this.glasses = types.map((t) => makeGlass(t));
+      this.glasses = types.map((t) => makeGlass(t, this.rim));
       for (const g of this.glasses) this.tray.add(g.group);
       this.glassTypes = types;
     }

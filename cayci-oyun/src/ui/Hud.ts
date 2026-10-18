@@ -14,7 +14,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', parent?: HT
 export interface TicketView {
   office: string;
   items: string[];
-  label?: string; // hazır yazı (açgözlü mod: "3 çay")
+  label?: string; // hazır yazı ("3 çay")
+  kind?: 'normal' | 'vip' | 'rush';
   urgency: number;
 }
 
@@ -150,14 +151,15 @@ export class Hud {
   }
 
   setTickets(list: TicketView[]) {
-    const key = list.map((x) => `${x.office}:${x.label ?? x.items.join('')}:${Math.round(x.urgency * 20)}`).join('|');
+    const key = list.map((x) => `${x.office}:${x.kind}:${x.label ?? x.items.join('')}:${Math.round(x.urgency * 20)}`).join('|');
     if (key === this.lastTicketKey) return;
     this.lastTicketKey = key;
     this.tickets.innerHTML = '';
     for (const tk of list) {
       const d = el('div', 'ticket', this.tickets);
       if (tk.urgency > 0.75) d.classList.add('late');
-      el('div', 'ticket-office', d, tk.office);
+      if (tk.kind && tk.kind !== 'normal') d.classList.add(tk.kind);
+      el('div', 'ticket-office', d, `${tk.kind === 'vip' ? '★ VIP · ' : tk.kind === 'rush' ? '! ' : ''}${tk.office}`);
       const counts = { acik: 0, demli: 0 } as Record<string, number>;
       tk.items.forEach((i) => counts[i]++);
       const parts: string[] = [];

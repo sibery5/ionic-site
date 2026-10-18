@@ -22,6 +22,30 @@ ipcMain.handle('steam:achievement', (_e, id) => {
   }
 });
 
+// Steam Cloud: tek dosyalık kayıt (Steamworks panelinde "Steam Cloud" açılmalı)
+const CLOUD_FILE = 'cayci-save.json';
+ipcMain.on('steam:cloudSave', (_e, json) => {
+  try {
+    if (steam && steam.cloud.isEnabledForApp()) steam.cloud.writeFile(CLOUD_FILE, json);
+  } catch {
+    /* bulut kapalı */
+  }
+});
+ipcMain.handle('steam:cloudLoad', () => {
+  try {
+    return steam && steam.cloud.isEnabledForApp() ? steam.cloud.readFile(CLOUD_FILE) : null;
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle('steam:playerName', () => {
+  try {
+    return steam ? steam.localplayer.getName() : null;
+  } catch {
+    return null;
+  }
+});
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -29,6 +53,7 @@ function createWindow() {
     backgroundColor: '#120c08',
     title: 'ÇAYCI — Don\'t Spill the Tea',
     autoHideMenuBar: true,
+    fullscreenable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
   });
   win.loadFile(path.join(__dirname, 'app', 'index.html'));

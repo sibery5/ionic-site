@@ -17,6 +17,7 @@ export interface Puddle {
   r: number;
   life: number;
   mesh: THREE.Mesh;
+  water: boolean;
 }
 
 const MAX = 600;
@@ -30,6 +31,7 @@ export class Particles {
   private steamMat: THREE.SpriteMaterial;
   puddles: Puddle[] = [];
   private puddleMat: THREE.MeshStandardMaterial;
+  private waterMat = new THREE.MeshStandardMaterial({ color: 0x9fc4d8, roughness: 0.02, metalness: 0.3, transparent: true, opacity: 0.45 });
   private dummy = new THREE.Object3D();
   onLand: ((x: number, z: number, amount: number) => void) | null = null;
 
@@ -109,23 +111,24 @@ export class Particles {
     }
   }
 
-  addPuddle(x: number, z: number, amount: number) {
-    // yakında gölcük varsa büyüt
+  /** water: Gülsüm Abla'nın sildiği su (mavi, daha kısa ömürlü). */
+  addPuddle(x: number, z: number, amount: number, water = false, life: number = PUDDLE.life) {
+    // yakında aynı türde gölcük varsa büyüt
     for (const p of this.puddles) {
-      if (Math.hypot(p.x - x, p.z - z) < p.r) {
+      if (p.water === water && Math.hypot(p.x - x, p.z - z) < p.r) {
         p.r = Math.min(0.9, p.r + amount * 0.3);
-        p.life = PUDDLE.life;
+        p.life = Math.max(p.life, life);
         p.mesh.scale.setScalar(p.r);
         return;
       }
     }
-    const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 14), this.puddleMat);
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 14), water ? this.waterMat : this.puddleMat);
     mesh.rotation.x = -Math.PI / 2;
     const r = Math.min(PUDDLE.radius, 0.15 + amount * 0.4);
     mesh.scale.setScalar(r);
     mesh.position.set(x, 0.008 + Math.random() * 0.002, z);
     this.group.add(mesh);
-    this.puddles.push({ x, z, r, life: PUDDLE.life, mesh });
+    this.puddles.push({ x, z, r, life, mesh, water });
   }
 
   /** Bir noktanın gölcük üstünde olup olmadığı (kayganlık). */

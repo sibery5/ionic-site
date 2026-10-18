@@ -53,7 +53,7 @@ export class Cat {
         const side = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).normalize();
         want.copy(side).multiplyScalar(Math.sin(this.t * 2.2) * CAT.speed).addScaledVector(toPlayer, 0.6);
       }
-      if (dist < CAT.tripRadius && playerSpeed > 1.2 && this.tripCooldown <= 0) {
+      if (dist < CAT.tripRadius && playerSpeed > CAT.safeSpeed && this.tripCooldown <= 0) {
         tripped = true;
         this.tripCooldown = CAT.tripCooldown;
         this.mode = 'flee';

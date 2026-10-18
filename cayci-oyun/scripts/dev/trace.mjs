@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'vite';
+const server = await createServer({ root: '/home/user/ionic-site/cayci-oyun', server: { port: 5201 }, logLevel: 'error' });
+await server.listen();
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
+await page.goto('http://localhost:5201/');
+await page.waitForTimeout(1500);
+const pol = JSON.parse(process.argv[3] || '{"greed":4,"spin":false,"timingError":0.1,"careful":true}');
+if (process.env.DUMP) await page.evaluate(() => (globalThis.__botDump = true));
+if (process.env.EVERY) await page.evaluate((e) => (globalThis.__botEvery = e), Number(process.env.EVERY));
+const out = await page.evaluate(([i, pol, seed]) => { const s = window.__cayci.bot(i, pol, seed); return { score: s.score, trace: globalThis.__botTrace.filter((l) => globalThis.__botDump || !l.startsWith('  t=')).slice(0, 60), st: { d: s.delivered, oc: s.ordersCompleted, ox: s.ordersExpired, jl: s.jarsLost, br: s.broken, cat: s.catTrips, sl: s.slips, info: globalThis.__botInfo() } }; }, [Number(process.argv[2] || 0), pol, Number(process.argv[4] || 22)]);
+console.log(out.score, JSON.stringify(out.st)); console.log(out.trace.join('\n'));
+await browser.close(); await server.close();

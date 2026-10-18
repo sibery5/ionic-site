@@ -1,57 +1,112 @@
+import { steamBridge } from './steam';
 import type { Lang } from '../game/story';
+import type { BoardEntry } from '../meta/leaderboard';
+import type { MissionState } from '../meta/missions';
+import type { Totals } from '../meta/achievements';
+import { DEFAULT_LOOK, type CosmeticSlot } from '../meta/progress';
 
-// Kayıt dosyası. Tarayıcıda localStorage, Electron'da da aynı şekilde çalışır.
+// Kayıt dosyası (sürüm 2). Tarayıcıda localStorage; Steam sürümünde ayrıca Steam Cloud'a yazılır.
 
-export interface SaveData {
-  version: 1;
-  day: number; // hikâyede sıradaki gün (0..5), 5 = final
-  wallet: number;
-  upgrades: string[];
-  gossip: string[]; // "gün:ofis"
-  stars: number[]; // gün başına en iyi yıldız
-  dailyBest: Record<string, number>;
-  ending?: string;
-  greedBest?: number;
-  greedPlays?: number;
-  settings: { lang: Lang; volume: number; music: number; sensitivity: number };
+export type Quality = 'low' | 'medium' | 'high';
+
+export interface VenueRecord {
+  best: number;
+  stars: number;
+  objectives: string[]; // tamamlanan görevlerin "tür:hedef" anahtarları
+  plays: number;
 }
 
-const KEY = 'cayci-save-v1';
+export interface SaveData {
+  version: 2;
+  xp: number;
+  wallet: number;
+  upgrades: string[];
+  look: Record<CosmeticSlot, string>;
+  venues: Record<string, VenueRecord>;
+  gossip: string[]; // "venue:ofis"
+  endings: string[];
+  finalSeen: boolean;
+  daily: { date: string; missions: MissionState[] };
+  dailyDays: string[]; // bütün görevlerin bittiği günler
+  dailyBest: Record<string, number>; // günlük mücadele skoru, tarih → skor
+  achievements: string[];
+  totals: Totals;
+  boards: Record<string, BoardEntry[]>;
+  playerName: string;
+  tutorialDone: boolean;
+  settings: { lang: Lang; volume: number; music: number; sensitivity: number; quality: Quality; invertY: boolean };
+}
+
+const KEY = 'cayci-save-v2';
+const OLD_KEY = 'cayci-save-v1';
 
 export function defaultSave(): SaveData {
-  const lang: Lang = typeof navigator !== 'undefined' && !navigator.language?.startsWith('tr') ? 'en' : 'tr';
+  const lang: Lang = typeof navigator !== 'undefined' && navigator.language && !navigator.language.startsWith('tr') ? 'en' : 'tr';
   return {
-    version: 1,
-    day: 0,
+    version: 2,
+    xp: 0,
     wallet: 0,
     upgrades: [],
+    look: { ...DEFAULT_LOOK },
+    venues: {},
     gossip: [],
-    stars: [0, 0, 0, 0, 0],
+    endings: [],
+    finalSeen: false,
+    daily: { date: '', missions: [] },
+    dailyDays: [],
     dailyBest: {},
-    settings: { lang, volume: 0.8, music: 0.5, sensitivity: 1 },
+    achievements: [],
+    totals: { delivered: 0, spins: 0, broken: 0, catTrips: 0, runs: 0, jarsLost: 0, vipPerfect: 0 },
+    boards: {},
+    playerName: lang === 'tr' ? 'Çırak' : 'Apprentice',
+    tutorialDone: false,
+    settings: { lang, volume: 0.8, music: 0.5, sensitivity: 1, quality: 'high', invertY: false },
+  };
+}
+
+/** Eksik alanları varsayılanlarla doldurur (eski/yarım kayıtlar için). */
+export function normalize(d: Partial<SaveData>): SaveData {
+  const base = defaultSave();
+  return {
+    ...base,
+    ...d,
+    version: 2,
+    look: { ...base.look, ...(d.look ?? {}) },
+    totals: { ...base.totals, ...(d.totals ?? {}) },
+    settings: { ...base.settings, ...(d.settings ?? {}) },
+    daily: d.daily ?? base.daily,
   };
 }
 
 export function loadSave(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaultSave();
-    const d = JSON.parse(raw) as SaveData;
-    const base = defaultSave();
-    return { ...base, ...d, settings: { ...base.settings, ...d.settings } };
+    if (raw) return normalize(JSON.parse(raw));
+    // sürüm 1'den geçiş: ayarlar korunur, ilerleme yeni sisteme taşınamaz
+    const old = localStorage.getItem(OLD_KEY);
+    if (old) {
+      const o = JSON.parse(old) as { settings?: Partial<SaveData['settings']> };
+      const d = defaultSave();
+      d.settings = { ...d.settings, ...(o.settings ?? {}) };
+      return d;
+    }
   } catch {
-    return defaultSave();
+    /* bozuk kayıt: sıfırdan başla */
   }
+  return defaultSave();
 }
 
 export function writeSave(d: SaveData) {
+  const json = JSON.stringify(d);
   try {
-    localStorage.setItem(KEY, JSON.stringify(d));
+    localStorage.setItem(KEY, json);
   } catch {
     /* gizli mod vb. */
   }
-}
-
-export function hasProgress(d: SaveData) {
-  return d.day > 0 || d.wallet > 0;
+  // Steam sürümünde bulut kaydı (masaüstü köprüsü varsa)
+  try {
+    steamBridge()?.cloudSave?.(json);
+  } catch {
+    /* yok say */
+  }
 }
