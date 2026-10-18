@@ -248,6 +248,8 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1, until = Infinity)
     bumps.push(r.lastBump ?? 0);
     if (bumps.length > 20) bumps.shift();
     const j0 = r.stats.jarsLost;
+    // "dedikodu var mı?" paneli: bot bilmiyorum der (denge ölçümü dedikodusuz)
+    if (r.intrigue.panel) r.intrigue.choose(-1);
     r.update(dt, inp);
     if (r.stats.catTrips > lastCat) {
       lastCat = r.stats.catTrips;

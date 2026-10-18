@@ -8,7 +8,9 @@ import { dateSeed, Rng } from './core/rng';
 import { audio } from './audio/Audio';
 import { Run, RunConfig } from './game/Run';
 import { VENUES, type Venue } from './game/venues';
-import { GOSSIP_NEEDED } from './game/story';
+import { EVIDENCE_NEEDED } from './game/rumors';
+import { liveEvidence } from './meta/titles';
+import { MEETING_REP } from './ui/Menus';
 import { Hud } from './ui/Hud';
 import { Menus } from './ui/Menus';
 import { TraySim } from './physics/tray';
@@ -345,18 +347,8 @@ class Game {
     const venue: Venue = VENUES[index];
     const daily = mode === 'daily';
     const tutorial = !daily && !this.save.tutorialDone && index === 0;
-    const cfg: RunConfig = {
-      venue,
-      mode,
-      // günlük mücadelede herkes aynı tohumla oynar; diğerlerinde her tur farklı
-      seed: daily ? dateSeed() : (Date.now() ^ (index * 7919)) >>> 0,
-      upgrades: new Set(daily ? [] : this.save.upgrades), // günlükte eşit şartlar
-      look: { ...this.save.look },
-      sensitivity: this.save.settings.sensitivity,
-      quality: this.save.settings.quality,
-      tutorial,
-      knownGossip: new Set(this.save.gossip),
-    };
+    // günlük mücadelede herkes aynı tohumla oynar; diğerlerinde her tur farklı
+    const cfg = this.runConfig(venue, mode, daily ? dateSeed() : (Date.now() ^ (index * 7919)) >>> 0, tutorial);
     if (tutorial) {
       this.save.tutorialDone = true;
       this.persist();
@@ -366,6 +358,27 @@ class Game {
     this.run = new Run(cfg, this.hud, (s) => this.onRunEnd(s), window.innerWidth / window.innerHeight);
     this.state = 'overlay';
     this.menus.clickToPlay(() => this.resume());
+  }
+
+  runConfig(venue: Venue, mode: RunStats['mode'], seed: number, tutorial = false): RunConfig {
+    const s = this.save;
+    return {
+      venue,
+      mode,
+      seed,
+      upgrades: new Set(mode === 'daily' ? [] : s.upgrades), // günlükte eşit şartlar
+      look: { ...s.look },
+      sensitivity: s.settings.sensitivity,
+      quality: s.settings.quality,
+      tutorial,
+      pocket: [...s.pocket],
+      sold: [...s.sales],
+      evidence: liveEvidence(s),
+      rep: s.rep,
+      title: s.title,
+      trayAssist: s.settings.trayAssist,
+      camDist: s.settings.camDist,
+    };
   }
 
   resume() {
@@ -417,15 +430,15 @@ class Game {
   finalChoice() {
     this.endRun();
     this.state = 'overlay';
-    const n = this.save.gossip.length;
-    this.menus.choice(
-      n,
-      () => this.ending(n >= GOSSIP_NEEDED ? 'saved' : 'disbelieved'),
-      () => this.ending('silent'),
-    );
+    const believed = liveEvidence(this.save) >= EVIDENCE_NEEDED && this.save.rep >= MEETING_REP;
+    this.menus.choice(this.save, {
+      onTruth: () => this.ending(believed ? 'saved' : 'disbelieved'),
+      onQuiet: () => this.ending('silent'),
+      onSell: () => this.ending('sold'),
+    });
   }
 
-  ending(key: 'saved' | 'disbelieved' | 'silent') {
+  ending(key: 'saved' | 'disbelieved' | 'silent' | 'sold') {
     const got = recordEnding(this.save, key);
     this.persist();
     this.unlockSteam(got);
@@ -449,16 +462,19 @@ if (import.meta.env.DEV) (window as unknown as { __cayci: unknown }).__cayci = {
   /** Denge ölçümü: botla bir vardiya oynat, istatistikleri döndür (kayda yazmaz). */
   bot: (index: number, policy: BotPolicy, seed = 1, upgrades: string[] = []) => {
     game.endRun();
+    // denge ölçümü her zaman aynı şartlarda: boş cep, itibar 50, normal tepsi
     const cfg: RunConfig = {
-      venue: VENUES[index],
-      mode: 'free',
-      seed,
+      ...game.runConfig(VENUES[index], 'free', seed),
       upgrades: new Set(upgrades),
-      look: { ...game.save.look },
       sensitivity: 1,
       quality: 'low',
-      tutorial: false,
-      knownGossip: new Set(),
+      pocket: [],
+      sold: [],
+      evidence: 0,
+      rep: 50,
+      title: 0,
+      trayAssist: 'normal',
+      camDist: 1,
     };
     // ölçüm tekrarlanabilir olsun: Math.random da tohumlanır
     const rand = Math.random;

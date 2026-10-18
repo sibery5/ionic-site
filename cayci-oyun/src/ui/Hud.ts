@@ -15,8 +15,17 @@ export interface TicketView {
   office: string;
   items: string[];
   label?: string; // hazır yazı ("3 çay")
-  kind?: 'normal' | 'vip' | 'rush';
+  kind?: 'normal' | 'vip' | 'rush' | 'gossip';
   urgency: number;
+}
+
+export interface RumorPanelView {
+  who: string;
+  ask: string;
+  topicIcon: string;
+  cards: { icon: string; text: string; source: string }[];
+  sel: number; // -1 = "bilmiyorum"
+  timeLeft: number;
 }
 
 /** Oyun içi arayüz. DOM ile çizilir, kanvasın üstünde durur. */
@@ -42,6 +51,12 @@ export class Hud {
   private greedEl: HTMLElement;
   private spinEl: HTMLElement;
   private bigEl: HTMLElement;
+  private rumorEl: HTMLElement;
+  private rumorKey = '';
+  private phoneEl: HTMLElement;
+  private angerEl: HTMLElement;
+  private angerFill: HTMLElement;
+  private chaseEl: HTMLElement;
   private lastTicketKey = '';
   private lastTrayKey = '';
   private speechTimer = 0;
@@ -76,6 +91,64 @@ export class Hud {
     this.greedEl = el('div', 'greed hidden', this.root);
     this.spinEl = el('div', 'spin-meter hidden', this.root, '<div class="spin-zone"></div><div class="spin-needle"></div><div class="spin-label"></div>');
     this.bigEl = el('div', 'big-text hidden', this.root);
+    this.rumorEl = el('div', 'rumor-panel hidden', this.root);
+    this.phoneEl = el('div', 'phone-stack', this.root);
+    this.angerEl = el('div', 'anger hidden', this.root, '<span class="anger-face">😤</span><div class="anger-bar"><div class="anger-fill"></div></div><span class="anger-label"></span>');
+    this.angerFill = this.angerEl.querySelector('.anger-fill') as HTMLElement;
+    this.chaseEl = el('div', 'chase-vignette hidden', this.root, '<div class="chase-label"></div>');
+  }
+
+  /** "Dedikodu var mı?" seçim paneli. null: kapalı. */
+  rumorPanel(v: RumorPanelView | null) {
+    if (!v) {
+      this.rumorEl.classList.add('hidden');
+      this.rumorKey = '';
+      return;
+    }
+    this.rumorEl.classList.remove('hidden');
+    const key = `${v.who}|${v.sel}|${v.cards.length}|${Math.ceil(v.timeLeft)}`;
+    if (key === this.rumorKey) return;
+    this.rumorKey = key;
+    const cards = v.cards
+      .map(
+        (c, i) =>
+          `<div class="rumor-card ${i === v.sel ? 'sel' : ''}"><span class="rc-key">${i + 1}</span><span class="rc-icon">${c.icon}</span><span class="rc-text">${c.text}</span><span class="rc-src">${c.source}</span></div>`,
+      )
+      .join('');
+    this.rumorEl.innerHTML = `
+      <div class="rp-head"><span class="rp-ear">👂</span><b>${v.who}</b><span class="rp-time">${Math.ceil(v.timeLeft)}</span></div>
+      <div class="rp-ask">${v.topicIcon} ${v.ask}</div>
+      <div class="rp-cards">${cards || `<div class="rp-empty">${t('pocketEmpty')}</div>`}</div>
+      <div class="rumor-card none ${v.sel === -1 ? 'sel' : ''}"><span class="rc-key">0</span><span class="rc-text">${t('dontKnow')}</span></div>
+      <div class="rp-foot">${t('rumorKeys')}</div>`;
+  }
+
+  /** Telefona mesaj düşer (patron, Rıza Usta, Selim). */
+  phone(from: string, text: string, kind: 'boss' | 'riza' | 'villain' | 'info' = 'boss') {
+    const icon = kind === 'boss' ? '👔' : kind === 'riza' ? '🫖' : kind === 'villain' ? '🕶️' : '📱';
+    const d = el('div', `phone-msg ${kind}`, this.phoneEl, `<div class="pm-from">${icon} ${from}</div><div class="pm-text">${text}</div>`);
+    while (this.phoneEl.children.length > 2) this.phoneEl.firstElementChild?.remove();
+    setTimeout(() => d.classList.add('out'), 5200);
+    setTimeout(() => d.remove(), 5800);
+  }
+
+  /** Sinir göstergesi 0..1; dolunca tepsiyle vurulabilir. */
+  anger(level: number, ready: boolean) {
+    this.angerEl.classList.toggle('hidden', level < 0.04 && !ready);
+    this.angerEl.classList.toggle('ready', ready);
+    this.angerFill.style.width = `${Math.min(1, level) * 100}%`;
+    const lab = this.angerEl.querySelector('.anger-label') as HTMLElement;
+    const txt = ready ? t('angerReady') : '';
+    if (lab.textContent !== txt) lab.textContent = txt;
+  }
+
+  /** Kovalama uyarısı (kırmızı kenar + yazı). */
+  chase(text: string | null, closeness = 0) {
+    this.chaseEl.classList.toggle('hidden', !text);
+    if (!text) return;
+    this.chaseEl.style.setProperty('--close', String(Math.max(0, Math.min(1, closeness))));
+    const lab = this.chaseEl.firstElementChild as HTMLElement;
+    if (lab.textContent !== text) lab.textContent = text;
   }
 
   /** Açgözlü mod paneli: kasa, kavanoz, çarpan, kule. */
@@ -291,5 +364,9 @@ export class Hud {
     this.wind(null, 0);
     this.spinMeter(null);
     this.bigEl.classList.add('hidden');
+    this.rumorPanel(null);
+    this.anger(0, false);
+    this.chase(null);
+    this.phoneEl.innerHTML = '';
   }
 }

@@ -165,11 +165,14 @@ export function wetSignTexture(lang: 'tr' | 'en') {
 }
 
 /** Müşterinin üstündeki sipariş balonu. kind: normal / vip (altın) / rush (kırmızı, acele). */
-export function bubbleTexture(items: string[], urgency: number, kind: 'normal' | 'vip' | 'rush' = 'normal') {
+export type BubbleKind = 'normal' | 'vip' | 'rush' | 'gossip';
+
+/** Sipariş balonu. gossip: mor balon, kulak ve sorulan konunun işareti ("dedikodu var mı?") */
+export function bubbleTexture(items: string[], urgency: number, kind: BubbleKind = 'normal', topicIcon = '') {
   const [c, ctx] = canvas(320, 140);
   ctx.clearRect(0, 0, 320, 140);
-  const fill = kind === 'vip' ? '#fff1c4' : kind === 'rush' ? '#ffe0d8' : '#fffaf0';
-  const stroke = kind === 'vip' ? '#c9a54a' : urgency > 0.75 || kind === 'rush' ? '#b3261e' : '#3a2a1a';
+  const fill = kind === 'vip' ? '#fff1c4' : kind === 'rush' ? '#ffe0d8' : kind === 'gossip' ? '#efe2ff' : '#fffaf0';
+  const stroke = kind === 'vip' ? '#c9a54a' : urgency > 0.75 || kind === 'rush' ? '#b3261e' : kind === 'gossip' ? '#6b3fa0' : '#3a2a1a';
   ctx.fillStyle = fill;
   ctx.strokeStyle = stroke;
   ctx.lineWidth = kind === 'normal' ? 6 : 9;
@@ -186,7 +189,7 @@ export function bubbleTexture(items: string[], urgency: number, kind: 'normal' |
   ctx.stroke();
   const n = items.length;
   const gap = Math.min(52, 240 / Math.max(1, n));
-  const x0 = 160 - ((n - 1) * gap) / 2 + (kind === 'normal' ? 0 : 14);
+  const x0 = 160 - ((n - 1) * gap) / 2 + (kind === 'normal' ? 0 : kind === 'gossip' ? 40 : 14);
   const sc = Math.min(1, gap / 50);
   items.forEach((type, i) => {
     ctx.save();
@@ -197,7 +200,17 @@ export function bubbleTexture(items: string[], urgency: number, kind: 'normal' |
     drawGlassIcon(ctx, x, 56, type === 'demli' ? '#8e1d10' : '#e3a04a', 1);
     ctx.restore();
   });
-  if (kind !== 'normal') {
+  if (kind === 'gossip') {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '38px "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    ctx.fillText('👂', 46, 56);
+    ctx.font = '30px "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    ctx.fillText(topicIcon || '?', 98, 56);
+    ctx.fillStyle = '#6b3fa0';
+    ctx.font = 'bold 30px Georgia, serif';
+    ctx.fillText('?', 126, 40);
+  } else if (kind !== 'normal') {
     ctx.fillStyle = kind === 'vip' ? '#c9a54a' : '#b3261e';
     ctx.font = 'bold 34px Georgia, serif';
     ctx.textAlign = 'center';

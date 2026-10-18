@@ -196,6 +196,21 @@ export class AudioEngine {
     for (let i = 0; i < 12; i++) this.tone(3000 + Math.random() * 4500, t + Math.random() * 0.18, 0.12, 0.08);
   }
 
+  /** Tepsiyle kafaya: metal "DANK" (inharmonik çınlama + kısa vuruş). */
+  bonk() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = this.now;
+    const src = this.noiseSrc(t, 0.06);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 1400;
+    const g = ctx.createGain();
+    this.env(g, t, 0.5, 0.001, 0.06);
+    src.connect(f).connect(g).connect(this.sfx);
+    [1, 2.76, 5.4, 8.93].forEach((r, i) => this.tone(310 * r, t, 0.9 - i * 0.18, 0.22 / (i + 1), i ? 'sine' : 'triangle'));
+  }
+
   coin(size = 1) {
     if (!this.ctx) return;
     const t = this.now;

@@ -237,4 +237,3 @@ export function starsFor(score: number, stars: [number, number, number]): number
 }
 
 /** Bütün hikâye dedikodularının sayısı (VIP siparişlerle açılır). */
-export const GOSSIP_TOTAL = VENUES.reduce((n, v) => n + v.offices.filter((o) => o.gossip).length, 0);

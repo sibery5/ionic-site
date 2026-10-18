@@ -25,22 +25,6 @@ export function levelProgress(xp: number): number {
   return (xp - a) / (b - a);
 }
 
-export const RANKS: { from: number; name: Text }[] = [
-  { from: 1, name: { tr: 'Çırak', en: 'Apprentice' } },
-  { from: 3, name: { tr: 'Ocakçı', en: 'Stove Keeper' } },
-  { from: 6, name: { tr: 'Kalfa', en: 'Journeyman' } },
-  { from: 10, name: { tr: 'Tepsi Ustası', en: 'Tray Master' } },
-  { from: 15, name: { tr: 'Fırıldak Ustası', en: 'Spin Master' } },
-  { from: 20, name: { tr: 'Han Ustası', en: 'Master of the Han' } },
-  { from: 30, name: { tr: 'Efsane Çaycı', en: 'Legendary Tea Boy' } },
-];
-
-export function rankFor(level: number): Text {
-  let r = RANKS[0].name;
-  for (const k of RANKS) if (level >= k.from) r = k.name;
-  return r;
-}
-
 /** Bir turdan kazanılan XP: kasadaki para + görev ve yıldız bonusları. */
 export function xpForRun(o: { score: number; objectivesDone: number; newStars: number; missionsDone: number }): number {
   return Math.round(o.score + 25 * o.objectivesDone + 60 * o.newStars + 40 * o.missionsDone);

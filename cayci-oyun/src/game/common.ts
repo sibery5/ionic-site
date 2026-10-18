@@ -44,11 +44,11 @@ export interface CamState {
 }
 
 /** 3. şahıs takip kamerası; arkada duvar varsa yaklaşır ve yükselir. */
-export function followCamera(cam: CamState, p: Player, grid: Grid, outdoor: boolean, dt: number, shake = 0, side = 0) {
+export function followCamera(cam: CamState, p: Player, grid: Grid, outdoor: boolean, dt: number, shake = 0, side = 0, zoom = 1) {
   const f = p.forward(new THREE.Vector3(), p.camYaw);
   const r = p.right(new THREE.Vector3(), p.camYaw);
-  const dist = (p.armMode ? 2.6 : 3.2) - side * 0.6;
-  const height = outdoor ? 2.4 : 2.1;
+  const dist = ((p.armMode ? 2.6 : 3.2) - side * 0.6) * zoom;
+  const height = (outdoor ? 2.4 : 2.1) * (0.75 + zoom * 0.25);
   // side > 0: omuz üstü kamera, tepsi (sağ el) görünür kalsın
   const desired = p.pos.clone().addScaledVector(UP, height).addScaledVector(f, -dist).addScaledVector(r, side * 1.3).addScaledVector(UP, -side * 0.45);
   const head = p.pos.clone().addScaledVector(UP, 1.5);

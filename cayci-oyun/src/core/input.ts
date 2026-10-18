@@ -106,7 +106,10 @@ export class Input implements InputLike {
     3: 'Space', // Y
     4: 'ControlLeft', // LB
     5: 'ShiftLeft', // RB
+    7: 'KeyR', // RT: tepsiyle vur
     9: 'GamepadStart',
+    12: 'ArrowUp', // yön tuşları: dedikodu paneli
+    13: 'ArrowDown',
   };
 
   /** Her karenin başında çağrılır: oyun kolunu sanal tuşlara ve fare hareketine çevirir. */

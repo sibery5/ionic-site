@@ -1,5 +1,7 @@
 // Hikâye verisi: günler, ofisler, dedikodular, notlar ve sonlar. Her metin TR + EN.
 
+import type { PersonId } from './rumors';
+
 export type Lang = 'tr' | 'en';
 export interface Text {
   tr: string;
@@ -11,7 +13,7 @@ export interface Office {
   name: Text;
   person: Text; // müşterinin adı
   look: CustomerLook;
-  gossip?: Text; // VIP siparişi eksiksiz teslim edilince duyulan dedikodu
+  pid: PersonId; // kişinin kimliği (dedikodu sistemi)
   lines: Text[]; // teslimde söylenen rastgele sözler
 }
 
@@ -51,13 +53,10 @@ export const DAYS: DayDef[] = [
     offices: [
       {
         id: 'a',
+        pid: 'hayri',
         name: { tr: 'Terzi Hayri', en: 'Hayri the Tailor' },
         person: { tr: 'Hayri Usta', en: 'Master Hayri' },
         look: { shirt: 0x7a5c3e, pants: 0x3b3b3b, skin: SKIN[1], hair: 0xd8d8d8, glasses: true, mustache: true },
-        gossip: {
-          tr: '"Selim dün yine gelmiş, hanın tapusunu sormuş. Nadir Bey\'e söylemedim..."',
-          en: '"Selim came by again yesterday asking about the deed. I didn\'t tell Nadir Bey..."',
-        },
         lines: [
           { tr: 'Eline sağlık evlat.', en: 'Bless your hands, kid.' },
           { tr: 'Rıza\'dan iyisin valla.', en: "You're better than Rıza, honestly." },
@@ -65,13 +64,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'b',
+        pid: 'sevim',
         name: { tr: 'Kırtasiye Bilgi', en: 'Bilgi Stationery' },
         person: { tr: 'Sevim Hanım', en: 'Mrs. Sevim' },
         look: { shirt: 0x4f7cac, pants: 0x2e3a4a, skin: SKIN[0], hair: 0x3a2a1a, scarf: 0xb3261e },
-        gossip: {
-          tr: '"KriptoBey\'den biri yüz tane damgalı kâğıt aldı. Ne yapacaklar o kadar resmî kâğıdı?"',
-          en: '"Someone from KriptoBey bought a hundred stamped forms. What do they need that much paperwork for?"',
-        },
         lines: [
           { tr: 'Tam kıvamında!', en: 'Just right!' },
           { tr: 'Oh, ilaç gibi.', en: 'Ahh, like medicine.' },
@@ -79,13 +75,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'c',
+        pid: 'ferhat',
         name: { tr: 'Noter Kâtibi Ferhat', en: 'Ferhat, Notary Clerk' },
         person: { tr: 'Ferhat Bey', en: 'Mr. Ferhat' },
         look: { shirt: 0xe8e4d8, pants: 0x1f2630, skin: SKIN[2], hair: 0x111111, tie: 0x1e2a3a },
-        gossip: {
-          tr: '"Cuma günü han için bir satış vekâletnamesi randevusu var. Ama Nadir Bey\'in haberi yok gibi."',
-          en: '"There\'s an appointment Friday for a power of attorney to sell the han. Nadir Bey doesn\'t seem to know."',
-        },
         lines: [
           { tr: 'Mühür gibi çay.', en: 'Tea as official as a stamp.' },
           { tr: 'Teşekkürler genç.', en: 'Thanks, young man.' },
@@ -104,13 +97,10 @@ export const DAYS: DayDef[] = [
     offices: [
       {
         id: 'a',
+        pid: 'fikret',
         name: { tr: 'Mali Müşavir Fikret', en: 'Fikret, Accountant' },
         person: { tr: 'Fikret Bey', en: 'Mr. Fikret' },
         look: { shirt: 0xdedbd0, pants: 0x3a3f47, skin: SKIN[0], hair: 0x5a4a3a, bald: true, glasses: true, tie: 0x6b2a2a },
-        gossip: {
-          tr: '"KriptoBey\'in hesapları eksi. Bu çocuk han satılmazsa batar."',
-          en: '"KriptoBey\'s books are deep in the red. That kid goes bust unless the han gets sold."',
-        },
         lines: [
           { tr: 'Faturasını sonra keseriz.', en: "I'll invoice you later." },
           { tr: 'Kuruşu kuruşuna, tam kıvam.', en: 'Accurate to the penny.' },
@@ -118,6 +108,7 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'b',
+        pid: 'sukran',
         name: { tr: 'Sigortacı Şükran', en: 'Şükran Insurance' },
         person: { tr: 'Şükran Hanım', en: 'Mrs. Şükran' },
         look: { shirt: 0x9b3d6b, pants: 0x2b2b2b, skin: SKIN[1], hair: 0x2a1a10 },
@@ -128,13 +119,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'c',
+        pid: 'rifat',
         name: { tr: 'Av. Rıfat', en: 'Rıfat, Attorney' },
         person: { tr: 'Av. Rıfat', en: 'Attorney Rıfat' },
         look: { shirt: 0x22262e, pants: 0x22262e, skin: SKIN[2], hair: 0x9a9a9a, mustache: true, tie: 0xb3261e },
-        gossip: {
-          tr: '"Bir bilirkişi raporu imzalatacaklarmış: \'bina çürük\' diye. Bina sağlam oysa."',
-          en: '"They want to get an expert report signed saying the building is unsound. It\'s perfectly sound."',
-        },
         lines: [
           { tr: 'İtirazım yok, çay mükemmel.', en: 'No objection, the tea is perfect.' },
           { tr: 'Celse arasına iyi geldi.', en: 'Perfect for a recess.' },
@@ -153,13 +141,10 @@ export const DAYS: DayDef[] = [
     offices: [
       {
         id: 'a',
+        pid: 'nevin',
         name: { tr: 'Medyum Nevin', en: 'Nevin the Psychic' },
         person: { tr: 'Nevin Hanım', en: 'Madame Nevin' },
         look: { shirt: 0x5b2c83, pants: 0x2b1b3b, skin: SKIN[0], hair: 0xc04020, glasses: false },
-        gossip: {
-          tr: '"Fincanda gördüm: kule gibi bir bina, altında bir kedi ağlıyor. Han yıkılacak çocuğum."',
-          en: '"I saw it in the cup: a tower of glass, and a cat crying beneath. They\'ll tear the han down, child."',
-        },
         lines: [
           { tr: 'Bu çayda kısmet var.', en: 'This tea holds good fortune.' },
           { tr: 'Gelişini hissetmiştim.', en: 'I sensed you coming.' },
@@ -167,13 +152,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'b',
+        pid: 'lale',
         name: { tr: 'Fotoğrafçı Lale', en: 'Lale Photo Studio' },
         person: { tr: 'Lale', en: 'Lale' },
         look: { shirt: 0xd9822b, pants: 0x2e2e2e, skin: SKIN[1], hair: 0x1a1a1a },
-        gossip: {
-          tr: '"Selim ile Emlakçı Turgut\'u gece hanın önünde ölçü alırken çektim. Fotoğraf bende."',
-          en: '"I photographed Selim and Turgut the realtor measuring the front of the han at night. I have the picture."',
-        },
         lines: [
           { tr: 'Dur, bir kare çekeyim!', en: 'Hold on, let me take a shot!' },
           { tr: 'Işık da çay da güzel.', en: 'Lovely light, lovely tea.' },
@@ -181,6 +163,7 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'c',
+        pid: 'kerem',
         name: { tr: 'Boğaz Turizm', en: 'Bosphorus Travel' },
         person: { tr: 'Kerem', en: 'Kerem' },
         look: { shirt: 0x3a8a6a, pants: 0x30302a, skin: SKIN[3], hair: 0x111111 },
@@ -202,13 +185,10 @@ export const DAYS: DayDef[] = [
     offices: [
       {
         id: 'a',
+        pid: 'selim',
         name: { tr: 'KriptoBey A.Ş.', en: 'KriptoBey Inc.' },
         person: { tr: 'Selim', en: 'Selim' },
         look: { shirt: 0x111111, pants: 0x2a3550, skin: SKIN[0], hair: 0xb08040 },
-        gossip: {
-          tr: '"Telefonda: \'Amca imzalarsa Cuma AVM\'cilere devrederiz, çaycıyı da çıkarırız.\'"',
-          en: '"On the phone: \'If uncle signs, we hand it to the mall people on Friday, and we fire the tea boy.\'"',
-        },
         lines: [
           { tr: 'Bahşişi coin ile versem?', en: 'Can I tip you in crypto?' },
           { tr: 'Hızlı ol, toplantıdayım.', en: "Make it quick, I'm in a meeting." },
@@ -216,13 +196,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'b',
+        pid: 'turgut',
         name: { tr: 'Emlakçı Turgut', en: 'Turgut Realty' },
         person: { tr: 'Turgut', en: 'Turgut' },
         look: { shirt: 0xc9b26b, pants: 0x4a3a2a, skin: SKIN[2], hair: 0x222222, mustache: true },
-        gossip: {
-          tr: '"AVM şirketi komisyonu peşin yatırdı. Cuma\'ya kadar Nadir amcanın imzası lazım."',
-          en: '"The mall company paid the commission up front. We need old Nadir\'s signature by Friday."',
-        },
         lines: [
           { tr: 'Çay güzel, manzara daha güzel olacak.', en: "Nice tea. The view's going to be nicer." },
           { tr: 'Senin ocağı da satarız haha.', en: "We'll sell your stove too, haha." },
@@ -230,6 +207,7 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'c',
+        pid: 'defne',
         name: { tr: 'Mimar Defne', en: 'Defne Architects' },
         person: { tr: 'Defne Hanım', en: 'Ms. Defne' },
         look: { shirt: 0x2d6a8a, pants: 0x1f1f1f, skin: SKIN[1], hair: 0x6b3a1a, glasses: true },
@@ -251,13 +229,10 @@ export const DAYS: DayDef[] = [
     offices: [
       {
         id: 'a',
+        pid: 'nadir',
         name: { tr: 'Nadir Bey', en: 'Nadir Bey' },
         person: { tr: 'Nadir Bey', en: 'Nadir Bey' },
         look: { shirt: 0x6b4226, pants: 0x3a2a1a, skin: SKIN[1], hair: 0xffffff, mustache: true, glasses: true },
-        gossip: {
-          tr: '"Selim bana bir rapor getirdi, bina çürükmüş. İmzalayayım mı bilmiyorum evlat."',
-          en: '"Selim brought me a report saying the building is rotten. I don\'t know if I should sign, son."',
-        },
         lines: [
           { tr: 'Rıza\'nın tepsisi sana yakıştı.', en: "Rıza's tray suits you." },
           { tr: 'Bu han benim çocukluğum.', en: 'This han is my childhood.' },
@@ -265,13 +240,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'b',
+        pid: 'gokdelen',
         name: { tr: 'Misafir Masası', en: 'Guest Table' },
         person: { tr: 'Gökdelen Yapı', en: 'Skyscraper Corp.' },
         look: { shirt: 0x3a3a46, pants: 0x3a3a46, skin: SKIN[0], hair: 0x333333, tie: 0x2d6a8a, glasses: true },
-        gossip: {
-          tr: '"Raporu hazırlayan bilirkişi bizim adamımız. Bina sapasağlam aslında."',
-          en: '"The expert who wrote the report is on our payroll. The building is actually fine."',
-        },
         lines: [
           { tr: 'Burada güzel bir otopark olur.', en: 'This would make a nice parking lot.' },
           { tr: 'Hmm, fena değil.', en: 'Hmm, not bad.' },
@@ -279,13 +251,10 @@ export const DAYS: DayDef[] = [
       },
       {
         id: 'c',
+        pid: 'gulsum',
         name: { tr: 'Han Esnafı', en: 'Han Tenants' },
         person: { tr: 'Gülsüm Abla', en: 'Gülsüm' },
         look: { shirt: 0x8a9a5b, pants: 0x3b3b3b, skin: SKIN[2], hair: 0x2a1a10, scarf: 0x2d6a8a },
-        gossip: {
-          tr: '"Hepimiz arkandayız Cemal. Bildiğini söylersen biz de konuşuruz."',
-          en: '"We\'re all behind you, Cemal. If you speak up, we will too."',
-        },
         lines: [
           { tr: 'Yerleri yeni sildim, dikkat!', en: 'I just mopped, careful!' },
           { tr: 'Aferin oğluma.', en: "That's my boy." },
@@ -295,14 +264,20 @@ export const DAYS: DayDef[] = [
   },
 ];
 
-export const GOSSIP_NEEDED = 10;
 
 export const ENDINGS = {
   saved: {
-    title: { tr: 'Han Kurtuldu', en: 'The Han Is Saved' },
+    title: { tr: 'Patron Cemal', en: 'Boss Cemal' },
     text: {
-      tr: 'Cemal herkesin önünde duyduklarını tek tek anlattı. Lale fotoğrafı çıkardı, Av. Rıfat raporun sahte olduğunu kanıtladı. Nadir Bey yırttı kâğıdı. O akşam han esnafı terasta ilk çayı Cemal\'e doldurdu. Nadir Bey tepsisine bir isim kazıttı: "Han Ustası".',
-      en: 'Cemal told everyone what he had heard, piece by piece. Lale produced the photo, Attorney Rıfat proved the report was forged. Nadir Bey tore up the papers. That evening the tenants poured the first tea for Cemal. Nadir Bey had a name engraved on his tray: "Master of the Han".',
+      tr: 'Cemal terasta herkesin önünde kalktı ve topladığı kanıtları tek tek ortaya koydu. Lale fotoğrafı çıkardı, Av. Rıfat vekâletin sahte olduğunu, Defne Hanım binanın sapasağlam olduğunu kanıtladı. Nadir Bey Selim\'in kâğıtlarını yırttı. Sonra Rıza Usta tepsisini Cemal\'e uzattı, Nadir Bey de çay ocağının anahtarını: "Bu handa herkes sana muhtaç evlat. Ocak artık senin. Patron sensin."',
+      en: "Cemal stood up on the rooftop in front of everyone and laid out his evidence piece by piece. Lale produced the photo, Attorney Rıfat proved the power of attorney was forged, Ms. Defne proved the building was rock solid. Nadir Bey tore up Selim's papers. Then Master Rıza handed Cemal his tray, and Nadir Bey handed him the key to the tea house: \"Everyone in this han needs you, kid. The stove is yours now. You're the boss.\"",
+    },
+  },
+  sold: {
+    title: { tr: 'AVM Müdürü', en: 'Mall Manager' },
+    text: {
+      tr: 'Cemal Selim\'in zarfını aldı ve sustu. Cuma günü imzalar atıldı, han yıkıldı, yerine cam bir AVM dikildi. Cemal bugün "ÇaycıX" zincirinin bölge müdürü: takım elbiseli, maaşı yüksek. Ama her sabah otoparkın tam ortasında, eski ocağın olduğu yerde, bir an duruyor.',
+      en: 'Cemal took Selim\'s envelope and kept quiet. On Friday the papers were signed, the han was torn down and a glass mall rose in its place. Today Cemal is regional manager of the "TeaX" chain: a suit, a fat salary. But every morning, right in the middle of the parking lot where the old stove used to be, he stops for a moment.',
     },
   },
   disbelieved: {
@@ -323,8 +298,8 @@ export const ENDINGS = {
 
 /** Giriş salonundaki dört müşteri (hikâyeden tanıdık yüzler, burada dedikodu yok). */
 export const ARENA_OFFICES: Office[] = [
-  { ...DAYS[0].offices[0], id: 'a', gossip: undefined },
-  { ...DAYS[0].offices[1], id: 'b', gossip: undefined },
-  { ...DAYS[1].offices[2], id: 'c', gossip: undefined },
-  { ...DAYS[2].offices[0], id: 'd', gossip: undefined },
+  { ...DAYS[0].offices[0], id: 'a' },
+  { ...DAYS[0].offices[1], id: 'b' },
+  { ...DAYS[1].offices[2], id: 'c' },
+  { ...DAYS[2].offices[0], id: 'd' },
 ];

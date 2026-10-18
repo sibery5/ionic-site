@@ -1,4 +1,13 @@
+import type { PersonId, Verdict } from '../game/rumors';
+
 // Bir turun sonunda toplanan sayılar. Görevler, başarımlar ve hedefler bunlardan hesaplanır.
+
+export interface SaleRecord {
+  rumor: string;
+  buyer: PersonId;
+  verdict: Verdict;
+  pay: number;
+}
 
 export interface RunStats {
   venue: string;
@@ -23,7 +32,16 @@ export interface RunStats {
   banks: number; // ocağa kaç kez para teslim edildi
   maxBank: number; // tek seferde kasaya geçen en yüksek tutar
   spilled: number; // dökülen toplam doluluk (bardak cinsinden)
-  gossip: string[]; // bu turda duyulan dedikodular ("venue:office")
+  heard: string[]; // bu turda duyulan dedikodular (rumor id)
+  sales: SaleRecord[]; // anlatılan dedikodular ve sonuçları
+  evidence: string[]; // han tarafına ulaştırılan hikâye kanıtları
+  repDelta: number; // itibar değişimi
+  chases: number; // kızıp kovalayan müşteri
+  escapes: number; // kovalamadan ocağa kaçış
+  caught: number; // yakalanıp tepsiye şaplak yeme
+  smashed: number; // kızgın müşterinin kırdığı bardak
+  bonks: number; // tepsiyle vurulan kişi
+  fines: number; // patronun kestiği ceza (₺)
 }
 
 export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
@@ -50,6 +68,15 @@ export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
     banks: 0,
     maxBank: 0,
     spilled: 0,
-    gossip: [],
+    heard: [],
+    sales: [],
+    evidence: [],
+    repDelta: 0,
+    chases: 0,
+    escapes: 0,
+    caught: 0,
+    smashed: 0,
+    bonks: 0,
+    fines: 0,
   };
 }

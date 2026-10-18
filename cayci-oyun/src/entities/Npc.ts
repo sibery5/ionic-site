@@ -19,6 +19,11 @@ export class Npc {
   private wait = 0;
   private phase = Math.random() * 10;
   private yaw = 0;
+  /** tepsiyle vurulunca yere düşer: kalan süre (sn) */
+  downT = 0;
+  private fall = 0;
+  /** bir süre oyuncuya kızgın bakar */
+  grumpyT = 0;
 
   constructor(
     private grid: Grid,
@@ -47,7 +52,41 @@ export class Npc {
     this.wait = rng.range(0, 2);
   }
 
+  /** Tepsiyle vuruldu: geriye savrulur, düşer, söylenerek kalkar. */
+  knock(dir: THREE.Vector3) {
+    this.vel.copy(dir).setY(0).normalize().multiplyScalar(3.2);
+    this.downT = 2.4;
+    this.fall = 0;
+    this.path = [];
+    this.wait = 0.6;
+    this.grumpyT = 6;
+    this.rig.setMood?.('angry');
+  }
+
+  get isDown() {
+    return this.downT > 0;
+  }
+
   update(dt: number, avoid: THREE.Vector3, tray?: THREE.Vector3) {
+    this.grumpyT -= dt;
+    if (this.downT > 0) {
+      // savrulup yere yığılır, sonra doğrulur
+      this.downT -= dt;
+      this.vel.multiplyScalar(Math.exp(-4 * dt));
+      this.pos.addScaledVector(this.vel, dt);
+      this.grid.resolveCircle(this.pos, this.radius, 0);
+      const target = this.downT > 0.6 ? 1 : this.downT / 0.6;
+      this.fall += (target - this.fall) * (1 - Math.exp(-14 * dt));
+      this.rig.root.position.copy(this.pos);
+      this.rig.root.rotation.set(-this.fall * Math.PI * 0.48, this.yaw, 0, 'YXZ');
+      this.rig.root.position.y = this.fall * 0.18;
+      if (this.downT <= 0) {
+        this.rig.root.rotation.set(0, this.yaw, 0);
+        this.rig.root.position.y = 0;
+      }
+      return;
+    }
+    if (this.grumpyT <= 0 && this.grumpyT > -dt * 1.5) this.rig.setMood?.('neutral');
     if (this.wait > 0) {
       this.wait -= dt;
       this.vel.multiplyScalar(0.8);

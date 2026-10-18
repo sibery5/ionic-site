@@ -11,6 +11,12 @@ export interface Totals {
   runs: number;
   jarsLost: number;
   vipPerfect: number;
+  sales: number; // doğru kişiye satılan dedikodu
+  lies: number;
+  escapes: number;
+  caught: number;
+  bonks: number;
+  betrayals: number;
 }
 
 export interface AchievementCtx {
@@ -19,8 +25,9 @@ export interface AchievementCtx {
   level: number;
   venueStars: Record<string, number>; // venue id → en iyi yıldız
   venueCount: number;
-  gossipCount: number;
+  gossipCount: number; // cepteki dedikodu
   gossipTotal: number;
+  title: number; // unvan sırası
   endings: string[];
   dailyDays: number; // görevlerin hepsinin bittiği gün sayısı
 }
@@ -48,7 +55,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'ALL_1STAR', name: { tr: 'Han Turu', en: 'Grand Tour' }, desc: { tr: 'Bütün katlarda en az 1 yıldız', en: 'Earn a star on every floor' }, check: (c) => allStars(c, 1) },
   { id: 'ALL_3STAR', name: { tr: 'Mükemmeliyetçi', en: 'Perfectionist' }, desc: { tr: 'Bütün katlarda 3 yıldız', en: 'Earn three stars on every floor' }, check: (c) => allStars(c, 3) },
   { id: 'GOSSIP_ALL', name: { tr: 'Her Şeyi Duyan', en: 'Heard It All' }, desc: { tr: 'Bütün dedikoduları topla', en: 'Collect every piece of gossip' }, check: (c) => c.gossipCount >= c.gossipTotal },
-  { id: 'END_SAVED', name: { tr: 'Han Kurtuldu', en: 'The Han Is Saved' }, desc: { tr: 'Hanı kurtar', en: 'Save the han' }, check: (c) => c.endings.includes('saved') },
+  { id: 'END_SAVED', name: { tr: 'Patron Oldun', en: 'You Are the Boss' }, desc: { tr: 'Hanı kurtar, çay ocağının patronu ol', en: 'Save the han and become boss of the tea house' }, check: (c) => c.endings.includes('saved') },
   { id: 'END_SILENT', name: { tr: 'Susmak Altın', en: 'Silence Is Golden' }, desc: { tr: 'Sus ve vapurda ocak aç', en: 'Stay quiet and open a ferry stand' }, check: (c) => c.endings.includes('silent') },
   { id: 'END_DISBELIEVED', name: { tr: 'Dedikoducu Çırak', en: 'Gossip Boy' }, desc: { tr: 'Kimse sana inanmasın', en: 'Nobody believes you' }, check: (c) => c.endings.includes('disbelieved') },
   { id: 'CAT_10', name: { tr: 'Paşa\'nın Kurbanı', en: "Paşa's Victim" }, desc: { tr: 'Paşa\'ya 10 kez takıl', en: 'Trip over Paşa 10 times' }, check: (c) => c.totals.catTrips >= 10 },
@@ -56,6 +63,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'DAILY_7', name: { tr: 'Müdavim', en: 'Regular' }, desc: { tr: '7 farklı günde bütün günlük görevleri bitir', en: 'Finish all daily missions on 7 different days' }, check: (c) => c.dailyDays >= 7 },
   { id: 'LEVEL_10', name: { tr: 'Tepsi Ustası', en: 'Tray Master' }, desc: { tr: '10. seviyeye ulaş', en: 'Reach level 10' }, check: (c) => c.level >= 10 },
   { id: 'LEVEL_30', name: { tr: 'Efsane', en: 'Legend' }, desc: { tr: '30. seviyeye ulaş', en: 'Reach level 30' }, check: (c) => c.level >= 30 },
+  { id: 'SALE_1', name: { tr: 'İlk Haber', en: 'First Scoop' }, desc: { tr: 'Doğru dedikoduyu doğru kişiye sat', en: 'Sell the right gossip to the right person' }, check: (c) => c.totals.sales >= 1 },
+  { id: 'SALE_10', name: { tr: 'Haber Ajansı', en: 'News Agency' }, desc: { tr: 'Toplam 10 dedikodu sat', en: 'Sell 10 pieces of gossip' }, check: (c) => c.totals.sales >= 10 },
+  { id: 'LIAR_5', name: { tr: 'Yalancı Çoban', en: 'The Boy Who Cried Wolf' }, desc: { tr: '5 kez yalan dedikodu anlat', en: 'Tell 5 false rumors' }, check: (c) => c.totals.lies >= 5 },
+  { id: 'ESCAPE_1', name: { tr: 'Kaçak Çaycı', en: 'Fugitive Tea Boy' }, desc: { tr: 'Seni kovalayan müşteriden ocağa kaç', en: 'Escape an angry customer back to the stove' }, check: (c) => c.totals.escapes >= 1 },
+  { id: 'CAUGHT_3', name: { tr: 'Şaplak', en: 'Smack' }, desc: { tr: '3 kez yakalanıp tepsine şaplak ye', en: 'Get caught and smacked 3 times' }, check: (c) => c.totals.caught >= 3 },
+  { id: 'BONK_1', name: { tr: 'Sabrın Sonu', en: 'Last Straw' }, desc: { tr: 'Yolunu kesen birine tepsiyle vur', en: 'Bonk someone blocking your way with the tray' }, check: (c) => c.totals.bonks >= 1 },
+  { id: 'BETRAY_1', name: { tr: 'Satılık Çaycı', en: 'Tea Boy for Sale' }, desc: { tr: 'Bir kanıtı kötü adamlara sat', en: 'Sell a piece of evidence to the villains' }, check: (c) => c.totals.betrayals >= 1 },
+  { id: 'TITLE_BAS', name: { tr: 'Baş Çaycı', en: 'Head Tea Boy' }, desc: { tr: 'Baş Çaycı unvanını al', en: 'Earn the Head Tea Boy title' }, check: (c) => c.title >= 3 },
+  { id: 'END_SOLD', name: { tr: 'AVM Müdürü', en: 'Mall Manager' }, desc: { tr: 'Selim\'in teklifini kabul et', en: "Accept Selim's offer" }, check: (c) => c.endings.includes('sold') },
 ];
 
 /** Henüz açılmamış ve koşulu sağlanan başarımlar. */

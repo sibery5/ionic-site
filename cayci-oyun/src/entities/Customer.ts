@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Office } from '../game/story';
 import type { DeskInfo } from '../world/LevelBuilder';
 import { makePerson, PersonRig, sitPose } from '../world/models';
-import { bubbleTexture } from '../world/textures';
+import { bubbleTexture, type BubbleKind } from '../world/textures';
 
 /** Masasında oturan, sipariş veren müşteri. */
 export class Customer {
@@ -14,6 +14,8 @@ export class Customer {
   private cheerT = 0;
   private t = Math.random() * 10;
   voicePitch: number;
+  /** kızıp masadan kalktı (kovalıyor ya da geri dönüyor) */
+  standing = false;
 
   constructor(
     public office: Office,
@@ -34,21 +36,37 @@ export class Customer {
   }
 
   /** Siparişi balonda göster. items boşsa balon gizlenir. */
-  showOrder(items: string[] | null, urgency: number, kind: 'normal' | 'vip' | 'rush' = 'normal') {
+  showOrder(items: string[] | null, urgency: number, kind: BubbleKind = 'normal', topicIcon = '') {
     if (!items || !items.length) {
       this.bubble.visible = false;
       this.bubbleKey = '';
       return;
     }
-    const key = `${items.join(',')}|${urgency > 0.75 ? 1 : 0}|${kind}`;
+    const key = `${items.join(',')}|${urgency > 0.75 ? 1 : 0}|${kind}|${topicIcon}`;
     if (key !== this.bubbleKey) {
       this.bubbleKey = key;
       const mat = this.bubble.material as THREE.SpriteMaterial;
       mat.map?.dispose();
-      mat.map = bubbleTexture(items, urgency, kind);
+      mat.map = bubbleTexture(items, urgency, kind, topicIcon);
       mat.needsUpdate = true;
     }
     this.bubble.visible = true;
+  }
+
+  /** Masadan kalkar: kovalama başlar. Konumu ve yürüyüşü Run sürer. */
+  standUp() {
+    this.standing = true;
+    this.bubble.visible = false;
+    this.rig.setMood?.('angry');
+  }
+
+  /** Masasına geri oturur. */
+  sitDown() {
+    this.standing = false;
+    sitPose(this.rig);
+    this.rig.root.position.copy(this.desk.seat);
+    this.rig.root.rotation.set(0, Math.atan2(this.desk.dir.x, this.desk.dir.z), 0);
+    this.rig.setMood?.('neutral');
   }
 
   talk() {
@@ -66,6 +84,10 @@ export class Customer {
 
   update(dt: number) {
     this.t += dt;
+    if (this.standing) {
+      this.rig.blink?.(dt);
+      return;
+    }
     const head = this.rig.head;
     head.rotation.set(0, 0, 0);
     if (this.cheerT > 0) {

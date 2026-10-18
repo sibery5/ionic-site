@@ -1,5 +1,8 @@
 import type { SaveData } from '../core/save';
-import { GOSSIP_TOTAL, objectiveDone, starsFor, VENUES, type Objective, type Venue } from '../game/venues';
+import { objectiveDone, starsFor, VENUES, type Objective, type Venue } from '../game/venues';
+import { RUMORS, saleKey } from '../game/rumors';
+import type { SaleRecord } from './stats';
+import { earnedTitle, TITLES } from './titles';
 import { ACHIEVEMENTS, newlyUnlocked, type Achievement } from './achievements';
 import { submit, beatenRival, nextRival } from './leaderboard';
 import { applyRun, missionDef, missionsFor, todayKey, type MissionState } from './missions';
@@ -25,7 +28,13 @@ export interface RunReport {
   boardRank: number | null;
   rivalBeaten: { name: string; score: number } | null;
   nextRival: { name: string; score: number } | null;
-  gossipNew: string[];
+  gossipNew: string[]; // cebe yeni giren dedikodular (rumor id)
+  sales: SaleRecord[];
+  repBefore: number;
+  repAfter: number;
+  salary: number;
+  /** terfi edildiyse yeni unvan sırası */
+  promotedTo: number | null;
   finalUnlocked: boolean; // teras ilk kez geçildi → han toplantısı
 }
 
@@ -62,9 +71,28 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
     return { objective: o, done, isNew };
   });
 
-  // dedikodu: sadece kariyer
-  const gossipNew = s.mode === 'career' ? s.gossip.filter((g) => !save.gossip.includes(g)) : [];
-  save.gossip.push(...gossipNew);
+  // dedikodular (günlük mücadele hariç): duyulanlar cebe, anlatılanlar deftere
+  const gossipNew = s.mode === 'daily' ? [] : [...new Set(s.heard)].filter((g) => !save.pocket.includes(g));
+  save.pocket.push(...gossipNew);
+  if (s.mode !== 'daily') {
+    for (const sale of s.sales) {
+      if (sale.verdict === 'reward' || sale.verdict === 'betray') {
+        const k = saleKey(sale.rumor, sale.buyer);
+        if (!save.sales.includes(k)) save.sales.push(k);
+      }
+      if (sale.verdict === 'reward') save.totals.sales++;
+      if (sale.verdict === 'lie') save.totals.lies++;
+      if (sale.verdict === 'betray') {
+        save.totals.betrayals++;
+        const r = RUMORS.find((x) => x.id === sale.rumor);
+        if (r?.story && !save.burned.includes(r.id)) save.burned.push(r.id);
+      }
+    }
+    // kanıt: han tarafına ulaşan hikâye dedikodusu (Run bunu 'reward' + evidence olarak işaretler)
+    for (const id of s.evidence) if (!save.evidence.includes(id)) save.evidence.push(id);
+  }
+  const repBefore = save.rep;
+  save.rep = Math.max(0, Math.min(100, save.rep + (s.mode === 'daily' ? 0 : s.repDelta)));
 
   // günlük görevler
   const missions = ensureDaily(save, date);
@@ -86,6 +114,9 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
   save.totals.jarsLost += s.jarsLost;
   save.totals.vipPerfect += s.vipPerfect;
   save.totals.runs++;
+  save.totals.escapes += s.escapes;
+  save.totals.caught += s.caught;
+  save.totals.bonks += s.bonks;
 
   // XP, seviye, ödüller
   const levelBefore = levelFromXp(save.xp);
@@ -96,8 +127,14 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
   const rewards: Cosmetic[] = [];
   for (let l = levelBefore + 1; l <= levelAfter; l++) rewards.push(...rewardsAtLevel(l));
 
-  // cüzdan: kasadaki para + görev ödülleri
-  const coins = s.score + missionCoins;
+  // unvan: yıldızlar ve itibar güncellendikten sonra
+  const before = save.title;
+  save.title = earnedTitle(save);
+  const promotedTo = save.title > before ? save.title : null;
+  const salary = TITLES[save.title].salary;
+
+  // cüzdan: kasadaki para + görev ödülleri + maaş
+  const coins = s.score + missionCoins + salary;
   save.wallet += coins;
 
   // sıralama
@@ -119,8 +156,9 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
       level: levelAfter,
       venueStars,
       venueCount: VENUES.length,
-      gossipCount: save.gossip.length,
-      gossipTotal: GOSSIP_TOTAL,
+      gossipCount: save.pocket.length,
+      gossipTotal: RUMORS.length,
+      title: save.title,
       endings: save.endings,
       dailyDays: save.dailyDays.length,
     },
@@ -146,6 +184,11 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
     rivalBeaten: competitive ? beatenRival(s.score, venue.rivals) : null,
     nextRival: nextRival(Math.max(s.score, rec.best), venue.rivals),
     gossipNew,
+    sales: s.sales,
+    repBefore,
+    repAfter: save.rep,
+    salary,
+    promotedTo,
     finalUnlocked,
   };
 }
@@ -161,6 +204,9 @@ export function isUnlocked(save: SaveData, index: number): boolean {
 export function recordEnding(save: SaveData, ending: string): Achievement[] {
   if (!save.endings.includes(ending)) save.endings.push(ending);
   save.finalSeen = true;
+  // gerçeği anlatan çaycı ocağın patronu olur; teklifi kabul eden ise parayı alır
+  save.title = earnedTitle(save);
+  if (ending === 'sold') save.wallet += SOLD_PRICE;
   const venueStars: Record<string, number> = {};
   for (const v of VENUES) if (save.venues[v.id]) venueStars[v.id] = save.venues[v.id].stars;
   const got = newlyUnlocked(
@@ -170,8 +216,9 @@ export function recordEnding(save: SaveData, ending: string): Achievement[] {
       level: levelFromXp(save.xp),
       venueStars,
       venueCount: VENUES.length,
-      gossipCount: save.gossip.length,
-      gossipTotal: GOSSIP_TOTAL,
+      gossipCount: save.pocket.length,
+      gossipTotal: RUMORS.length,
+      title: save.title,
       endings: save.endings,
       dailyDays: save.dailyDays.length,
     },
@@ -182,3 +229,6 @@ export function recordEnding(save: SaveData, ending: string): Achievement[] {
 }
 
 export { ACHIEVEMENTS };
+
+/** Selim'in teklifi: hanı bırakıp AVM'nin çay zincirine geçmek. */
+export const SOLD_PRICE = 500;

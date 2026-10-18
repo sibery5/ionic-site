@@ -1,5 +1,8 @@
 import { controlsList, gamepadList, getLang, t, tx } from '../core/i18n';
-import { ENDINGS, GOSSIP_NEEDED, Lang } from '../game/story';
+import { ENDINGS, Lang } from '../game/story';
+import { EVIDENCE_NEEDED, PEOPLE, RUMOR, RUMORS, TOPICS, type PersonId } from '../game/rumors';
+import { TITLES, liveEvidence, nextTitleNeeds } from '../meta/titles';
+import { SOLD_PRICE } from '../meta/profile';
 import { VENUES, objectiveText, type Venue } from '../game/venues';
 import type { SaveData, Quality } from '../core/save';
 import type { RunStats } from '../meta/stats';
@@ -7,7 +10,7 @@ import { objectiveKey, isUnlocked, type RunReport } from '../meta/profile';
 import { ACHIEVEMENTS } from '../meta/achievements';
 import { missionDef } from '../meta/missions';
 import { withRivals, nextRival } from '../meta/leaderboard';
-import { COSMETICS, UPGRADES, levelFromXp, levelProgress, rankFor, type CosmeticSlot, type Upgrade } from '../meta/progress';
+import { COSMETICS, UPGRADES, levelFromXp, levelProgress, type CosmeticSlot, type Upgrade } from '../meta/progress';
 import { audio } from '../audio/Audio';
 
 function h(tag: string, cls = '', html = '', parent?: HTMLElement) {
@@ -40,10 +43,26 @@ function stars(n: number, of = 3) {
 function profileStrip(save: SaveData, parent: HTMLElement) {
   const lv = levelFromXp(save.xp);
   const strip = h('div', 'profile', '', parent);
-  h('div', 'p-rank', `<b>${t('level')} ${lv}</b> · ${tx(rankFor(lv))}`, strip);
+  h('div', 'p-rank', `<b>${tx(TITLES[save.title].name)}</b> · ${t('level')} ${lv}`, strip);
   const bar = h('div', 'xpbar', '', strip);
   h('div', 'xpbar-fill', '', bar).style.width = `${levelProgress(save.xp) * 100}%`;
+  h('div', `p-rep ${save.rep < 30 ? 'low' : save.rep >= 70 ? 'high' : ''}`, `${t('reputation')}: <b>${Math.round(save.rep)}</b>`, strip);
   h('div', 'p-wallet', `${t('wallet')}: <b>${Math.round(save.wallet)}₺</b>`, strip);
+}
+
+/** Toplantıda inandırıcı olmak için gereken itibar. */
+export const MEETING_REP = 35;
+
+const VERDICT_ICON = { reward: '✅', betray: '🕶️', already: '↩️', own: '😅', irrelevant: '🤷', lie: '🤥', aboutThem: '😡' } as const;
+
+/** Şimdiki unvan ve bir sonrakinin şartları. */
+function titleBox(save: SaveData, parent: HTMLElement) {
+  const box = h('div', 'title-box', '', parent);
+  h('div', 'tb-now', `${t('title')}: <b>${tx(TITLES[save.title].name)}</b> · ${t('salary')} ${TITLES[save.title].salary}₺`, box);
+  const next = nextTitleNeeds(save);
+  if (!next) return;
+  h('div', 'tb-next', `${t('nextTitle')}: <b>${tx(next.title.name)}</b> (${next.title.salary}₺)`, box);
+  for (const n of next.needs) h('div', `obj ${n.done ? 'done' : ''}`, `${n.done ? '✔' : '○'} ${tx(n.text)}`, box);
 }
 
 const SLOT_NAMES: Record<CosmeticSlot, { tr: string; en: string }> = {
@@ -148,7 +167,8 @@ export class Menus {
       else card.disabled = true;
     });
     if (onMeeting) button(`★ ${t('meetingCard')} <small>${t('meetingCardSub')}</small>`, onMeeting, p, 'btn primary');
-    h('p', 'gossip-count', `${t('gossipFound')}: <b>${save.gossip.length}</b> / 12 (${GOSSIP_NEEDED}+)`, p);
+    h('p', 'gossip-count', `📒 ${t('pocket')}: <b>${save.pocket.length}</b> / ${RUMORS.length} · ⚖️ ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED}`, p);
+    titleBox(save, p);
     button(t('back'), onBack, p);
   }
 
@@ -211,22 +231,31 @@ export class Menus {
     row(t('spins'), String(s.spins));
     row(t('broken'), String(s.broken));
     row(t('jarsLost'), String(s.jarsLost));
+    if (s.chases) row(t('statChases'), `${s.chases} · ${t('statEscapes')} ${s.escapes} · ${t('statCaught')} ${s.caught}`);
+    if (s.bonks) row(t('statBonks'), `${s.bonks}${s.fines ? ` (−${s.fines}₺)` : ''}`);
     if (r.boardRank) row(t('rank'), `#${r.boardRank}`);
 
     const right = h('div', 'intro-box', '', cols);
     const lv = r.levelAfter;
-    h('h4', '', `${t('level')} ${lv} · ${tx(rankFor(lv))}`, right);
+    h('h4', '', `${tx(TITLES[save.title].name)} · ${t('level')} ${lv}`, right);
+    if (r.promotedTo !== null) h('div', 'levelup promo', `${t('promoted')} ${tx(TITLES[r.promotedTo].name)}`, right);
     const bar = h('div', 'xpbar', '', right);
     h('div', 'xpbar-fill', '', bar).style.width = `${levelProgress(save.xp) * 100}%`;
-    h('div', 'obj', `+${r.xpGained} ${t('xp')} · ${t('coins')} +${r.coins}₺`, right);
+    h('div', 'obj', `+${r.xpGained} ${t('xp')} · ${t('coins')} +${r.coins}₺${r.salary ? ` (${t('salary')} ${r.salary}₺)` : ''}`, right);
+    const dr = Math.round(r.repAfter - r.repBefore);
+    if (dr) h('div', `obj ${dr > 0 ? 'done' : 'bad'}`, `${t('reputation')}: ${Math.round(r.repBefore)} → <b>${Math.round(r.repAfter)}</b> (${dr > 0 ? '+' : ''}${dr})`, right);
     if (r.levelAfter > r.levelBefore) h('div', 'levelup', `${t('levelUp')} ${r.levelBefore} → ${r.levelAfter}`, right);
     for (const c of r.rewards) h('div', 'reward', `${t('unlockedReward')}: <b>${tx(c.name)}</b>`, right);
     for (const m of r.missionsCompleted) h('div', 'reward', `${t('missionDone')} ${tx(missionDef(m.kind).text(m.target))}`, right);
     if (r.achievements.length) h('div', 'reward ach', `🏆 ${t('achievementUnlocked')}: <b>${r.achievements.map((a) => tx(a.name)).join(', ')}</b>`, right);
-    for (const g of r.gossipNew) {
-      const [vid, oid] = g.split(':');
-      const off = VENUES.find((x) => x.id === vid)?.offices.find((x) => x.id === oid);
-      if (off?.gossip) h('div', 'reward gossip-line', `<b>${tx(off.person)}</b>: ${tx(off.gossip)}`, right);
+    for (const id of r.gossipNew) {
+      const g = RUMOR[id];
+      if (g) h('div', 'reward gossip-line', `📒 ${TOPICS[g.topic].icon} <b>${tx(PEOPLE[g.source].name)}</b>: ${tx(g.text)}`, right);
+    }
+    for (const sale of r.sales) {
+      const g = RUMOR[sale.rumor];
+      if (!g) continue;
+      h('div', `reward sale ${sale.verdict}`, `${VERDICT_ICON[sale.verdict]} ${TOPICS[g.topic].icon} → <b>${tx(PEOPLE[sale.buyer].name)}</b>${sale.pay ? ` +${sale.pay}₺` : ''} · ${t(`verdict_${sale.verdict}`)}`, right);
     }
 
     const act = h('div', 'res-actions', '', p);
@@ -323,16 +352,34 @@ export class Menus {
 
   gossipBook(save: SaveData, onBack: () => void) {
     const p = this.open('note-screen');
-    h('div', 'note-day', `${t('gossipBook')} (${save.gossip.length}/12)`, p);
+    h('div', 'note-day', `📒 ${t('pocket')} (${save.pocket.length}/${RUMORS.length})`, p);
+    h('div', 'note-meta', `${t('pocketSub')}<br>⚖️ ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED} · ${t('reputation')}: <b>${Math.round(save.rep)}</b>`, p);
     const paper = h('div', 'note-paper gossip-book', '', p);
-    for (const v of VENUES) {
-      for (const off of v.offices) {
-        if (!off.gossip) continue;
-        const key = `${v.id}:${off.id}`;
-        const got = save.gossip.includes(key);
-        h('p', got ? '' : 'dim', got ? `<b>${tx(off.person)}</b> (${tx(v.name)}): ${tx(off.gossip)}` : `<b>${tx(v.name)}</b> · ? ? ?`, paper);
-      }
+    for (const id of save.pocket) {
+      const r = RUMOR[id];
+      if (!r) continue;
+      const told = save.sales.filter((k) => k.startsWith(`${id}>`)).map((k) => tx(PEOPLE[k.split('>')[1] as PersonId].name));
+      const chips = [
+        save.evidence.includes(id) && !save.burned.includes(id) ? `<span class="chip ok">⚖️ ${t('evidence')}</span>` : '',
+        save.burned.includes(id) ? `<span class="chip bad">🔥 ${t('burnedNote')}</span>` : '',
+        told.length ? `<span class="chip">${t('soldTo')}: ${told.join(', ')}</span>` : '',
+      ].join('');
+      h('div', 'pocket-card', `<div class="pc-head">${TOPICS[r.topic].icon} <b>${tx(PEOPLE[r.source].name)}</b> <small>${tx(TOPICS[r.topic].name)}</small></div><div class="pc-text">${tx(r.text)}</div>${chips ? `<div class="pc-chips">${chips}</div>` : ''}`, paper);
     }
+    const unknown = RUMORS.length - save.pocket.filter((id) => RUMOR[id]).length;
+    if (unknown > 0) h('p', 'dim', `? ? ? × ${unknown}`, paper);
+    // kim neyi merak eder: açılmış katlardaki insanlar
+    h('div', 'note-day small', `👥 ${t('people')} · ${t('wants')}`, p);
+    const ppl = h('div', 'people-grid', '', p);
+    const seen = new Set<PersonId>();
+    VENUES.forEach((v, i) => {
+      if (!isUnlocked(save, i)) return;
+      for (const o of v.offices) {
+        if (seen.has(o.pid) || !PEOPLE[o.pid].wants.length) continue;
+        seen.add(o.pid);
+        h('div', 'person-chip', `<b>${tx(PEOPLE[o.pid].name)}</b> ${PEOPLE[o.pid].wants.map((w) => `<span title="${tx(TOPICS[w].name)}">${TOPICS[w].icon}</span>`).join(' ')}`, ppl);
+      }
+    });
     button(t('back'), onBack, p, 'btn primary');
   }
 
@@ -403,6 +450,9 @@ export class Menus {
     const p = this.open();
     h('h2', '', t('howTo'), p);
     h('p', 'rules', t('rules'), p);
+    h('p', 'rules', t('rulesGossip'), p);
+    h('p', 'rules', t('rulesAnger'), p);
+    h('p', 'rules', t('rulesRise'), p);
     h('h3', '', t('controlsTitle'), p);
     const tbl = h('table', 'controls', '', p);
     for (const [k, v] of controlsList()) h('tr', '', `<td><kbd>${k}</kbd></td><td>${v}</td>`, tbl);
@@ -421,13 +471,20 @@ export class Menus {
 
   // ---------------- final ----------------
 
-  choice(gossipCount: number, onSpill: () => void, onQuiet: () => void) {
+  choice(save: SaveData, o: { onTruth: () => void; onQuiet: () => void; onSell: () => void }) {
     const p = this.open('note-screen');
     h('div', 'note-day', t('choiceTitle'), p);
     h('div', 'note-paper', t('choiceText'), p);
-    h('div', 'note-meta', `${t('gossipFound')}: <b>${gossipCount}</b> / 12 (${GOSSIP_NEEDED}+)`, p);
-    button(t('spillIt'), onSpill, p, 'btn primary');
-    button(t('stayQuiet'), onQuiet, p);
+    const ev = liveEvidence(save);
+    h(
+      'div',
+      'note-meta',
+      `${t('meetingNeeds')}: ⚖️ ${t('evidence')} <b class="${ev >= EVIDENCE_NEEDED ? 'ok' : 'bad'}">${ev}/${EVIDENCE_NEEDED}</b> · ${t('reputation')} <b class="${save.rep >= MEETING_REP ? 'ok' : 'bad'}">${Math.round(save.rep)}/${MEETING_REP}</b>`,
+      p,
+    );
+    button(t('spillIt'), o.onTruth, p, 'btn primary');
+    button(t('stayQuiet'), o.onQuiet, p);
+    button(`${t('acceptOffer')} <small>${t('acceptOfferSub')} · +${SOLD_PRICE}₺</small>`, o.onSell, p, 'btn danger');
   }
 
   ending(key: keyof typeof ENDINGS, achievements: string[], onMenu: () => void) {

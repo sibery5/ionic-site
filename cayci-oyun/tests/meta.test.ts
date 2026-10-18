@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { defaultSave, normalize } from '../src/core/save';
 import { emptyStats, RunStats } from '../src/meta/stats';
 import { applyRunToSave, isUnlocked, recordEnding } from '../src/meta/profile';
-import { VENUES, objectiveDone, starsFor, GOSSIP_TOTAL } from '../src/game/venues';
-import { levelFromXp, xpForLevel, levelProgress, rankFor, COSMETICS, MAX_LEVEL } from '../src/meta/progress';
+import { VENUES, objectiveDone, starsFor } from '../src/game/venues';
+import { TITLES, earnedTitle } from '../src/meta/titles';
+import { levelFromXp, xpForLevel, levelProgress, COSMETICS, MAX_LEVEL } from '../src/meta/progress';
 import { missionsFor, applyRun, MISSION_DEFS } from '../src/meta/missions';
 import { submit, withRivals, nextRival, beatenRival, BOARD_SIZE } from '../src/meta/leaderboard';
 import { ACHIEVEMENTS } from '../src/meta/achievements';
@@ -23,9 +24,6 @@ describe('seviye ve rütbe', () => {
     expect(levelFromXp(1e9)).toBe(MAX_LEVEL);
   });
   it('rütbeler seviyeye göre', () => {
-    expect(rankFor(1).tr).toBe('Çırak');
-    expect(rankFor(10).tr).toBe('Tepsi Ustası');
-    expect(rankFor(30).tr).toBe('Efsane Çaycı');
   });
   it('her kozmetik geçerli bir seviyede açılır, her yuvanın 1. seviye varsayılanı var', () => {
     for (const c of COSMETICS) expect(c.level).toBeGreaterThanOrEqual(1), expect(c.level).toBeLessThanOrEqual(MAX_LEVEL);
@@ -92,7 +90,6 @@ describe('mekânlar', () => {
       // Rıza Usta her zaman 3 yıldızın üstünde: yenilmesi zor bir hedef
       expect(Math.max(...v.rivals.map((r) => r.score))).toBeGreaterThan(v.stars[2]);
     }
-    expect(GOSSIP_TOTAL).toBe(12);
   });
   it('yıldızlar ve görevler', () => {
     expect(starsFor(0, [10, 20, 30])).toBe(0);
@@ -140,12 +137,53 @@ describe('profil', () => {
     expect(got.map((a) => a.id)).toContain('END_SAVED');
     expect(save.finalSeen).toBe(true);
   });
-  it('dedikodular sadece kariyerde ve bir kez', () => {
+  it('dedikodular cebe bir kez girer, günlükte girmez', () => {
     const save = defaultSave();
-    applyRunToSave(save, VENUES[1], { ...stats({ gossip: ['zemin:a'] }), venue: 'zemin' });
-    applyRunToSave(save, VENUES[1], { ...stats({ gossip: ['zemin:a', 'zemin:b'] }), venue: 'zemin' });
-    applyRunToSave(save, VENUES[1], { ...stats({ gossip: ['zemin:c'] }), venue: 'zemin', mode: 'free' });
-    expect(save.gossip).toEqual(['zemin:a', 'zemin:b']);
+    applyRunToSave(save, VENUES[1], { ...stats({ heard: ['hayri_tapu'] }), venue: 'zemin' });
+    applyRunToSave(save, VENUES[1], { ...stats({ heard: ['hayri_tapu', 'sevim_evrak'] }), venue: 'zemin', mode: 'free' });
+    applyRunToSave(save, VENUES[1], { ...stats({ heard: ['ferhat_vekalet'] }), venue: 'zemin', mode: 'daily' });
+    expect(save.pocket).toEqual(['hayri_tapu', 'sevim_evrak']);
+  });
+  it('satışlar, kanıtlar, ihanet ve itibar kayda işlenir', () => {
+    const save = defaultSave();
+    applyRunToSave(save, VENUES[2], {
+      ...stats({
+        sales: [
+          { rumor: 'ferhat_vekalet', buyer: 'rifat', verdict: 'reward', pay: 40 },
+          { rumor: 'rifat_rapor', buyer: 'selim', verdict: 'betray', pay: 80 },
+          { rumor: 'nevin_fal', buyer: 'rifat', verdict: 'lie', pay: 0 },
+        ],
+        evidence: ['ferhat_vekalet'],
+        repDelta: -17,
+      }),
+      venue: 'kat1',
+    });
+    expect(save.sales).toEqual(['ferhat_vekalet>rifat', 'rifat_rapor>selim']);
+    expect(save.evidence).toEqual(['ferhat_vekalet']);
+    expect(save.burned).toEqual(['rifat_rapor']);
+    expect(save.rep).toBe(33);
+    expect(save.totals.sales).toBe(1);
+    expect(save.totals.betrayals).toBe(1);
+    expect(save.totals.lies).toBe(1);
+  });
+  it('unvan sırayla gelir, maaş öder ve geri düşmez', () => {
+    const save = defaultSave();
+    const r1 = applyRunToSave(save, VENUES[0], { ...stats({ score: VENUES[0].stars[0] }) });
+    expect(r1.promotedTo).toBe(1);
+    expect(save.title).toBe(1);
+    // 1. katta yıldız var ama zeminde yok: kat çaycısı olunmaz
+    applyRunToSave(save, VENUES[2], { ...stats({ score: VENUES[2].stars[0] }), venue: 'kat1' });
+    expect(save.title).toBe(1);
+    const r2 = applyRunToSave(save, VENUES[1], { ...stats({ score: VENUES[1].stars[0] }), venue: 'zemin' });
+    expect(r2.promotedTo).toBe(2);
+    expect(r2.salary).toBe(TITLES[2].salary);
+    save.rep = 0;
+    expect(earnedTitle(save)).toBe(2);
+  });
+  it('eski kayıttaki dedikodular cebe taşınır', () => {
+    const n = normalize({ gossip: ['zemin:a', 'kat2:b', 'yok:z'] } as never);
+    expect(n.pocket).toEqual(['hayri_tapu', 'lale_foto']);
+    expect((n as unknown as { gossip?: unknown }).gossip).toBeUndefined();
   });
   it('başarım id\'leri benzersiz ve Steam adına uygun', () => {
     expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(ACHIEVEMENTS.length);

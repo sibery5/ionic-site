@@ -24,12 +24,16 @@ import { TEA_COLORS, makeGlass, makeTipJar } from '../world/models';
 import { emptyStats, type RunStats } from '../meta/stats';
 import type { CosmeticSlot } from '../meta/progress';
 import type { Hud } from '../ui/Hud';
+import type { TrayAssist } from '../core/save';
+import { repTipFactor } from '../meta/titles';
+import { Intrigue } from './Intrigue';
+import { TOPICS, vipRumor, type Topic } from './rumors';
 
 // Bir vardiya: 90-120 saniye. Tepsiye istediğin kadar bardak koy, bahşişleri kavanozda taşı, ocakta kasaya geçir.
 // Mekânın kuralları (renkli siparişler, Gülsüm Abla, karanlık, rüzgâr, Paşa) Venue'dan gelir.
 
 export type TeaType = 'acik' | 'demli';
-export type OrderKind = 'normal' | 'vip' | 'rush';
+export type OrderKind = 'normal' | 'vip' | 'rush' | 'gossip';
 
 export interface RunConfig {
   venue: Venue;
@@ -40,8 +44,22 @@ export interface RunConfig {
   sensitivity: number;
   quality: Quality;
   tutorial: boolean;
-  knownGossip: Set<string>;
+  /** cep defterindeki dedikodular, daha önce yapılmış satışlar, kanıt sayısı */
+  pocket: string[];
+  sold: string[];
+  evidence: number;
+  rep: number;
+  title: number;
+  trayAssist: TrayAssist;
+  camDist: number;
 }
+
+/** Tepsi zorluğu: fizik çarpanları ve skor çarpanı. */
+export const ASSIST: Record<TrayAssist, { spill: number; tower: number; damping: number; score: number }> = {
+  easy: { spill: 1.35, tower: 5, damping: 1.45, score: 0.8 },
+  normal: { spill: 1, tower: 0, damping: 1, score: 1 },
+  master: { spill: 0.8, tower: -3, damping: 0.85, score: 1.25 },
+};
 
 interface RunOrder {
   office: string;
@@ -50,6 +68,7 @@ interface RunOrder {
   createdAt: number;
   patience: number;
   perfect: boolean;
+  topic?: Topic;
 }
 
 interface Debris {
@@ -60,7 +79,7 @@ interface Debris {
 }
 
 const RUSH_HOUR = 20; // son 20 saniye: çay saati
-const KIND_PAY: Record<OrderKind, number> = { normal: 1, vip: 3, rush: 2 };
+const KIND_PAY: Record<OrderKind, number> = { normal: 1, vip: 3, rush: 2, gossip: 1 };
 
 export class Run {
   scene = new THREE.Scene();
@@ -100,11 +119,14 @@ export class Run {
   private rushHour = false;
   private lockUsed = false;
   private pourBlocked = false;
+  private bumpAngerCd = 0;
   /** son karedeki tepsi çarpması (m/s), denge ölçümü için */
   lastBump = 0;
   private wind = { t: 3, dir: new THREE.Vector3(), level: 0, target: 0, release: 0 };
   private stats: RunStats;
   private coachStep: number;
+  readonly intrigue: Intrigue;
+  private assist: (typeof ASSIST)[TrayAssist];
 
   constructor(
     private cfg: RunConfig,
@@ -169,6 +191,55 @@ export class Run {
     const d = cfg.venue.duration;
     this.vipTimes = cfg.venue.id === 'salon' ? [d * 0.55] : cfg.venue.id === 'teras' ? [d * 0.2, d * 0.45, d * 0.7] : [d * 0.25, d * 0.6];
     this.coachStep = cfg.tutorial ? 1 : 0;
+    this.assist = ASSIST[cfg.mode === 'daily' ? 'normal' : cfg.trayAssist];
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const run = this;
+    this.intrigue = new Intrigue({
+      get time() {
+        return run.time;
+      },
+      mode: cfg.mode,
+      hud: this.hud,
+      player: this.player,
+      tray: this.tray,
+      grid: this.grid,
+      rng: this.rng,
+      fx: this.fx,
+      stats: this.stats,
+      npcs: this.npcs,
+      mopper: this.mopper,
+      pocket: cfg.pocket,
+      soldBefore: cfg.sold,
+      evidenceBefore: cfg.evidence,
+      title: cfg.title,
+      tutorial: cfg.tutorial,
+      get spinning() {
+        return !!run.spin;
+      },
+      nearOcak: () => run.built.ocak.some((o) => o.distanceTo(run.player.pos) < ORDERS.ocakRange),
+      addJar: (v) => {
+        run.jar += v;
+      },
+      fine: (v) => {
+        const got = Math.min(v, Math.floor(run.bank));
+        run.bank -= got;
+        return got;
+      },
+      smashGlass: () => run.smashGlass(),
+      loseJar: () => {
+        run.tray.hasJar = false;
+        run.loseJar();
+      },
+      cancelOrder: (id) => {
+        run.orders.delete(id);
+      },
+      slowMo: (sec) => {
+        run.slowMo = Math.max(run.slowMo, sec);
+      },
+      shake: (v) => {
+        run.shake = Math.max(run.shake, v);
+      },
+    });
 
     followCamera({ camera: this.camera, pos: this.camPos }, this.player, this.grid, def.theme === 'teras', 1, 0, 0.55);
     audio.musicMood = cfg.venue.rules.dark ? 'tense' : 'calm';
@@ -189,6 +260,12 @@ export class Run {
 
   update(realDt: number, input: Input) {
     if (this.ended) return;
+    // dedikodu paneli açıkken dünya durur, sadece seçim yapılır
+    if (this.intrigue.panel) {
+      this.intrigue.updatePanel(realDt, input);
+      this.hud.hint(null);
+      return;
+    }
     let dt = realDt;
     if (this.slowMo > 0) {
       this.slowMo -= realDt;
@@ -209,7 +286,8 @@ export class Run {
 
     // ---- oyuncu ----
     const others = this.npcs.map((n) => ({ pos: n.pos, radius: n.radius }));
-    for (const c of this.customers.values()) others.push({ pos: c.desk.seat, radius: 0.25 });
+    for (const c of this.customers.values()) if (!c.standing) others.push({ pos: c.desk.seat, radius: 0.25 });
+    others.push(...this.intrigue.bodies());
     const step = this.player.update(dt, input, this.grid, {
       slippery: (x, z) => (this.built.wet.has(`${x},${z}`) ? 1 : 0) || this.fx.puddleAt(this.player.pos.x, this.player.pos.z),
       shoes: this.has('shoes'),
@@ -220,6 +298,7 @@ export class Run {
     if (step.step) audio.footstep(step.step);
     if (step.slipped) {
       this.stats.slips++;
+      this.intrigue.addAnger(10);
       this.hud.toast(t('slip'), 'warn');
     }
     for (const n of this.npcs) n.update(dt, this.player.pos, this.tray.pos);
@@ -252,6 +331,7 @@ export class Run {
     }
     if (this.cat && this.cat.update(dt, this.player.pos, Math.hypot(this.player.vel.x, this.player.vel.z))) {
       this.stats.catTrips++;
+      this.intrigue.addAnger(15);
       this.player.stumble(1);
       audio.meow();
       this.hud.toast(t('trip'), 'warn');
@@ -259,6 +339,8 @@ export class Run {
 
     // ---- Fırıldak ----
     this.updateSpin(dt, input);
+    // ---- entrika: kovalayanlar, sinir, tepsiyle vurma, mesajlar ----
+    this.intrigue.update(dt, input);
 
     // ---- tepsi ----
     const n = this.tray.glasses.length;
@@ -271,15 +353,23 @@ export class Run {
       const p = greedParams(n);
       if (this.has('wrist')) p.grip = Math.max(TRAY.grip * 0.8, p.grip - 0.08);
       if (this.has('plates')) p.towerAngle += 3;
+      p.spillScale *= this.assist.spill;
+      p.towerAngle += this.assist.tower;
       Object.assign(this.tray.params, p);
       this.tray.params.catchAssist = false;
-      this.tray.params.damping = this.player.armMode ? TRAY.dampingArmMode : TRAY.damping;
+      this.tray.params.damping = (this.player.armMode ? TRAY.dampingArmMode : TRAY.damping) * this.assist.damping;
       if (this.player.armMode) this.tray.params.grip = TRAY.gripArmMode;
     }
     this.updateWind(dt);
     const ev = this.tray.step(this.player.hand, dt);
-    const bump = collideTray(this.tray, this.grid, this.npcs);
+    const bump = collideTray(this.tray, this.grid, this.npcs.filter((n) => !n.isDown));
     this.lastBump = bump;
+    this.bumpAngerCd -= dt;
+    if (bump >= 1.5 && this.bumpAngerCd <= 0) {
+      // biri tepsiye çarptı: sinir
+      this.intrigue.addAnger(25);
+      this.bumpAngerCd = 1;
+    }
     if (bump > 0.4 && this.tray.glasses.length) audio.clink(Math.min(1, bump / 3));
     this.tray.cool(dt, TEA.coolRate);
     if (this.tray.glasses.length) audio.clink(Math.min(1, Math.max(0, (ev.jerk - 6) / 40)));
@@ -350,7 +440,7 @@ export class Run {
     // ---- görsel ----
     for (const [id, c] of this.customers) {
       const o = this.orders.get(id);
-      c.showOrder(o ? o.items : null, o ? (now - o.createdAt) / o.patience : 0, o?.kind ?? 'normal');
+      if (!c.standing) c.showOrder(o ? o.items : null, o ? (now - o.createdAt) / o.patience : 0, o?.kind ?? 'normal', o?.topic ? TOPICS[o.topic].icon : '');
       c.update(dt);
     }
     this.trayView.sync(this.tray);
@@ -360,7 +450,7 @@ export class Run {
     this.fx.emitSteam(this.built.steamPoints, 5, dt);
     this.fx.update(dt);
     this.updateDebris(dt);
-    followCamera({ camera: this.camera, pos: this.camPos }, this.player, this.grid, this.venue.level.theme === 'teras', realDt, this.shake, 0.55);
+    followCamera({ camera: this.camera, pos: this.camPos }, this.player, this.grid, this.venue.level.theme === 'teras', realDt, this.shake, 0.55, this.cfg.camDist);
     if (this.flashlight) {
       const f = this.player.forward(new THREE.Vector3());
       this.flashlight.position.copy(this.player.pos).add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(f, 0.2);
@@ -369,7 +459,7 @@ export class Run {
       this.flashlight.intensity = 70 * (Math.sin(now * 37) > 0.995 ? 0.3 : 1);
     }
     if (this.ferry) this.ferry.position.x += dt * 0.6;
-    audio.setIntensity(Math.min(1, this.tray.glasses.length / 11 + (this.rushHour ? 0.35 : 0)));
+    audio.setIntensity(Math.min(1, Math.max(this.tray.glasses.length / 11 + (this.rushHour ? 0.35 : 0), this.intrigue.chaseLevel + 0.4 * Math.sign(this.intrigue.chaseLevel))));
 
     // ---- HUD ----
     this.hud.setTime(this.remaining, this.venue.duration);
@@ -379,7 +469,7 @@ export class Run {
         office: tx(this.customers.get(id)!.office.name),
         items: o.items,
         kind: o.kind,
-        label: this.venue.rules.colored ? undefined : `${o.items.length} ${t('greedOrder')}`,
+        label: o.topic ? `👂${TOPICS[o.topic].icon} ${o.items.length} ${t('greedOrder')}` : this.venue.rules.colored ? undefined : `${o.items.length} ${t('greedOrder')}`,
         urgency: (now - o.createdAt) / o.patience,
       })),
     );
@@ -447,6 +537,9 @@ export class Run {
   }
 
   private spawnOrder(now: number, office: Office, kind: OrderKind) {
+    // bazı müşteriler çay söylerken "dedikodu var mı?" diye de sorar
+    const topic = kind === 'normal' ? this.intrigue.askFor(office) : null;
+    if (topic) kind = 'gossip';
     const count = kind === 'vip' ? this.rng.int(3, 4) : kind === 'rush' ? this.rng.int(1, 2) : this.rng.int(GREED.orderMin, GREED.orderMax);
     const base = kind === 'vip' ? 30 : kind === 'rush' ? 15 : GREED.patience;
     this.orders.set(office.id, {
@@ -456,16 +549,18 @@ export class Run {
       createdAt: now,
       patience: base * (this.has('patience') ? 1.25 : 1),
       perfect: true,
+      topic: kind === 'gossip' ? (topic ?? undefined) : undefined,
     });
     const c = this.customers.get(office.id)!;
     audio.babble(c.voicePitch, kind === 'vip' ? 7 : 4);
     c.talk();
     if (kind === 'vip') this.hud.toast(`★ VIP: ${tx(office.person)}`, 'good');
     if (kind === 'rush') this.hud.toast(`! ${tx(office.person)}`, 'warn');
+    if (kind === 'gossip') this.hud.toast(`👂 ${tx(office.person)}: ${t('gossipAsk')}`, 'warn');
   }
 
   private updateOrders(dt: number, now: number) {
-    const offices = this.venue.offices.filter((o) => this.customers.has(o.id));
+    const offices = this.venue.offices.filter((o) => this.customers.has(o.id) && !this.customers.get(o.id)!.standing);
     const free = () => offices.filter((o) => !this.orders.has(o.id));
     // planlı VIP
     if (this.vipTimes.length && now >= this.vipTimes[0]) {
@@ -473,10 +568,11 @@ export class Run {
       if (f.length) {
         this.vipTimes.shift();
         // hikâyede, henüz duyulmamış dedikodusu olan müşteri önce gelir
-        const pick =
-          (this.cfg.mode === 'career' && f.find((o) => o.gossip && !this.cfg.knownGossip.has(`${this.venue.id}:${o.id}`) && !this.stats.gossip.includes(`${this.venue.id}:${o.id}`))) ||
-          f.find((o) => o.gossip) ||
-          this.rng.pick(f);
+        const known = (o: Office) => {
+          const r = vipRumor(o.pid);
+          return !r || this.cfg.pocket.includes(r.id) || this.stats.heard.includes(r.id);
+        };
+        const pick = (this.cfg.mode === 'career' && f.find((o) => !known(o))) || f.find((o) => vipRumor(o.pid)) || this.rng.pick(f);
         this.spawnOrder(now, pick, 'vip');
       }
     }
@@ -495,6 +591,7 @@ export class Run {
         audio.fail();
         this.hud.toast(`${tx(c.office.person)} ${t('expired')}`, 'bad');
         this.combo = Math.max(1, this.combo - GREED.comboStep);
+        this.intrigue.addAnger(8);
       }
     }
   }
@@ -509,7 +606,7 @@ export class Run {
     let best: Customer | null = null;
     let bd = ORDERS.deliverRange;
     for (const c of this.customers.values()) {
-      if (!this.orders.has(c.office.id)) continue;
+      if (!this.orders.has(c.office.id) || c.standing) continue;
       const d = Math.hypot(c.desk.center.x - this.player.pos.x, c.desk.center.z - this.player.pos.z);
       if (d < bd) {
         bd = d;
@@ -545,7 +642,7 @@ export class Run {
     let tip = 0;
     for (const i of used) {
       const g = glasses[i];
-      tip += greedTip(g.fill, this.combo, carried, spun) * KIND_PAY[o.kind] * rush;
+      tip += greedTip(g.fill, this.combo, carried, spun) * KIND_PAY[o.kind] * rush * repTipFactor(this.cfg.rep);
       if (g.fill < 0.8) o.perfect = false;
     }
     [...used].sort((a, b) => b - a).forEach((i) => glasses.splice(i, 1));
@@ -572,15 +669,8 @@ export class Run {
       if (carried >= GREED.towerBonusFrom) this.hud.toast(`${t('tower')} ×${GREED.towerBonus}!`, 'good');
       if (!o.perfect) this.hud.toast(t('okPour'), 'warn');
       if (o.kind === 'vip' && o.perfect) this.stats.vipPerfect++;
-      // VIP siparişini tamamlayan dedikoduyu duyar (kusursuzluk bonus için, şart değil)
-      if (o.kind === 'vip') {
-        const key = `${this.venue.id}:${c.office.id}`;
-        if (this.cfg.mode === 'career' && c.office.gossip && !this.cfg.knownGossip.has(key) && !this.stats.gossip.includes(key)) {
-          this.stats.gossip.push(key);
-          audio.jingle();
-          this.hud.gossipCard(tx(c.office.person), tx(c.office.gossip));
-        }
-      }
+      // VIP dedikodusu, fısıltılar ve "dedikodu var mı?" paneli
+      this.intrigue.onOrderDone(c, o.kind, o.perfect, o.topic);
     }
   }
 
@@ -687,6 +777,17 @@ export class Run {
     this.loseCombo();
   }
 
+  /** Kızgın müşteri tepsiden bir bardak kapıp yere çalar. */
+  private smashGlass(): boolean {
+    const g = this.tray.glasses.pop();
+    if (!g) return false;
+    this.stats.broken++;
+    this.throwGlass(0.6);
+    audio.shatter();
+    this.loseCombo();
+    return true;
+  }
+
   private throwGlass(up: number) {
     const g = makeGlass('demli');
     g.group.position.copy(this.tray.pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.1, (Math.random() - 0.5) * 0.2));
@@ -727,8 +828,8 @@ export class Run {
     this.pour?.sound.stop();
     audio.stopAmbience();
     audio.setIntensity(0);
-    // kavanozda kalan para kasaya geçmez: açgözlülüğün bedeli
-    this.stats.score = Math.round(this.bank);
+    // kavanozda kalan para kasaya geçmez: açgözlülüğün bedeli. Tepsi zorluğu skoru çarpar.
+    this.stats.score = Math.round(this.bank * this.assist.score);
     this.onEnd(this.stats);
   }
 
@@ -747,6 +848,7 @@ export class Run {
     audio.stopAmbience();
     audio.setIntensity(0);
     this.hud.setMode(false);
+    this.intrigue.dispose();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry?.dispose();
     });
