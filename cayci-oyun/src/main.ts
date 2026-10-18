@@ -9,6 +9,8 @@ import { audio } from './audio/Audio';
 import { Run, RunConfig } from './game/Run';
 import { VENUES, type Venue } from './game/venues';
 import { EVIDENCE_NEEDED } from './game/rumors';
+import { Cutscene } from './game/Cutscene';
+import { PROMO_SCENE, SCENES } from './game/scenes';
 import { liveEvidence } from './meta/titles';
 import { MEETING_REP } from './ui/Menus';
 import { Hud } from './ui/Hud';
@@ -25,7 +27,7 @@ import { upgrade, type CosmeticSlot } from './meta/progress';
 import type { Achievement } from './meta/achievements';
 import type { RunStats } from './meta/stats';
 
-type State = 'menu' | 'playing' | 'paused' | 'overlay';
+type State = 'menu' | 'playing' | 'paused' | 'overlay' | 'cutscene';
 
 /** Ana menünün arkasında dönen küçük sahne: Cemal (giydiği kıyafetlerle) ve sallanan tepsi. */
 class MenuScene {
@@ -180,6 +182,7 @@ class Game {
       this.menuScene.camera.updateProjectionMatrix();
     }
     this.run?.resize(w / h);
+    this.cutscene?.resize(w / h);
   }
 
   frozen = false; // galeri görseli çizilirken döngü ekrana dokunmaz
@@ -196,7 +199,10 @@ class Game {
       if (this.state === 'playing') this.pause();
       else if (this.state === 'paused' || (this.state === 'overlay' && this.run)) this.resume();
     }
-    if (this.state === 'playing' && this.run) {
+    if (this.state === 'cutscene' && this.cutscene) {
+      this.cutscene.update(dt, this.input);
+      if (this.cutscene) this.renderer.render(this.cutscene.scene, this.cutscene.camera);
+    } else if (this.state === 'playing' && this.run) {
       this.run.update(dt, this.input);
       if (this.run) this.renderer.render(this.run.scene, this.run.camera);
     } else if (this.run && (this.state === 'paused' || this.state === 'overlay')) {
@@ -211,6 +217,36 @@ class Game {
 
   persist() {
     writeSave(this.save);
+  }
+
+  cutscene: Cutscene | null = null;
+  private endingScene = false;
+
+  /** Ara sahneyi oynat (bir kez izlenenler kayda yazılır), bitince devam et. */
+  playScene(id: string, then: () => void) {
+    const def = SCENES[id];
+    if (!def) return then();
+    this.endRun();
+    this.menus.hide();
+    this.hud.hide();
+    this.input.exitLock();
+    if (!this.save.scenes.includes(id)) {
+      this.save.scenes.push(id);
+      this.persist();
+    }
+    this.state = 'cutscene';
+    this.cutscene = new Cutscene(def, document.getElementById('app')!, this.save.look, window.innerWidth / window.innerHeight, () => {
+      this.cutscene?.dispose();
+      this.cutscene = null;
+      this.state = 'overlay';
+      then();
+    });
+  }
+
+  /** Bir sahne henüz izlenmediyse oynat, yoksa doğrudan devam et. */
+  private once(id: string, then: () => void) {
+    if (this.save.scenes.includes(id)) then();
+    else this.playScene(id, then);
   }
 
   private rebuildMenuScene() {
@@ -262,6 +298,9 @@ class Game {
 
   venueIntro(index: number, mode: RunStats['mode']) {
     const v = VENUES[index];
+    // hikâye: ilk vardiyadan önce Rıza Usta, 3. kata ilk çıkışta Selim
+    if (mode === 'career' && index === 0 && !this.save.scenes.includes('intro')) return this.playScene('intro', () => this.venueIntro(index, mode));
+    if (mode === 'career' && v.id === 'kat3' && !this.save.scenes.includes('villain')) return this.playScene('villain', () => this.venueIntro(index, mode));
     this.menus.venueIntro(v, this.save, mode, () => this.startRun(index, mode), () => (mode === 'daily' ? this.showTitle() : this.careerMap()));
   }
 
@@ -419,15 +458,19 @@ class Game {
     if (report.stars >= 1 || s.mode === 'daily') audio.jingle();
     else audio.fail();
     const nextOpen = s.mode === 'career' && index + 1 < VENUES.length && isUnlocked(this.save, index + 1);
+    // terfi edildiyse, sonuç ekranından çıkarken terfi sahnesi oynar
+    const promo = report.promotedTo !== null ? PROMO_SCENE[report.promotedTo] : undefined;
+    const go = (f: () => void) => () => (promo ? this.once(promo, f) : f());
     this.menus.results(report, s, venue, this.save, {
-      onAgain: () => this.startRun(index, s.mode),
-      onNext: nextOpen ? () => this.venueIntro(index + 1, 'career') : null,
-      onMap: () => (s.mode === 'daily' ? this.showTitle() : this.careerMap()),
-      onFinal: report.finalUnlocked ? () => this.finalChoice() : null,
+      onAgain: go(() => this.startRun(index, s.mode)),
+      onNext: nextOpen ? go(() => this.venueIntro(index + 1, 'career')) : null,
+      onMap: go(() => (s.mode === 'daily' ? this.showTitle() : this.careerMap())),
+      onFinal: report.finalUnlocked ? go(() => this.finalChoice()) : null,
     });
   }
 
-  finalChoice() {
+  finalChoice(sceneDone = false) {
+    if (!sceneDone) return this.playScene('meeting', () => this.finalChoice(true));
     this.endRun();
     this.state = 'overlay';
     const believed = liveEvidence(this.save) >= EVIDENCE_NEEDED && this.save.rep >= MEETING_REP;
@@ -443,6 +486,14 @@ class Game {
     this.persist();
     this.unlockSteam(got);
     if (key === 'saved') audio.jingle();
+    if (key === 'saved' && !this.endingScene) {
+      // patron sahnesi, sonra son kartı
+      this.endingScene = true;
+      return this.playScene('end_saved', () => {
+        this.menus.ending(key, got.map((a) => tx(a.name)), () => this.careerMap());
+        this.endingScene = false;
+      });
+    }
     this.menus.ending(key, got.map((a) => tx(a.name)), () => this.careerMap());
   }
 }
@@ -506,6 +557,8 @@ if (import.meta.env.DEV) (window as unknown as { __cayci: unknown }).__cayci = {
       Math.random = rand;
     }
   },
+  /** Ara sahneyi oynat (görsel ve test için). */
+  scene: (id: string) => game.playScene(id, () => game.showTitle()),
   /** Tanıtım görseli çiz (karakterler / eşyalar). */
   gallery: (kind: 'cast' | 'props' | 'wardrobe' | 'keyart') => {
     game.state = 'overlay';
