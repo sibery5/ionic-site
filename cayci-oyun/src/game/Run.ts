@@ -14,6 +14,7 @@ import { getLang, t, tx } from '../core/i18n';
 import { audio } from '../audio/Audio';
 import { buildLevel, BuiltLevel } from '../world/LevelBuilder';
 import { setupLights, type Quality } from '../world/environment';
+import { icon } from '../ui/icons';
 import { Player } from '../entities/Player';
 import { Npc } from '../entities/Npc';
 import { Customer } from '../entities/Customer';
@@ -494,7 +495,7 @@ export class Run {
     this.hud.setGreed({ bank: this.bank, jar: this.jar, hasJar: this.tray.hasJar, combo: this.combo, tower: this.tray.glasses.length, spinBoost: now < this.spinBoostUntil });
     this.hud.setTickets(
       [...this.orders.entries()].map(([id, o]) => ({
-        office: `${o.topic ? `👂${TOPICS[o.topic].icon} ` : ''}${tx(this.customers.get(id)!.office.name)}`,
+        office: `${o.topic ? `${icon('ear')}${icon(TOPICS[o.topic].icon)} ` : ''}${tx(this.customers.get(id)!.office.name)}`,
         items: o.items,
         kind: o.kind,
         label: this.venue.rules.colored ? undefined : `${o.items.length} ${t('greedOrder')}`,
@@ -583,9 +584,9 @@ export class Run {
     const c = this.customers.get(office.id)!;
     audio.babble(c.voicePitch, kind === 'vip' ? 7 : 4);
     c.talk();
-    if (kind === 'vip') this.hud.toast(`★ VIP: ${tx(office.person)}`, 'good');
-    if (kind === 'rush') this.hud.toast(`! ${tx(office.person)}`, 'warn');
-    if (kind === 'gossip') this.hud.toast(`👂 ${tx(office.person)}: ${t('gossipAsk')}`, 'warn');
+    if (kind === 'vip') this.hud.toast(`${icon('star')} VIP: ${tx(office.person)}`, 'good');
+    if (kind === 'rush') this.hud.toast(`${icon('alert')} ${tx(office.person)}`, 'warn');
+    if (kind === 'gossip') this.hud.toast(`${icon('ear')} ${tx(office.person)}: ${t('gossipAsk')}`, 'warn');
   }
 
   private updateOrders(dt: number, now: number) {

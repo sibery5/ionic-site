@@ -1,5 +1,6 @@
 import { TEA } from '../config';
 import { t } from '../core/i18n';
+import { drawIcon, icon } from './icons';
 import type { Glass } from '../physics/tray';
 import { drawGlassIcon } from '../world/textures';
 
@@ -59,6 +60,8 @@ export class Hud {
   private chaseEl: HTMLElement;
   private inspectEl: HTMLElement;
   private inspectKey = '';
+  private chaseText = '';
+  private greedHtml = '';
   private lastTicketKey = '';
   private lastTrayKey = '';
   private speechTimer = 0;
@@ -75,7 +78,7 @@ export class Hud {
     this.moneyTarget = el('span', 'money-target', m);
     this.floatEl = el('div', 'float-money', tr);
     this.dayLabel = el('div', 'day-label', this.root);
-    this.windEl = el('div', 'wind hidden', this.root, '<span class="wind-arrow">➤</span>');
+    this.windEl = el('div', 'wind hidden', this.root, `<span class="wind-arrow">${icon('arrow')}</span>`);
     this.trayBox = el('canvas', 'tray-box', this.root);
     this.trayBox.width = 420;
     this.trayBox.height = 110;
@@ -95,7 +98,7 @@ export class Hud {
     this.bigEl = el('div', 'big-text hidden', this.root);
     this.rumorEl = el('div', 'rumor-panel hidden', this.root);
     this.phoneEl = el('div', 'phone-stack', this.root);
-    this.angerEl = el('div', 'anger hidden', this.root, '<span class="anger-face">😤</span><div class="anger-bar"><div class="anger-fill"></div></div><span class="anger-label"></span>');
+    this.angerEl = el('div', 'anger hidden', this.root, `<span class="anger-face">${icon('anger')}</span><div class="anger-bar"><div class="anger-fill"></div></div><span class="anger-label"></span>`);
     this.angerFill = this.angerEl.querySelector('.anger-fill') as HTMLElement;
     this.chaseEl = el('div', 'chase-vignette hidden', this.root, '<div class="chase-label"></div>');
     this.inspectEl = el('div', 'inspect hidden', this.root);
@@ -109,7 +112,7 @@ export class Hud {
     this.inspectEl.classList.toggle('hidden', !v);
     if (!v) return;
     this.inspectEl.classList.toggle('watching', v.watching);
-    this.inspectEl.innerHTML = `<span class="in-icon">👔</span><span class="in-text">${v.watching ? '👀 ' + t('inspectWatching') : t('inspectAround')}</span><span class="in-score">👍${v.good} 👎${v.bad}</span><span class="in-time">${Math.ceil(v.left)}</span>`;
+    this.inspectEl.innerHTML = `<span class="in-icon">${icon('boss')}</span><span class="in-text">${v.watching ? icon('eyes') + ' ' + t('inspectWatching') : t('inspectAround')}</span><span class="in-score">${icon('good')}${v.good} ${icon('bad')}${v.bad}</span><span class="in-time">${Math.ceil(v.left)}</span>`;
   }
 
   /** "Dedikodu var mı?" seçim paneli. null: kapalı. */
@@ -130,7 +133,7 @@ export class Hud {
       )
       .join('');
     this.rumorEl.innerHTML = `
-      <div class="rp-head"><span class="rp-ear">👂</span><b>${v.who}</b><span class="rp-time">${Math.ceil(v.timeLeft)}</span></div>
+      <div class="rp-head"><span class="rp-ear">${icon('ear')}</span><b>${v.who}</b><span class="rp-time">${Math.ceil(v.timeLeft)}</span></div>
       <div class="rp-ask">${v.topicIcon} ${v.ask}</div>
       <div class="rp-cards">${cards || `<div class="rp-empty">${t('pocketEmpty')}</div>`}</div>
       <div class="rumor-card none ${v.sel === -1 ? 'sel' : ''}"><span class="rc-key">0</span><span class="rc-text">${t('dontKnow')}</span></div>
@@ -139,8 +142,8 @@ export class Hud {
 
   /** Telefona mesaj düşer (patron, Rıza Usta, Selim). */
   phone(from: string, text: string, kind: 'boss' | 'riza' | 'villain' | 'info' = 'boss') {
-    const icon = kind === 'boss' ? '👔' : kind === 'riza' ? '🫖' : kind === 'villain' ? '🕶️' : '📱';
-    const d = el('div', `phone-msg ${kind}`, this.phoneEl, `<div class="pm-from">${icon} ${from}</div><div class="pm-text">${text}</div>`);
+    const ic = icon(kind === 'boss' ? 'boss' : kind === 'riza' ? 'teapot' : kind === 'villain' ? 'villain' : 'phone');
+    const d = el('div', `phone-msg ${kind}`, this.phoneEl, `<div class="pm-from">${ic} ${from}</div><div class="pm-text">${text}</div>`);
     while (this.phoneEl.children.length > 2) this.phoneEl.firstElementChild?.remove();
     setTimeout(() => d.classList.add('out'), 5200);
     setTimeout(() => d.remove(), 5800);
@@ -161,8 +164,9 @@ export class Hud {
     this.chaseEl.classList.toggle('hidden', !text);
     if (!text) return;
     this.chaseEl.style.setProperty('--close', String(Math.max(0, Math.min(1, closeness))));
-    const lab = this.chaseEl.firstElementChild as HTMLElement;
-    if (lab.textContent !== text) lab.textContent = text;
+    if (text === this.chaseText) return;
+    this.chaseText = text;
+    (this.chaseEl.firstElementChild as HTMLElement).innerHTML = text;
   }
 
   /** Açgözlü mod paneli: kasa, kavanoz, çarpan, kule. */
@@ -173,7 +177,9 @@ export class Hud {
       `<div class="g-jar ${o.hasJar ? '' : 'lost'}"><span>${t('jar')}</span><b>${o.hasJar ? Math.round(o.jar) + '₺' : '—'}</b></div>` +
       `<div class="g-combo ${o.combo > 1 ? 'hot' : ''}">×${o.combo.toFixed(1)}</div>` +
       `<div class="g-tower">${t('tower')}: <b>${o.tower}</b>${o.tower >= 7 ? ' <i>×2</i>' : ''}${o.spinBoost ? ' <i class="spin">' + t('spin') + ' ×2</i>' : ''}</div>`;
-    if (this.greedEl.innerHTML !== html) this.greedEl.innerHTML = html;
+    if (html === this.greedHtml) return;
+    this.greedHtml = html;
+    this.greedEl.innerHTML = html;
   }
 
   /** Fırıldak zamanlama göstergesi; null gizler. */
@@ -246,7 +252,7 @@ export class Hud {
       const d = el('div', 'ticket', this.tickets);
       if (tk.urgency > 0.75) d.classList.add('late');
       if (tk.kind && tk.kind !== 'normal') d.classList.add(tk.kind === 'gossip' ? 'ask' : tk.kind);
-      el('div', 'ticket-office', d, `${tk.kind === 'vip' ? '★ VIP · ' : tk.kind === 'rush' ? '! ' : ''}${tk.office}`);
+      el('div', 'ticket-office', d, `${tk.kind === 'vip' ? icon('star') + ' VIP · ' : tk.kind === 'rush' ? icon('alert') + ' ' : ''}${tk.office}`);
       const counts = { acik: 0, demli: 0 } as Record<string, number>;
       tk.items.forEach((i) => counts[i]++);
       const parts: string[] = [];
@@ -294,9 +300,7 @@ export class Hud {
       ctx.arc(x, 96, 6, 0, Math.PI * 2);
       ctx.fill();
       if (g.colorScore > 1.1) {
-        ctx.fillStyle = '#f2c230';
-        ctx.font = 'bold 16px sans-serif';
-        ctx.fillText('★', x + 14, 26);
+        drawIcon(ctx, 'star', x + 14, 22, 18);
       }
       ctx.restore();
     }

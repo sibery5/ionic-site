@@ -1,4 +1,5 @@
 import { t } from '../core/i18n';
+import { icon } from './icons';
 
 // Ara sahnelerin konuşma kutusu: konuşanın adı, daktilo gibi yazılan metin, devam ipucu.
 
@@ -13,7 +14,7 @@ export class Dialogue {
   constructor(parent: HTMLElement, title: string, private onNext: () => void, onSkip: () => void) {
     this.root = document.createElement('div');
     this.root.className = 'dialogue';
-    this.root.innerHTML = `<div class="dlg-title">${title}</div><div class="dlg-box"><div class="dlg-name"></div><div class="dlg-text"></div><div class="dlg-hint">${t('continueKey')}</div></div><button class="btn small dlg-skip">⏭</button>`;
+    this.root.innerHTML = `<div class="dlg-title">${title}</div><div class="dlg-box"><div class="dlg-name"></div><div class="dlg-text"></div><div class="dlg-hint">${t('continueKey')}</div></div><button class="btn small dlg-skip">${icon('skip')}</button>`;
     parent.appendChild(this.root);
     this.nameEl = this.root.querySelector('.dlg-name') as HTMLElement;
     this.textEl = this.root.querySelector('.dlg-text') as HTMLElement;

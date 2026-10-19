@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawIcon, type IconName } from '../ui/icons';
 
 // Canvas ile üretilen dokular. Hiçbir görsel dosya indirilmedi.
 
@@ -201,21 +202,15 @@ export function bubbleTexture(items: string[], urgency: number, kind: BubbleKind
     ctx.restore();
   });
   if (kind === 'gossip') {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '38px "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-    ctx.fillText('👂', 46, 56);
-    ctx.font = '30px "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-    ctx.fillText(topicIcon || '?', 98, 56);
+    drawIcon(ctx, 'ear', 46, 56, 50);
+    if (topicIcon) drawIcon(ctx, topicIcon as IconName, 98, 56, 42);
     ctx.fillStyle = '#6b3fa0';
     ctx.font = 'bold 30px Georgia, serif';
-    ctx.fillText('?', 126, 40);
-  } else if (kind !== 'normal') {
-    ctx.fillStyle = kind === 'vip' ? '#c9a54a' : '#b3261e';
-    ctx.font = 'bold 34px Georgia, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(kind === 'vip' ? '★' : '!', 34, 56);
+    ctx.fillText('?', 126, 36);
+  } else if (kind !== 'normal') {
+    drawIcon(ctx, kind === 'vip' ? 'star' : 'alert', 34, 56, 44, kind === 'vip' ? {} : { ink: '#b3261e' });
   }
   return tex(c, false);
 }

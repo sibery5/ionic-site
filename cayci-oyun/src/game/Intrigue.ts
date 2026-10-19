@@ -5,6 +5,7 @@ import type { Rng } from '../core/rng';
 import type { InputLike as Input } from '../core/input';
 import { t, tx } from '../core/i18n';
 import { audio } from '../audio/Audio';
+import { icon } from '../ui/icons';
 import type { Player } from '../entities/Player';
 import type { Npc } from '../entities/Npc';
 import type { Customer } from '../entities/Customer';
@@ -199,7 +200,7 @@ export class Intrigue {
     const h = this.h;
     if (perfect && this.watching()) {
       this.insp!.good++;
-      h.hud.toast(`👔 👍 ${t('inspectGood')}`, 'good');
+      h.hud.toast(`${icon('boss')} ${icon('good')} ${t('inspectGood')}`, 'good');
     }
     if (kind === 'gossip' && topic) {
       this.openPanel(c, topic);
@@ -223,7 +224,7 @@ export class Intrigue {
     const r = RUMOR[id];
     this.h.stats.heard.push(id);
     audio.jingle();
-    this.h.hud.gossipCard(`${title} · ${TOPICS[r.topic].icon} ${this.name(r.source)}`, tx(r.text));
+    this.h.hud.gossipCard(`${title} · ${icon(TOPICS[r.topic].icon)} ${this.name(r.source)}`, tx(r.text));
   }
 
   private openPanel(c: Customer, topic: Topic) {
@@ -242,11 +243,11 @@ export class Intrigue {
     this.h.hud.rumorPanel({
       who: this.name(p.c.office.pid),
       ask: p.chain ? tx(ASK_MORE.ask[(p.chain - 1 + p.c.office.pid.length) % ASK_MORE.ask.length]) : tx(TOPICS[p.topic].ask),
-      topicIcon: TOPICS[p.topic].icon,
+      topicIcon: icon(TOPICS[p.topic].icon),
       cards: p.cards.map((id) => {
         const r = RUMOR[id];
         const text = tx(r.text);
-        return { icon: TOPICS[r.topic].icon, text: text.length > 92 ? text.slice(0, 90) + '…"' : text, source: this.name(r.source) };
+        return { icon: icon(TOPICS[r.topic].icon), text: text.length > 92 ? text.slice(0, 90) + '…"' : text, source: this.name(r.source) };
       }),
       sel: p.sel,
       timeLeft: p.t,
@@ -370,7 +371,7 @@ export class Intrigue {
     h.stats.chases++;
     audio.shout();
     h.slowMo(0.6);
-    h.hud.big(`🏃 ${this.name(c.office.pid)}`, t('chasing'));
+    h.hud.big(`${icon('run')} ${this.name(c.office.pid)}`, t('chasing'));
     h.hud.speech(this.name(c.office.pid), tx(h.rng.pick(shout ?? CHASE.shout)));
     if (this.watching()) this.saw();
   }
@@ -457,7 +458,7 @@ export class Intrigue {
     }
     const level = this.chaseLevel;
     const near = this.chases.find((c) => c.state === 'chase');
-    h.hud.chase(near ? `🏃 ${this.name(near.c.office.pid)} ${t('chasing')}` : null, level);
+    h.hud.chase(near ? `${icon('run')} ${this.name(near.c.office.pid)} ${t('chasing')}` : null, level);
   }
 
   /** Kovalayan yetişti: tepsiye şaplak, kavanoz uçar. */
@@ -506,7 +507,7 @@ export class Intrigue {
       if (!this.angerReady && !isChaser) {
         if (h.time > this.angerHint) {
           this.angerHint = h.time + 4;
-          h.hud.toast('😤 …', 'warn');
+          h.hud.toast(`${icon('anger')} …`, 'warn');
         }
         return;
       }
@@ -555,7 +556,7 @@ export class Intrigue {
       npc.knock(dir);
       h.stats.bossBonks++;
       h.stats.repDelta -= 15;
-      h.hud.big(t('bossHit'), '👔💥');
+      h.hud.big(t('bossHit'), `${icon('boss')}${icon('boom')}`);
       h.hud.speech(this.name('nadir'), tx(h.rng.pick(INSPECT.bossOuch)));
       h.shake(0.3);
       h.slowMo(1.2);
@@ -616,7 +617,7 @@ export class Intrigue {
 
   private saw(n = 1) {
     this.insp!.bad += n;
-    this.h.hud.toast(`👔 👎 ${t('inspectBad')}`, 'bad');
+    this.h.hud.toast(`${icon('boss')} ${icon('bad')} ${t('inspectBad')}`, 'bad');
   }
 
   private startInspection() {
@@ -626,7 +627,7 @@ export class Intrigue {
     this.insp = { npc, t: 0, good: 0, bad: 0, over: false, lastBroken: h.stats.broken, lastJars: h.stats.jarsLost };
     h.stats.inspections++;
     h.hud.phone(this.name('nadir'), tx(h.rng.pick(INSPECT.start)), 'boss');
-    h.hud.big(`👔 ${t('inspection')}`, t('inspectionSub'));
+    h.hud.big(`${icon('boss')} ${t('inspection')}`, t('inspectionSub'));
     audio.click();
   }
 
@@ -644,7 +645,7 @@ export class Intrigue {
       h.stats.repDelta += 5;
       h.addJar(15);
       h.hud.floatMoney(15);
-      h.hud.toast(`👔 ${t('inspectPass')} +15₺`, 'good');
+      h.hud.toast(`${icon('boss')} ${t('inspectPass')} +15₺`, 'good');
       audio.jingle();
       this.queue(0.8, 'boss', INSPECT.pass);
     } else if (score >= 0) {
@@ -652,7 +653,7 @@ export class Intrigue {
       this.queue(0.8, 'boss', INSPECT.ok);
     } else {
       h.stats.repDelta -= 5;
-      h.hud.toast(`👔 ${t('inspectFail')}`, 'bad');
+      h.hud.toast(`${icon('boss')} ${t('inspectFail')}`, 'bad');
       this.queue(0.8, 'boss', INSPECT.fail);
     }
   }
@@ -691,7 +692,7 @@ export class Intrigue {
     const h = this.h;
     for (const pid of about) {
       if (pid === buyer || this.backfires.some((b) => b.pid === pid) || !h.customerOf(pid)) continue;
-      h.hud.toast(`🤫 ${this.name(pid)} ${t('backfireHint')}`, 'warn');
+      h.hud.toast(`${icon('hush')} ${this.name(pid)} ${t('backfireHint')}`, 'warn');
       if (h.rng.next() < 0.4) this.backfires.push({ pid, at: h.time + h.rng.range(12, 24) });
     }
   }
@@ -706,7 +707,7 @@ export class Intrigue {
       if (!c || c.standing || this.isChasing(c.office.id)) continue;
       h.stats.backfires++;
       h.stats.repDelta -= 2;
-      h.hud.toast(`👂 ${this.name(b.pid)} ${t('backfire')}`, 'bad');
+      h.hud.toast(`${icon('ear')} ${this.name(b.pid)} ${t('backfire')}`, 'bad');
       this.startChase(c, BACKFIRE);
     }
   }

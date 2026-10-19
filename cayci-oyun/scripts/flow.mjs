@@ -85,8 +85,8 @@ for (let i = 0; i < 6; i++) {
   }, STAR3[i] + 5);
   await page.waitForTimeout(400);
   if (i === 0) await shot('04-results');
-  const stars = await page.locator('.big-stars').textContent();
-  if (!stars?.includes('★★★')) fail(`mekân ${i}: 3 yıldız yok (${stars})`);
+  const stars = await page.locator('.big-stars .st .ic-star').count();
+  if (stars !== 3) fail(`mekân ${i}: 3 yıldız yok (${stars})`);
   if (i < 5) {
     // harita (terfi olduysa önce terfi sahnesi)
     await page.locator('button', { hasText: lang === 'tr' ? 'Harita' : 'Map' }).first().click();
@@ -168,7 +168,7 @@ if (save.settings.quality !== 'low') fail('kalite ayarı kaydedilmedi');
 await page.locator('button', { hasText: lang === 'tr' ? 'Geri' : 'Back' }).last().click();
 await page.waitForTimeout(400);
 await shot('13-title-after', 900);
-console.log('son kayıt', { level: save.xp, wallet: save.wallet, upgrades: save.upgrades, look: save.look, missions: save.daily.missions.map((m) => `${m.kind}:${m.progress}/${m.target}${m.done ? '✔' : ''}`) });
+console.log('son kayıt', { level: save.xp, wallet: save.wallet, upgrades: save.upgrades, look: save.look, missions: save.daily.missions.map((m) => `${m.kind}:${m.progress}/${m.target}${m.done ? ' tamam' : ''}`) });
 console.log('ERRORS:', errors.length ? errors.join('\n') : 'none');
 if (errors.length) process.exitCode = 1;
 await browser.close();

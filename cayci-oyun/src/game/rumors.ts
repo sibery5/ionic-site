@@ -1,4 +1,5 @@
 import type { Text } from './story';
+import type { IconName } from '../ui/icons';
 
 // Dedikodu ekonomisi. Cemal çay taşırken laf da duyar: VIP müşteriler hikâyenin kanıtlarını anlatır,
 // diğerleri kulağına fısıldar. Bazı müşteriler çay söylerken "dedikodu var mı?" diye sorar.
@@ -25,13 +26,13 @@ export type PersonId =
 
 export type Topic = 'tapu' | 'para' | 'rapor' | 'foto' | 'kulis' | 'kedi';
 
-export const TOPICS: Record<Topic, { icon: string; name: Text; ask: Text }> = {
-  tapu: { icon: '📜', name: { tr: 'Tapu ve evrak', en: 'Deeds & papers' }, ask: { tr: 'Tapu, vekâlet, evrak... bir şey duydun mu?', en: 'Deeds, signatures, paperwork... heard anything?' } },
-  para: { icon: '💰', name: { tr: 'Para işleri', en: 'Money' }, ask: { tr: 'Paralar nereye gidiyor, bilen var mı?', en: 'Where is the money going, does anyone know?' } },
-  rapor: { icon: '📋', name: { tr: 'Bina raporu', en: 'Building report' }, ask: { tr: 'Binanın raporuyla ilgili bir laf var mı?', en: 'Any word about the building report?' } },
-  foto: { icon: '📷', name: { tr: 'Fotoğraf, görgü', en: 'Photos & sightings' }, ask: { tr: 'Gece hanın önünde kimler dolaşıyor, gören var mı?', en: 'Who has been prowling outside the han at night?' } },
-  kulis: { icon: '💬', name: { tr: 'Kulis', en: 'Office talk' }, ask: { tr: 'Anlat bakalım, kim kimle ne konuşuyor?', en: 'Come on, who is talking to whom?' } },
-  kedi: { icon: '🐈', name: { tr: 'Paşa', en: 'Paşa the cat' }, ask: { tr: 'Paşa yine ne karıştırıyor?', en: 'What is Paşa up to now?' } },
+export const TOPICS: Record<Topic, { icon: IconName; name: Text; ask: Text }> = {
+  tapu: { icon: 'deed', name: { tr: 'Tapu ve evrak', en: 'Deeds & papers' }, ask: { tr: 'Tapu, vekâlet, evrak... bir şey duydun mu?', en: 'Deeds, signatures, paperwork... heard anything?' } },
+  para: { icon: 'money', name: { tr: 'Para işleri', en: 'Money' }, ask: { tr: 'Paralar nereye gidiyor, bilen var mı?', en: 'Where is the money going, does anyone know?' } },
+  rapor: { icon: 'report', name: { tr: 'Bina raporu', en: 'Building report' }, ask: { tr: 'Binanın raporuyla ilgili bir laf var mı?', en: 'Any word about the building report?' } },
+  foto: { icon: 'camera', name: { tr: 'Fotoğraf, görgü', en: 'Photos & sightings' }, ask: { tr: 'Gece hanın önünde kimler dolaşıyor, gören var mı?', en: 'Who has been prowling outside the han at night?' } },
+  kulis: { icon: 'talk', name: { tr: 'Kulis', en: 'Office talk' }, ask: { tr: 'Anlat bakalım, kim kimle ne konuşuyor?', en: 'Come on, who is talking to whom?' } },
+  kedi: { icon: 'cat', name: { tr: 'Paşa', en: 'Paşa the cat' }, ask: { tr: 'Paşa yine ne karıştırıyor?', en: 'What is Paşa up to now?' } },
 };
 
 export type Side = 'han' | 'villain' | 'neutral';

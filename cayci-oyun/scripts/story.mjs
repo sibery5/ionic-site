@@ -20,7 +20,7 @@ for (const skill of SKILLS) {
     const pol = { greed: 7, spin: true, timingError: 0.06, careful: true, gossip: skill };
     const log = await page.evaluate(([pol, seed, max]) => window.__cayci.botCareer(pol, seed, max), [pol, seed, MAX]);
     console.log(`\n== beceri ${skill} tohum ${seed}`);
-    for (const r of log) console.log(`${String(r.n).padStart(2)} ${r.venue.padEnd(6)} skor ${String(r.score).padStart(4)} ★${r.stars} duydu ${r.heard} soru ${r.asked} satış ${r.sales || '-'} kovalama ${r.chases}/${r.caught} | cep ${r.pocket} kanıt ${r.evidence} itibar ${r.rep} unvan ${r.title}${r.believed ? '  ✔ inandırır' : ''}`);
+    for (const r of log) console.log(`${String(r.n).padStart(2)} ${r.venue.padEnd(6)} skor ${String(r.score).padStart(4)} yıldız ${r.stars} duydu ${r.heard} soru ${r.asked} satış ${r.sales || '-'} kovalama ${r.chases}/${r.caught} | cep ${r.pocket} kanıt ${r.evidence} itibar ${r.rep} unvan ${r.title}${r.believed ? '  ✔ inandırır' : ''}`);
     const last = log[log.length - 1];
     const firstTeras = log.findIndex((r) => r.venue === 'teras' && r.stars >= 1) + 1;
     summary.push({ skill, seed, shifts: log.length, believed: last.believed, firstTeras, evidence: last.evidence, rep: last.rep });

@@ -1,4 +1,5 @@
 import { controlsList, gamepadList, getLang, t, tx } from '../core/i18n';
+import { icon } from './icons';
 import { ENDINGS, Lang } from '../game/story';
 import { EVIDENCE_NEEDED, PEOPLE, RUMOR, RUMORS, TOPICS, type PersonId } from '../game/rumors';
 import { TITLES, liveEvidence, nextTitleNeeds } from '../meta/titles';
@@ -37,7 +38,7 @@ function button(label: string, onClick: () => void, parent: HTMLElement, cls = '
 }
 
 function stars(n: number, of = 3) {
-  return '<span class="st">' + '★'.repeat(n) + '</span><span class="dim">' + '★'.repeat(Math.max(0, of - n)) + '</span>';
+  return '<span class="st">' + icon('star').repeat(n) + '</span><span class="dim">' + icon('starOff').repeat(Math.max(0, of - n)) + '</span>';
 }
 
 function profileStrip(save: SaveData, parent: HTMLElement) {
@@ -53,7 +54,7 @@ function profileStrip(save: SaveData, parent: HTMLElement) {
 /** Toplantıda inandırıcı olmak için gereken itibar. */
 export const MEETING_REP = 35;
 
-const VERDICT_ICON = { reward: '✅', betray: '🕶️', already: '↩️', own: '😅', irrelevant: '🤷', lie: '🤥', aboutThem: '😡' } as const;
+const VERDICT_ICON = { reward: icon('good'), betray: icon('villain'), already: icon('back'), own: icon('faceSweat'), irrelevant: icon('shrug'), lie: icon('lie'), aboutThem: icon('mad') } as const;
 
 /** Şimdiki unvan ve bir sonrakinin şartları. */
 function titleBox(save: SaveData, parent: HTMLElement) {
@@ -62,7 +63,7 @@ function titleBox(save: SaveData, parent: HTMLElement) {
   const next = nextTitleNeeds(save);
   if (!next) return;
   h('div', 'tb-next', `${t('nextTitle')}: <b>${tx(next.title.name)}</b> (${next.title.salary}₺)`, box);
-  for (const n of next.needs) h('div', `obj ${n.done ? 'done' : ''}`, `${n.done ? '✔' : '○'} ${tx(n.text)}`, box);
+  for (const n of next.needs) h('div', `obj ${n.done ? 'done' : ''}`, `${n.done ? icon('check') : icon('ring')} ${tx(n.text)}`, box);
 }
 
 const SLOT_NAMES: Record<CosmeticSlot, { tr: string; en: string }> = {
@@ -156,7 +157,7 @@ export class Menus {
       card.innerHTML = `
         <div class="vc-floor">${tx(v.name)}</div>
         <div class="vc-obs">${tx(v.obstacle)}</div>
-        <div class="vc-stars">${open ? stars(rec?.stars ?? 0) : '🔒 ' + t('unlockHint')}</div>
+        <div class="vc-stars">${open ? stars(rec?.stars ?? 0) : icon('lock') + ' ' + t('unlockHint')}</div>
         ${open ? `<div class="vc-meta">${t('bestScore')}: <b>${rec?.best ?? 0}₺</b> · ${t('objectives')} ${objDone}/2${rival ? ` · ${t('rivalToBeat')}: ${esc(rival.name)} ${rival.score}₺` : ''}</div>` : ''}`;
       if (open)
         card.addEventListener('click', () => {
@@ -166,8 +167,8 @@ export class Menus {
         });
       else card.disabled = true;
     });
-    if (onMeeting) button(`★ ${t('meetingCard')} <small>${t('meetingCardSub')}</small>`, onMeeting, p, 'btn primary');
-    h('p', 'gossip-count', `📒 ${t('pocket')}: <b>${save.pocket.length}</b> / ${RUMORS.length} · ⚖️ ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED}`, p);
+    if (onMeeting) button(`${icon('star')} ${t('meetingCard')} <small>${t('meetingCardSub')}</small>`, onMeeting, p, 'btn primary');
+    h('p', 'gossip-count', `${icon('notebook')} ${t('pocket')}: <b>${save.pocket.length}</b> / ${RUMORS.length} · ${icon('scale')} ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED}`, p);
     titleBox(save, p);
     button(t('back'), onBack, p);
   }
@@ -182,7 +183,7 @@ export class Menus {
     const obj = h('div', 'intro-box', `<h4>${t('objectives')}</h4>`, info);
     for (const ob of v.objectives) {
       const done = rec?.objectives.includes(objectiveKey(ob));
-      h('div', `obj ${done ? 'done' : ''}`, `${done ? '✔' : '○'} ${tx(objectiveText(ob))}`, obj);
+      h('div', `obj ${done ? 'done' : ''}`, `${done ? icon('check') : icon('ring')} ${tx(objectiveText(ob))}`, obj);
     }
     const goals = h('div', 'intro-box', `<h4>${t('starGoals')}</h4>`, info);
     v.stars.forEach((s, k) => h('div', 'obj', `${stars(k + 1)} ${s}₺`, goals));
@@ -222,7 +223,7 @@ export class Menus {
 
     const cols = h('div', 'res-grid', '', p);
     const left = h('div', 'intro-box', `<h4>${t('objectives')}</h4>`, cols);
-    for (const ob of r.objectives) h('div', `obj ${ob.done ? 'done' : ''}`, `${ob.done ? '✔' : '○'} ${tx(objectiveText(ob.objective))}${ob.isNew ? ' <span class="badge">+XP</span>' : ''}`, left);
+    for (const ob of r.objectives) h('div', `obj ${ob.done ? 'done' : ''}`, `${ob.done ? icon('check') : icon('ring')} ${tx(objectiveText(ob.objective))}${ob.isNew ? ' <span class="badge">+XP</span>' : ''}`, left);
     const tbl = h('table', 'summary', '', left);
     const row = (a: string, b: string) => h('tr', '', `<td>${a}</td><td>${b}</td>`, tbl);
     row(t('delivered'), String(s.delivered));
@@ -234,8 +235,8 @@ export class Menus {
     if (s.chases) row(t('statChases'), `${s.chases} · ${t('statEscapes')} ${s.escapes} · ${t('statCaught')} ${s.caught}`);
     if (s.mode !== 'daily' && save.settings.trayAssist !== 'normal') row(t('trayAssist'), save.settings.trayAssist === 'easy' ? `${t('trayEasy')} ×0,8` : `${t('trayMaster')} ×1,25`);
     if (s.bonks) row(t('statBonks'), `${s.bonks}${s.fines ? ` (−${s.fines}₺)` : ''}`);
-    if (s.inspections) row(`👔 ${t('inspection')}`, s.bossBonks ? t('bossHit') : s.inspectPassed ? t('inspectPass') : '—');
-    if (s.backfires) row(`👂 ${t('statBackfires')}`, String(s.backfires));
+    if (s.inspections) row(`${icon('boss')} ${t('inspection')}`, s.bossBonks ? t('bossHit') : s.inspectPassed ? t('inspectPass') : '—');
+    if (s.backfires) row(`${icon('ear')} ${t('statBackfires')}`, String(s.backfires));
     if (r.boardRank) row(t('rank'), `#${r.boardRank}`);
 
     const right = h('div', 'intro-box', '', cols);
@@ -250,19 +251,19 @@ export class Menus {
     if (r.levelAfter > r.levelBefore) h('div', 'levelup', `${t('levelUp')} ${r.levelBefore} → ${r.levelAfter}`, right);
     for (const c of r.rewards) h('div', 'reward', `${t('unlockedReward')}: <b>${tx(c.name)}</b>`, right);
     for (const m of r.missionsCompleted) h('div', 'reward', `${t('missionDone')} ${tx(missionDef(m.kind).text(m.target))}`, right);
-    if (r.achievements.length) h('div', 'reward ach', `🏆 ${t('achievementUnlocked')}: <b>${r.achievements.map((a) => tx(a.name)).join(', ')}</b>`, right);
+    if (r.achievements.length) h('div', 'reward ach', `${icon('trophy')} ${t('achievementUnlocked')}: <b>${r.achievements.map((a) => tx(a.name)).join(', ')}</b>`, right);
     for (const id of r.gossipNew) {
       const g = RUMOR[id];
-      if (g) h('div', 'reward gossip-line', `📒 ${TOPICS[g.topic].icon} <b>${tx(PEOPLE[g.source].name)}</b>: ${tx(g.text)}`, right);
+      if (g) h('div', 'reward gossip-line', `${icon('notebook')} ${icon(TOPICS[g.topic].icon)} <b>${tx(PEOPLE[g.source].name)}</b>: ${tx(g.text)}`, right);
     }
     for (const sale of r.sales) {
       const g = RUMOR[sale.rumor];
       if (!g) continue;
-      h('div', `reward sale ${sale.verdict}`, `${VERDICT_ICON[sale.verdict]} ${TOPICS[g.topic].icon} → <b>${tx(PEOPLE[sale.buyer].name)}</b>${sale.pay ? ` +${sale.pay}₺` : ''} · ${t(`verdict_${sale.verdict}`)}`, right);
+      h('div', `reward sale ${sale.verdict}`, `${VERDICT_ICON[sale.verdict]} ${icon(TOPICS[g.topic].icon)} → <b>${tx(PEOPLE[sale.buyer].name)}</b>${sale.pay ? ` +${sale.pay}₺` : ''} · ${t(`verdict_${sale.verdict}`)}`, right);
     }
 
     const act = h('div', 'res-actions', '', p);
-    if (o.onFinal) button(`★ ${t('meetingCard')}`, o.onFinal, act, 'btn primary');
+    if (o.onFinal) button(`${icon('star')} ${t('meetingCard')}`, o.onFinal, act, 'btn primary');
     button(t('playAgain'), o.onAgain, act, o.onFinal ? 'btn' : 'btn primary');
     if (o.onNext) button(t('nextVenue'), o.onNext, act);
     button(t('map'), o.onMap, act);
@@ -279,7 +280,7 @@ export class Menus {
       const def = missionDef(m.kind);
       const r = def.reward(m.target);
       const item = h('div', `mission ${m.done ? 'done' : ''}`, '', list);
-      h('div', 'm-text', `${m.done ? '✔ ' : ''}${tx(def.text(m.target))}`, item);
+      h('div', 'm-text', `${m.done ? icon('check') + ' ' : ''}${tx(def.text(m.target))}`, item);
       const bar = h('div', 'xpbar', '', item);
       h('div', 'xpbar-fill', '', bar).style.width = `${(m.progress / m.target) * 100}%`;
       h('div', 'm-meta', `${Math.round(m.progress)}/${m.target} · ${t('reward')}: ${r.coins}₺ + ${r.xp} ${t('xp')}`, item);
@@ -289,7 +290,7 @@ export class Menus {
     const grid = h('div', 'ach-grid', '', p);
     for (const a of ACHIEVEMENTS) {
       const got = save.achievements.includes(a.id);
-      h('div', `ach ${got ? 'got' : ''}`, `<b>${got ? '🏆' : '🔒'} ${tx(a.name)}</b><small>${tx(a.desc)}</small>`, grid);
+      h('div', `ach ${got ? 'got' : ''}`, `<b>${got ? icon('trophy') : icon('lock')} ${tx(a.name)}</b><small>${tx(a.desc)}</small>`, grid);
     }
     button(t('back'), onBack, p, 'btn primary');
   }
@@ -332,7 +333,7 @@ export class Menus {
         const open = c.level <= lv;
         const on = save.look[slot] === c.id;
         const sw = c.color !== undefined ? `<span class="swatch" style="background:#${c.color.toString(16).padStart(6, '0')}"></span>` : '';
-        const b = button(`${sw}${tx(c.name)}<small>${open ? (on ? t('equipped') : t('equip')) : `🔒 ${t('level')} ${c.level}`}</small>`, () => open && onEquip(slot, c.id), row, `btn cos ${on ? 'active' : ''}`);
+        const b = button(`${sw}${tx(c.name)}<small>${open ? (on ? t('equipped') : t('equip')) : `${icon('lock')} ${t('level')} ${c.level}`}</small>`, () => open && onEquip(slot, c.id), row, `btn cos ${on ? 'active' : ''}`);
         if (!open) b.disabled = true;
       }
     }
@@ -355,24 +356,24 @@ export class Menus {
 
   gossipBook(save: SaveData, onBack: () => void) {
     const p = this.open('note-screen');
-    h('div', 'note-day', `📒 ${t('pocket')} (${save.pocket.length}/${RUMORS.length})`, p);
-    h('div', 'note-meta', `${t('pocketSub')}<br>⚖️ ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED} · ${t('reputation')}: <b>${Math.round(save.rep)}</b>`, p);
+    h('div', 'note-day', `${icon('notebook')} ${t('pocket')} (${save.pocket.length}/${RUMORS.length})`, p);
+    h('div', 'note-meta', `${t('pocketSub')}<br>${icon('scale')} ${t('evidence')}: <b>${liveEvidence(save)}</b> / ${EVIDENCE_NEEDED} · ${t('reputation')}: <b>${Math.round(save.rep)}</b>`, p);
     const paper = h('div', 'note-paper gossip-book', '', p);
     for (const id of save.pocket) {
       const r = RUMOR[id];
       if (!r) continue;
       const told = save.sales.filter((k) => k.startsWith(`${id}>`)).map((k) => tx(PEOPLE[k.split('>')[1] as PersonId].name));
       const chips = [
-        save.evidence.includes(id) && !save.burned.includes(id) ? `<span class="chip ok">⚖️ ${t('evidence')}</span>` : '',
-        save.burned.includes(id) ? `<span class="chip bad">🔥 ${t('burnedNote')}</span>` : '',
+        save.evidence.includes(id) && !save.burned.includes(id) ? `<span class="chip ok">${icon('scale')} ${t('evidence')}</span>` : '',
+        save.burned.includes(id) ? `<span class="chip bad">${icon('fire')} ${t('burnedNote')}</span>` : '',
         told.length ? `<span class="chip">${t('soldTo')}: ${told.join(', ')}</span>` : '',
       ].join('');
-      h('div', 'pocket-card', `<div class="pc-head">${TOPICS[r.topic].icon} <b>${tx(PEOPLE[r.source].name)}</b> <small>${tx(TOPICS[r.topic].name)}</small></div><div class="pc-text">${tx(r.text)}</div>${chips ? `<div class="pc-chips">${chips}</div>` : ''}`, paper);
+      h('div', 'pocket-card', `<div class="pc-head">${icon(TOPICS[r.topic].icon)} <b>${tx(PEOPLE[r.source].name)}</b> <small>${tx(TOPICS[r.topic].name)}</small></div><div class="pc-text">${tx(r.text)}</div>${chips ? `<div class="pc-chips">${chips}</div>` : ''}`, paper);
     }
     const unknown = RUMORS.length - save.pocket.filter((id) => RUMOR[id]).length;
     if (unknown > 0) h('p', 'dim', `? ? ? × ${unknown}`, paper);
     // kim neyi merak eder: açılmış katlardaki insanlar
-    h('div', 'note-day small', `👥 ${t('people')} · ${t('wants')}`, p);
+    h('div', 'note-day small', `${icon('people')} ${t('people')} · ${t('wants')}`, p);
     const ppl = h('div', 'people-grid', '', p);
     const seen = new Set<PersonId>();
     VENUES.forEach((v, i) => {
@@ -380,7 +381,7 @@ export class Menus {
       for (const o of v.offices) {
         if (seen.has(o.pid) || !PEOPLE[o.pid].wants.length) continue;
         seen.add(o.pid);
-        h('div', 'person-chip', `<b>${tx(PEOPLE[o.pid].name)}</b> ${PEOPLE[o.pid].wants.map((w) => `<span title="${tx(TOPICS[w].name)}">${TOPICS[w].icon}</span>`).join(' ')}`, ppl);
+        h('div', 'person-chip', `<b>${tx(PEOPLE[o.pid].name)}</b> ${PEOPLE[o.pid].wants.map((w) => `<span title="${tx(TOPICS[w].name)}">${icon(TOPICS[w].icon)}</span>`).join(' ')}`, ppl);
       }
     });
     button(t('back'), onBack, p, 'btn primary');
@@ -450,7 +451,7 @@ export class Menus {
       ['autoQuality', t('qAuto')],
       ['showFps', t('showFps')],
     ] as ['autoQuality' | 'showFps', string][]) {
-      button(`${s[key] ? '■' : '□'} ${label}`, () => {
+      button(`${s[key] ? icon('boxOn') : icon('boxOff')} ${label}`, () => {
         s[key] = !s[key];
         onChange();
         this.settings(save, onChange, onReset, onBack);
@@ -516,7 +517,7 @@ export class Menus {
     h(
       'div',
       'note-meta',
-      `${t('meetingNeeds')}: ⚖️ ${t('evidence')} <b class="${ev >= EVIDENCE_NEEDED ? 'ok' : 'bad'}">${ev}/${EVIDENCE_NEEDED}</b> · ${t('reputation')} <b class="${save.rep >= MEETING_REP ? 'ok' : 'bad'}">${Math.round(save.rep)}/${MEETING_REP}</b>`,
+      `${t('meetingNeeds')}: ${icon('scale')} ${t('evidence')} <b class="${ev >= EVIDENCE_NEEDED ? 'ok' : 'bad'}">${ev}/${EVIDENCE_NEEDED}</b> · ${t('reputation')} <b class="${save.rep >= MEETING_REP ? 'ok' : 'bad'}">${Math.round(save.rep)}/${MEETING_REP}</b>`,
       p,
     );
     button(t('spillIt'), o.onTruth, p, 'btn primary');
@@ -529,7 +530,7 @@ export class Menus {
     const p = this.open('note-screen');
     h('div', 'note-day', tx(e.title), p);
     h('div', 'note-paper', tx(e.text), p);
-    for (const a of achievements) h('div', 'reward ach', `🏆 ${t('achievementUnlocked')}: <b>${a}</b>`, p);
+    for (const a of achievements) h('div', 'reward ach', `${icon('trophy')} ${t('achievementUnlocked')}: <b>${a}</b>`, p);
     h('div', 'logo small', `ÇAYCI · ${t('theEnd')}`, p);
     button(t('map'), onMenu, p, 'btn primary');
   }
