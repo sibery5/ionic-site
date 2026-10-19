@@ -443,6 +443,20 @@ export class Menus {
       }, qs, `btn small ${s.quality === k ? 'active' : ''}`);
       void b;
     }
+    // otomatik kalite ve FPS göstergesi
+    const toggles = h('div', 'slider-row', `<span>${t('performance')}</span>`, p);
+    const tg = h('div', '', '', toggles);
+    for (const [key, label] of [
+      ['autoQuality', t('qAuto')],
+      ['showFps', t('showFps')],
+    ] as ['autoQuality' | 'showFps', string][]) {
+      button(`${s[key] ? '■' : '□'} ${label}`, () => {
+        s[key] = !s[key];
+        onChange();
+        this.settings(save, onChange, onReset, onBack);
+      }, tg, `btn small ${s[key] ? 'active' : ''}`);
+    }
+    h('p', 'dim small-note', t('qAutoNote'), p);
     const nm = h('label', 'slider-row', `<span>${t('playerName')}</span>`, p);
     const inp = h('input', 'name-input', '', nm) as HTMLInputElement;
     inp.id = 'set-name';

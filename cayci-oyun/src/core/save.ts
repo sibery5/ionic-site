@@ -41,7 +41,7 @@ export interface SaveData {
   boards: Record<string, BoardEntry[]>;
   playerName: string;
   tutorialDone: boolean;
-  settings: { lang: Lang; volume: number; music: number; sensitivity: number; quality: Quality; invertY: boolean; trayAssist: TrayAssist; camDist: number };
+  settings: { lang: Lang; volume: number; music: number; sensitivity: number; quality: Quality; invertY: boolean; trayAssist: TrayAssist; camDist: number; autoQuality: boolean; showFps: boolean };
 }
 
 /** Tepsi zorluğu: rahat (affedici), normal (dengelenen), usta (sert, daha çok bahşiş). */
@@ -76,7 +76,7 @@ export function defaultSave(): SaveData {
     boards: {},
     playerName: lang === 'tr' ? 'Çırak' : 'Apprentice',
     tutorialDone: false,
-    settings: { lang, volume: 0.8, music: 0.5, sensitivity: 1, quality: 'high', invertY: false, trayAssist: 'normal', camDist: 1 },
+    settings: { lang, volume: 0.8, music: 0.5, sensitivity: 1, quality: 'medium', invertY: false, trayAssist: 'normal', camDist: 1, autoQuality: true, showFps: false },
   };
 }
 

@@ -267,6 +267,16 @@ export class Run {
     this.hud.setDay(`${tx(cfg.venue.name)} · ${tx(cfg.venue.obstacle)}`);
   }
 
+  /** Oyun ortasında kalite düşerse (otomatik kalite): düşükte gölgeler kapanır, malzemeler yeniden derlenir. */
+  setQuality(q: Quality) {
+    if (q !== 'low') return;
+    this.scene.traverse((o) => {
+      if ((o as THREE.Light).isLight) o.castShadow = false;
+      const m = (o as THREE.Mesh).material;
+      if (m) for (const x of Array.isArray(m) ? m : [m]) x.needsUpdate = true;
+    });
+  }
+
   get remaining() {
     return Math.max(0, this.venue.duration - this.time);
   }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bakeStatic } from './bake';
 import { makeCeilingFan, makeFrame, makeGlassShelf, makeNoticeBoard, makePriceSign, makeRug, makeSemaver, makeWallClock, type PaintingKind } from './decor';
 import { CELL, WALL_HEIGHT } from '../config';
 import { Grid } from '../physics/grid';
@@ -269,6 +270,9 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
   }
 
   const spinners = decorate(group, grid, def, ocak, teras, at);
+  // sabit parçaları malzemeye göre birleştir (çizim çağrısı yüzlerden onlara iner)
+  bakeStatic(group, [...bulbs, ...spinners.map((s) => s.obj)]);
+  for (const sp of spinners) bakeStatic(sp.obj);
   return { group, desks, ocak, steamPoints, wet, bulbs, size: { w: W, d: D }, spinners };
 }
 

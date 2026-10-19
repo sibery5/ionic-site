@@ -1554,3 +1554,22 @@ kbd {
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 8, 2, 0.42) 100%);
+  z-index: 1;
+}
+.fps {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  font: 12px/1 monospace;
+  color: #e9cf7a;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 3px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 40;
+}

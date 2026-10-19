@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './ui/styles.css';
 import { Input, ScriptedInput } from './core/input';
-import { setLang, tx } from './core/i18n';
+import { setLang, t, tx } from './core/i18n';
 import { defaultSave, loadSave, normalize, SaveData, writeSave, type Quality } from './core/save';
 import { steamBridge } from './core/steam';
 import { dateSeed, Rng } from './core/rng';
@@ -110,12 +110,20 @@ class Game {
   private last = performance.now();
 
   constructor(root: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // preserveDrawingBuffer sadece geliştirmede (ekran görüntüsü için): yayında her karede tamponu korumak pahalı
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: import.meta.env.DEV });
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     root.appendChild(this.renderer.domElement);
+    // kenar karartma: her kalitede CSS ile (GPU'ya yük yok)
+    const vig = document.createElement('div');
+    vig.className = 'vignette';
+    root.appendChild(vig);
+    this.fpsEl = document.createElement('div');
+    this.fpsEl.className = 'fps hidden';
+    root.appendChild(this.fpsEl);
     this.post = new Post(this.renderer);
     this.input = new Input(this.renderer.domElement);
     this.hud = new Hud(root);
@@ -172,9 +180,53 @@ class Game {
   applyQuality() {
     const q: Quality = this.save.settings.quality;
     this.renderer.shadowMap.enabled = q !== 'low';
-    this.renderer.setPixelRatio(q === 'high' ? Math.min(2, window.devicePixelRatio) : q === 'medium' ? Math.min(1.25, window.devicePixelRatio) : 0.85);
+    // yüksek: en fazla 1,5 kat; orta: ekranın kendi çözünürlüğü (en fazla 1); düşük: 0,75 (otomatik kalite gerekirse daha da indirir)
+    const dpr = window.devicePixelRatio || 1;
+    this.renderer.setPixelRatio((q === 'high' ? Math.min(1.5, dpr) : q === 'medium' ? Math.min(1, dpr) : 0.75) * this.renderScale);
     this.post.setQuality(q);
+    this.fpsEl.classList.toggle('hidden', !this.save.settings.showFps);
     this.resize();
+  }
+
+  // ---- otomatik kalite: kare hızı düşerse kaliteyi kademe kademe indirir ----
+  private fpsEl: HTMLElement;
+  private renderScale = 1;
+  private perf = { frames: 0, time: 0, wait: 2, shown: 0 };
+
+  private watchPerf(realDt: number) {
+    const p = this.perf;
+    // sekme arkadaysa ya da tek seferlik takılma: ölçme
+    if (realDt > 0.5) return;
+    p.wait -= realDt;
+    p.frames++;
+    p.time += realDt;
+    if (p.time < 2.5) return;
+    const fps = p.frames / p.time;
+    p.frames = 0;
+    p.time = 0;
+    if (this.save.settings.showFps) this.fpsEl.textContent = `${Math.round(fps)} FPS`;
+    if (p.wait > 0 || !this.save.settings.autoQuality || fps >= 40) return;
+    const s = this.save.settings;
+    if (s.quality === 'high') s.quality = 'medium';
+    else if (s.quality === 'medium') s.quality = 'low';
+    else if (this.renderScale > 0.6) this.renderScale = Math.max(0.6, this.renderScale - 0.2);
+    else return;
+    this.persist();
+    this.applyQuality();
+    // gölge ayarı değişti: sahnedeki ışıklar yeniden derlensin
+    this.run?.setQuality(s.quality);
+    p.wait = 4;
+    if (this.state === 'playing') this.hud.toast(t('qualityDropped'), 'warn');
+  }
+
+  /** Mekânın bütün malzemelerini önceden derle: oyunun ortasında ilk kez görünen bir şey takılma yapmasın. */
+  private prewarm(scene: THREE.Scene, camera: THREE.Camera) {
+    try {
+      this.renderer.compile(scene, camera);
+    } catch {
+      /* derleme isteğe bağlı */
+    }
+    this.perf.wait = 2;
   }
 
   resize() {
@@ -194,8 +246,10 @@ class Game {
 
   loop(now: number) {
     // rAF zaman damgası resume() içindeki performance.now()dan önce olabilir: adım asla negatif olmasın
-    const dt = Math.max(0, Math.min(1 / 20, (now - this.last) / 1000));
+    const realDt = Math.max(0, (now - this.last) / 1000);
+    const dt = Math.min(1 / 20, realDt);
     this.last = now;
+    this.watchPerf(realDt);
     if (this.frozen) {
       requestAnimationFrame((t) => this.loop(t));
       return;
@@ -251,6 +305,7 @@ class Game {
       then();
     });
     this.cutscene = cs;
+    this.prewarm(cs.scene, cs.camera);
   }
 
   /** Bir sahne henüz izlenmediyse oynat, yoksa doğrudan devam et. */
@@ -405,6 +460,7 @@ class Game {
     this.lastRun = { index, mode };
     this.hud.reset();
     this.run = new Run(cfg, this.hud, (s) => this.onRunEnd(s), window.innerWidth / window.innerHeight);
+    this.prewarm(this.run.scene, this.run.camera);
     this.state = 'overlay';
     this.menus.clickToPlay(() => this.resume());
   }

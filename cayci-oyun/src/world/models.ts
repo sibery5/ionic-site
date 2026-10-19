@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bakeStatic } from './bake';
 import { TRAY } from '../config';
 import type { CustomerLook } from '../game/story';
 import { woodTexture } from './textures';
@@ -467,6 +468,10 @@ export function makePerson(o: PersonOpts): PersonRig {
       }
     }
   };
+  // her eklemin sabit parçalarını kendi içinde birleştir (kişi başına ~30 çizim çağrısı → ~10); yüz ifadesi ve el ayrı kalır
+  const moving = [hips, torso, head, legL, legR, armL, armR];
+  const keep = [smile, frown, flat, ...brows, eyes, hand];
+  for (const g of [root, ...moving]) bakeStatic(g, [...keep, ...moving.filter((x) => x !== g)]);
   return { root, hips, torso, head, legL, legR, armL, armR, hand, hipY, setMood, blink };
 }
 

@@ -13,6 +13,30 @@ export interface Lights {
   flashlight: THREE.SpotLight | null;
 }
 
+let glowTex: THREE.Texture | null = null;
+/** Yere düşen yumuşak ışık halkası (ışık hesabı yok, tek saydam düzlem). */
+function glowDisc(at: THREE.Vector3, radius: number, color: number, strength: number) {
+  if (!glowTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!;
+    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.45, 'rgba(255,255,255,0.35)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 128, 128);
+    glowTex = new THREE.CanvasTexture(c);
+  }
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(radius * 2, radius * 2),
+    new THREE.MeshBasicMaterial({ map: glowTex, color, transparent: true, opacity: strength, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(at.x, 0.02, at.z);
+  return m;
+}
+
 function shadowSun(sun: THREE.DirectionalLight, size: number, quality: Quality) {
   if (quality === 'low') return;
   sun.castShadow = true;
@@ -55,10 +79,12 @@ export function setupLights(scene: THREE.Scene, built: BuiltLevel, def: LevelDef
     }
     scene.add(fl, fl.target);
     // acil durum ışıkları masaların yanında, ocakta ateş
+    // yüksek kalitede gerçek ışık; orta ve düşükte yere düşen sahte bir ışık halkası (her ışık her pikselin maliyetini artırır)
     for (const desk of built.desks.values()) {
       const pl = new THREE.PointLight(0xff6a3a, 2.2, 4.5, 1.5);
       pl.position.copy(desk.center).setY(2.4);
-      scene.add(pl);
+      if (quality === 'high') scene.add(pl);
+      else scene.add(glowDisc(desk.center, 2.6, 0xff6a3a, 0.5));
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.08, 0.08), mat(0xff6a3a, { emissive: 0xff4a1a }));
       lamp.position.copy(pl.position);
       scene.add(lamp);
