@@ -179,7 +179,9 @@ const toChoice = async (id) => {
   await page.waitForTimeout(1500);
   for (let i = 0; i < 30; i++) {
     if (await page.locator('.dialogue.choosing').count()) {
-      await page.locator('.dlg-choices:not(.hidden)').waitFor({ timeout: 10000 });
+      // repliği bir tuşla tamamla (seçim beklerken E sahneyi ilerletmez), seçenekler belirsin
+      await page.keyboard.press('KeyE');
+      await page.locator('.dlg-choices:not(.hidden)').waitFor({ timeout: 30000 });
       return;
     }
     await page.keyboard.press('KeyE');
@@ -188,7 +190,7 @@ const toChoice = async (id) => {
     await page.waitForTimeout(300);
   }
 };
-// sahneler temiz bir sayfada (önceki vardiyalar kapansın)
+// sahneler temiz bir sayfada (önceki vardiyalar kapansın). ONLY_SCENES=1: sadece sahne kareleri (15-17)
 await page.goto('http://localhost:5219/');
 await page.waitForTimeout(2000);
 await step('secim', async () => {
