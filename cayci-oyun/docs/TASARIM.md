@@ -1,5 +1,5 @@
 # ÇAYCI — Don't Spill the Tea
-## Oyun Tasarım Belgesi (GDD) · sürüm 0.4
+## Oyun Tasarım Belgesi (GDD) · sürüm 0.5
 
 > Askılı çay tepsisini sallayarak, tek damla dökmeden İstanbul'un en kaotik iş hanına çay yetiştir.
 
@@ -57,7 +57,7 @@ Zorluk eğrisi (`npm run tune:greed`, 0.3 fiziğiyle): 3 bardak normal yürüyü
 | Hikâye | Rıza Usta'nın notları, VIP müşterilerin anlattığı 12 dedikodu, terasta han toplantısı ve 3 son. |
 | Her gün dönmek | Günlük Mücadele (herkese aynı tohum) ve her gün 3 yeni görev. 7 farklı gün tamamlanınca başarım. |
 | Bağlanma | Cemal'in dolabı (5 tepsi, 5 yelek, 5 şapka, 3 bardak; seviyeyle açılır), rütbeler (Çırak → Efsane Çaycı), mekân başına yerel sıralama ve geçilecek han sakinleri. |
-| Ödül | XP ve 30 seviye, bahşişle alınan 6 yükseltme, 30 başarım (Steam başarımlarıyla aynı adlar; 0.4 ile 21 → 30). |
+| Ödül | XP ve 30 seviye, bahşişle alınan 6 yükseltme, 33 başarım (Steam başarımlarıyla aynı adlar; 0.4 ile 21 → 30, 0.5 ile 33). |
 
 ### Mekânlar
 
@@ -121,8 +121,8 @@ Kural: 1 yıldız ≈ temkinli oyuncunun ortalamasının altı, 2 yıldız ≈ �
 | Öğe | Kural |
 |---|---|
 | Dedikodu | 20 tane. Her birinin konusu (📜 tapu, 💰 para, 📋 rapor, 📷 fotoğraf, 💬 kulis, 🐈 Paşa), kaynağı, kimin hakkında olduğu, doğru mu yalan mı ve değeri var. 11'i hanın kaderine dair hikâye kanıtı. |
-| Duymak | VIP siparişini eksiksiz götürünce müşteri kendi dedikodusunu anlatır (kariyer). Kusursuz teslimden sonra %20 şansla fısıltı (kariyer ve serbest). Hepsi cep defterine yazılır. |
-| Sormak | Bazı müşteriler çay söylerken "dedikodu var mı?" diye sorar (mor balon, kulak ve konu işareti). Vardiyada en çok 3, aralarında 16 sn. |
+| Duymak | VIP siparişini eksiksiz götürünce müşteri kendi dedikodusunu anlatır (kariyer). Kusursuz teslimden sonra %30 şansla fısıltı (kariyer ve serbest). Hepsi cep defterine yazılır. |
+| Sormak | Bazı müşteriler çay söylerken "dedikodu var mı?" diye sorar (mor balon, kulak ve konu işareti). Cepte o kişinin işine yarayacak bir laf varsa %80, yoksa %20 (cep boşsa %12). Vardiyada en çok 5 soru, aralarında 9 sn; kötü adamlar en çok 2 kez. Soran müşteri ×1,4 sabırlıdır. |
 | Anlatmak | Çay teslim edilince panel açılır, dünya durur: cepteki dedikodulardan biri ya da "bilmiyorum". |
 | Doğru kişi | Konuyu merak eden, han tarafından biri: dedikodunun değeri kadar bahşiş (sorulan konu değilse %60), itibar +3/+6, hikâye kanıtıysa kanıt han tarafına ulaşır. Aynı kişiye ikinci kez satılmaz. |
 | Kötü adam | Selim, Turgut, Gökdelen Yapı: iki kat para ama itibar −15, kanıt yanar (artık toplantıda işe yaramaz), Rıza Usta mesaj atar. |
@@ -168,6 +168,51 @@ Tepsi zorluğu: Rahat (döküm açısı ×1,35, kule +5°, sönüm ×1,45; skor 
 ### Denge (0.4 ölçümü, 8 tohum × 5 oyuncu tipi)
 
 Yeni sistemler bot ölçümünü bozmadı; sadece Teras düştü (medyan 95 → 72) ve yıldızları 55 / 105 / 180'e indirildi. Bot dedikodu sorularına "bilmiyorum" der; dedikodu bahşişleri ölçülen skorların üstüne eklenir.
+
+## 1.8 Sürüm 0.5: teftiş, geri tepme ve hikâye dengesi
+
+### Hikâye dengesi ölçüldü (`npm run story`)
+
+0.4'te bot dedikodu sorularına hep "bilmiyorum" diyordu, yani hikâyenin hızı hiç ölçülmemişti. 0.5'te bot dedikodu da oynuyor (`gossip` becerisi: doğru lafı seçme olasılığı) ve `__cayci.botCareer` bütün kariyeri geçici bir kayıtla oynayıp kanıt, itibar ve unvanı vardiya vardiya yazıyor.
+
+| | 0.4 kuralları | 0.5 kuralları |
+|---|---|---|
+| Beceri 0,95 (iyi oyuncu) | 24 vardiyada 4–5 kanıt, inandıramadı | 11–12. vardiyada inandırıyor (terası ilk geçtikten hemen sonra) |
+| Beceri 0,6 (özensiz) | 24 vardiyada 3 kanıt | 16–18. vardiyada inandırıyor |
+
+Bulunan darboğaz: soru sayısı değil, soran kişinin cepteki lafa ilgisizliği ve her panelde tek satış. Çözüm:
+- Laf, lafı bilenin ayağına gelir: cebinde o kişinin merak ettiği doğru bir laf varsa çok daha sık sorar.
+- Han tarafı doğru lafı alınca **"başka?"** diye üsteler: aynı panelde kalan kartlardan en çok iki laf daha (süre ×0,75). Bir şey bilmiyorsan "bilmiyorum" zararsızdır, oyun cepte iyi kart olup olmadığını ele vermez.
+- Kötü adamlar bir vardiyada en çok 2 kez ayartır (yoksa soru hakkını yiyorlardı).
+
+Skor ölçümü (`npm run balance`) eskisi gibi dedikodusuz yapılır; yıldız eşikleri değişmedi.
+
+### Patron teftişi
+
+Ocakçı olduktan sonra kariyer vardiyalarının %60'ında, vardiyanın %25–50'si arasında Nadir Bey 45 saniyeliğine bizzat kata çıkar (telefon mesajı, "TEFTİŞ" yazısı, üstte rozet). 6,5 m içindeyse "izliyor" sayılır (rozet kırmızı yanar):
+
+| Olay (izlerken) | Etki |
+|---|---|
+| Kusursuz teslim | 👍 +1 |
+| Kırılan bardak, uçan kavanoz, başlayan kovalama | 👎 +1 |
+| Birine tepsiyle vurmak | 👎 +2 |
+| Patronun kendisine vurmak | "PATRONA VURDUN!", itibar −20, 30₺ ceza, teftiş biter |
+
+Sonuç: 👍−👎 ≥ 2 ise teftişten geçilir (kavanoza 15₺, itibar +5), 0–1 "fena değil" (+1), eksi ise itibar −5 ve azar.
+
+### Dedikodunun geri tepmesi
+
+Bir lafı (doğru kişiye ya da kötü adama) satınca, lafın hakkında olduğu kişi aynı katta oturuyorsa "🤫 … bu katta, duymasın!" uyarısı çıkar. %40 ihtimalle 12–24 sn sonra o kişi duyar, "Kulaklarım çınladı!" diye kalkıp kovalar (itibar −2). Örnek: 3. katta Defne Hanım'a Selim'in raporunu anlatmak, Selim'i peşine takar.
+
+### Düzeltilen hatalar
+
+- Oyuna devam edilen ilk karede tarayıcının kare zaman damgası `performance.now()`dan önce kalabiliyor, zaman adımı negatif oluyordu (fizik bir an geri sarıyordu). Adım artık 0'ın altına düşmez.
+- Dedikodu paneli ortalanmıyordu: açılış animasyonu `transform`'u ezip paneli sağ alta kaydırıyor, kalabalık cepte "bilmiyorum" satırı ekran dışında kalıyordu.
+- Aynı adı taşıyan iki CSS animasyonu yüzünden bildirimler (toast) yukarı kayıp sönmüyordu.
+
+### Yeni başarımlar
+
+Göz Önünde (teftişten geç), Kulakları Çınladı (geri tepme), Patrona Tepsi (gizli). Toplam 33.
 
 ## 2. Kurgu
 
