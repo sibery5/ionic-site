@@ -1703,3 +1703,27 @@ kbd {
 .dialogue.choosing .dlg-box {
   cursor: default;
 }
+
+/* ---------- sonsuz vardiya ---------- */
+.lives {
+  /* saatin solunda: kasa ve kavanoz panelinin üstüne binmesin */
+  position: absolute;
+  right: 210px;
+  top: -3px;
+  display: flex;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.lives .ic {
+  width: 30px;
+  height: 30px;
+}
+.lives .ic.lost {
+  opacity: 0.55;
+  filter: grayscale(0.6) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
+}
+.clock.endless .clock-fill {
+  background: linear-gradient(90deg, #5a170c, #b3261e 40%, #e8a33a);
+}

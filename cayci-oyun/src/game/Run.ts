@@ -80,6 +80,8 @@ interface Debris {
 }
 
 const RUSH_HOUR = 20; // son 20 saniye: çay saati
+/** Sonsuz vardiya: kaç can (kaçan sipariş ya da düşen kavanoz bir can götürür) */
+export const ENDLESS_LIVES = 3;
 const KIND_PAY: Record<OrderKind, number> = { normal: 1, vip: 3, rush: 2, gossip: 1 };
 
 export class Run {
@@ -118,6 +120,9 @@ export class Run {
   private spillMsgCooldown = 0;
   private mopTimer = 0;
   private leakTimer = 2;
+  private readonly endless: boolean;
+  private strikes = 0;
+  private endAt = Infinity;
   private rushHour = false;
   private lockUsed = false;
   private pourBlocked = false;
@@ -191,7 +196,8 @@ export class Run {
 
     // VIP siparişlerinin zamanları (vardiyanın belli anlarında)
     const d = cfg.venue.duration;
-    this.vipTimes = cfg.venue.id === 'salon' ? [d * 0.55] : cfg.venue.id === 'teras' ? [d * 0.2, d * 0.45, d * 0.7] : [d * 0.25, d * 0.6];
+    this.endless = cfg.mode === 'endless';
+    this.vipTimes = this.endless ? Array.from({ length: 40 }, (_, i) => 40 + i * 55) : cfg.venue.id === 'salon' ? [d * 0.55] : cfg.venue.id === 'teras' ? [d * 0.2, d * 0.45, d * 0.7] : [d * 0.25, d * 0.6];
     this.coachStep = cfg.tutorial ? 1 : 0;
     this.assist = ASSIST[cfg.mode === 'daily' ? 'normal' : cfg.trayAssist];
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -280,7 +286,19 @@ export class Run {
   }
 
   get remaining() {
-    return Math.max(0, this.venue.duration - this.time);
+    return this.endless ? Infinity : Math.max(0, this.venue.duration - this.time);
+  }
+
+  /** Sonsuz vardiya: bir can gitti; hepsi gidince vardiya biter. */
+  private strike(why: string) {
+    if (!this.endless || this.endAt !== Infinity) return;
+    this.strikes++;
+    audio.fail();
+    this.shake = Math.max(this.shake, 0.12);
+    if (this.strikes >= ENDLESS_LIVES) {
+      this.hud.big(t('endlessOver'), why);
+      this.endAt = this.time + 1.6;
+    } else this.hud.toast(`${icon('shard')} ${t('lifeLost')} (${ENDLESS_LIVES - this.strikes})`, 'bad');
   }
 
   private has(u: string) {
@@ -306,7 +324,19 @@ export class Run {
     const rules = this.venue.rules;
 
     // ---- çay saati ----
-    if (!this.rushHour && this.remaining <= RUSH_HOUR) {
+    if (this.endless) {
+      // sonsuz vardiyada her 90 saniyenin son 20'si çay saati
+      const rush = this.time % 90 > 70;
+      if (this.rushHour && !rush) {
+        this.rushHour = false;
+        audio.musicMood = 'calm';
+      } else if (!this.rushHour && rush) {
+        this.rushHour = true;
+        this.hud.big(getLang() === 'tr' ? 'ÇAY SAATİ!' : 'TEA TIME!', getLang() === 'tr' ? 'Bahşişler ×1,5' : 'Tips ×1.5');
+        audio.jingle();
+        audio.musicMood = 'tense';
+      }
+    } else if (!this.rushHour && this.remaining <= RUSH_HOUR) {
       this.rushHour = true;
       this.hud.big(getLang() === 'tr' ? 'ÇAY SAATİ!' : 'TEA TIME!', getLang() === 'tr' ? 'Bahşişler ×1,5' : 'Tips ×1.5');
       audio.jingle();
@@ -502,7 +532,8 @@ export class Run {
     audio.setIntensity(Math.min(1, Math.max(this.tray.glasses.length / 11 + (this.rushHour ? 0.35 : 0), this.intrigue.chaseLevel + 0.4 * Math.sign(this.intrigue.chaseLevel))));
 
     // ---- HUD ----
-    this.hud.setTime(this.remaining, this.venue.duration);
+    if (this.endless) this.hud.setEndless(this.time, ENDLESS_LIVES - this.strikes);
+    else this.hud.setTime(this.remaining, this.venue.duration);
     this.hud.setGreed({ bank: this.bank, jar: this.jar, hasJar: this.tray.hasJar, combo: this.combo, tower: this.tray.glasses.length, spinBoost: now < this.spinBoostUntil });
     this.hud.setTickets(
       [...this.orders.entries()].map(([id, o]) => ({
@@ -515,7 +546,7 @@ export class Run {
     );
     this.hud.setTray(this.tray.glasses, this.tray.capacity);
     this.coach();
-    if (this.remaining <= 0) this.finish();
+    if (this.remaining <= 0 || this.time >= this.endAt) this.finish();
   }
 
   // ---------------- öğretici ----------------
@@ -588,7 +619,7 @@ export class Run {
       kind,
       items: this.makeItems(count),
       createdAt: now,
-      patience: base * (this.has('patience') ? 1.25 : 1),
+      patience: base * (this.has('patience') ? 1.25 : 1) * (this.endless ? Math.max(0.55, 1 - this.time / 500) : 1),
       perfect: true,
       topic: kind === 'gossip' ? (topic ?? undefined) : undefined,
     });
@@ -617,7 +648,9 @@ export class Run {
         this.spawnOrder(now, pick, 'vip');
       }
     }
-    this.orderTimer -= dt * (this.rushHour ? 2 : 1);
+    // sonsuz vardiyada siparişler zamanla sıklaşır
+    const ramp = this.endless ? Math.min(2.5, 1 + this.time / 150) : 1;
+    this.orderTimer -= dt * (this.rushHour ? 2 : 1) * ramp;
     if (this.orderTimer <= 0) {
       this.orderTimer = this.rng.range(GREED.orderInterval[0], GREED.orderInterval[1]);
       const f = free();
@@ -633,6 +666,7 @@ export class Run {
         this.hud.toast(`${tx(c.office.person)} ${t('expired')}`, 'bad');
         this.combo = Math.max(1, this.combo - GREED.comboStep);
         this.intrigue.addAnger(8);
+        this.strike(`${tx(c.office.person)} ${t('expired')}`);
       }
     }
   }
@@ -806,6 +840,7 @@ export class Run {
       return;
     }
     this.stats.jarsLost++;
+    this.strike(t('jarGone'));
     const lost = this.jar;
     this.jar = 0;
     const obj = makeTipJar();
@@ -871,6 +906,7 @@ export class Run {
     audio.setIntensity(0);
     // kavanozda kalan para kasaya geçmez: açgözlülüğün bedeli. Tepsi zorluğu skoru çarpar.
     this.stats.score = Math.round(this.bank * this.assist.score);
+    this.stats.survived = Math.round(this.time);
     this.onEnd(this.stats);
   }
 

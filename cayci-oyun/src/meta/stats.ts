@@ -11,7 +11,7 @@ export interface SaleRecord {
 
 export interface RunStats {
   venue: string;
-  mode: 'career' | 'free' | 'daily';
+  mode: 'career' | 'free' | 'daily' | 'endless';
   score: number; // kasaya geçen para
   delivered: number; // teslim edilen bardak
   maxDeliveryTower: number; // teslim anında tepsideki en yüksek bardak sayısı
@@ -47,6 +47,7 @@ export interface RunStats {
   inspectPassed: number; // iyi geçen teftiş
   bossBonks: number; // patrona tepsiyle vurma
   backfires: number; // hakkında konuşulanın duyup kovalaması
+  survived: number; // sonsuz vardiyada dayanılan süre (sn)
 }
 
 export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
@@ -88,5 +89,6 @@ export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
     inspectPassed: 0,
     bossBonks: 0,
     backfires: 0,
+    survived: 0,
   };
 }

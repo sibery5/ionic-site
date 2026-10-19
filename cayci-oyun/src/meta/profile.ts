@@ -47,7 +47,7 @@ export function ensureDaily(save: SaveData, date = todayKey()) {
 }
 
 export function boardKey(venue: Venue, mode: RunStats['mode'], date: string) {
-  return mode === 'daily' ? `daily-${date}` : venue.id;
+  return mode === 'daily' ? `daily-${date}` : mode === 'endless' ? `endless-${venue.id}` : venue.id;
 }
 
 export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date = todayKey()): RunReport {
@@ -56,7 +56,8 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
   const prevStars = rec.stars;
   const stars = starsFor(s.score, venue.stars);
   rec.plays++;
-  const competitive = s.mode !== 'daily';
+  // mekân rekoru, yıldız ve görevler sadece kariyer ve serbest modda; günlük ve sonsuz vardiyanın kendi sıralaması var
+  const competitive = s.mode === 'career' || s.mode === 'free';
   if (competitive) {
     rec.best = Math.max(rec.best, s.score);
     rec.stars = Math.max(rec.stars, stars);
@@ -185,7 +186,7 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
     achievements,
     boardRank,
     rivalBeaten: competitive ? beatenRival(s.score, venue.rivals) : null,
-    nextRival: nextRival(Math.max(s.score, rec.best), venue.rivals),
+    nextRival: competitive ? nextRival(Math.max(s.score, rec.best), venue.rivals) : null,
     gossipNew,
     sales: s.sales,
     repBefore,

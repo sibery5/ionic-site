@@ -19,9 +19,9 @@ const out = await page.evaluate(async () => {
     GOSSIP_ALL: ['notebook'], END_SAVED: ['key'], END_SILENT: ['hush'], END_DISBELIEVED: ['shrug'], CAT_10: ['cat', '10'], BROKEN_100: ['shard', '100'],
     DAILY_7: ['calendar', '7'], LEVEL_10: ['chevron', '10'], LEVEL_30: ['chevron', '30'], SALE_1: ['ear'], SALE_10: ['talk', '10'], LIAR_5: ['lie', '5'],
     ESCAPE_1: ['run'], CAUGHT_3: ['boom', '3'], BONK_1: ['anger'], BETRAY_1: ['villain'], TITLE_BAS: ['teapot'], END_SOLD: ['money'],
-    INSPECT_PASS: ['boss'], BACKFIRE_1: ['mad'], BOSS_BONK: ['boom'],
+    INSPECT_PASS: ['boss'], BACKFIRE_1: ['mad'], BOSS_BONK: ['boom'], ENDLESS_300: ['glass', '5:00'],
   };
-  const GOLD = ['END_SAVED', 'TITLE_BAS', 'ALL_3STAR', 'LEVEL_30', 'TOWER_12', 'INSPECT_PASS'];
+  const GOLD = ['END_SAVED', 'TITLE_BAS', 'ALL_3STAR', 'LEVEL_30', 'TOWER_12', 'INSPECT_PASS', 'ENDLESS_300'];
   const DARK = ['BETRAY_1', 'END_SOLD', 'BOSS_BONK'];
   const res = {};
   const missing = [];

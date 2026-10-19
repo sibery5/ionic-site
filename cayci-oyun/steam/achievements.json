@@ -416,6 +416,19 @@
     "icon": "steam/achievement-icons/BOSS_BONK.png"
   },
   {
+    "apiName": "ENDLESS_300",
+    "displayName": {
+      "turkish": "Demir Tepsi",
+      "english": "Iron Tray"
+    },
+    "description": {
+      "turkish": "Sonsuz Vardiya'da 5 dakika dayan",
+      "english": "Last 5 minutes in the Endless Shift"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/ENDLESS_300.png"
+  },
+  {
     "apiName": "END_SOLD",
     "displayName": {
       "turkish": "AVM Müdürü",

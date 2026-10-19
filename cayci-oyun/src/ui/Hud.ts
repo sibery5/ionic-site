@@ -60,6 +60,8 @@ export class Hud {
   private chaseEl: HTMLElement;
   private inspectEl: HTMLElement;
   private inspectKey = '';
+  private livesEl: HTMLElement;
+  private livesKey = -1;
   private chaseText = '';
   private greedHtml = '';
   private lastTicketKey = '';
@@ -73,6 +75,7 @@ export class Hud {
     const tr = el('div', 'hud-tr', this.root);
     this.clock = el('div', 'clock', tr);
     this.clockFill = el('div', 'clock-fill', this.clock);
+    this.livesEl = el('div', 'lives hidden', tr);
     const m = el('div', 'money', tr);
     this.money = el('span', 'money-now', m, '0₺');
     this.moneyTarget = el('span', 'money-target', m);
@@ -225,7 +228,23 @@ export class Hud {
     this.dayLabel.textContent = label;
   }
 
+  /** Sonsuz vardiya: geçen süre ve kalan canlar (çay bardağı; giden can kırık cam). */
+  setEndless(elapsed: number, lives: number) {
+    const s = Math.floor(elapsed);
+    this.clockFill.style.width = '100%';
+    this.clock.dataset.label = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    this.clock.classList.add('endless');
+    this.livesEl.classList.remove('hidden');
+    if (lives === this.livesKey) return;
+    this.livesKey = lives;
+    let html = '';
+    for (let i = 0; i < 3; i++) html += icon(i < lives ? 'glass' : 'shard', i < lives ? 'life' : 'life lost');
+    this.livesEl.innerHTML = html;
+  }
+
   setTime(remaining: number, total: number) {
+    this.clock.classList.remove('endless');
+    this.livesEl.classList.add('hidden');
     const s = Math.ceil(remaining);
     this.clockFill.style.width = `${(remaining / total) * 100}%`;
     this.clock.dataset.label = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

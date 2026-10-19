@@ -5,7 +5,7 @@ import { applyRunToSave, isUnlocked, recordEnding } from '../src/meta/profile';
 import { VENUES, objectiveDone, starsFor } from '../src/game/venues';
 import { TITLES, earnedTitle } from '../src/meta/titles';
 import { levelFromXp, xpForLevel, levelProgress, COSMETICS, MAX_LEVEL } from '../src/meta/progress';
-import { missionsFor, applyRun, MISSION_DEFS } from '../src/meta/missions';
+import { missionsFor, applyRun, runValue, MISSION_DEFS } from '../src/meta/missions';
 import { submit, withRivals, nextRival, beatenRival, BOARD_SIZE } from '../src/meta/leaderboard';
 import { ACHIEVEMENTS } from '../src/meta/achievements';
 import { parseLevel } from '../src/game/levels';
@@ -234,5 +234,24 @@ describe('bodrum (0.6)', () => {
     const fresh = defaultSave();
     fresh.venues.kat3 = { best: 80, stars: 2, objectives: [], plays: 2 };
     expect(isUnlocked(fresh, ids.indexOf('teras'))).toBe(false);
+  });
+});
+
+describe('sonsuz vardiya (0.6)', () => {
+  it('mekân rekoru ve yıldız yazılmaz; kendi sıralaması var', () => {
+    const save = defaultSave();
+    const r = applyRunToSave(save, VENUES[1], { ...stats({ score: 500, survived: 320 }), mode: 'endless', venue: 'zemin' }, '2026-10-19');
+    expect(save.venues.zemin.best).toBe(0);
+    expect(save.venues.zemin.stars).toBe(0);
+    expect(save.boards['endless-zemin'][0].score).toBe(500);
+    expect(r.nextRival).toBeNull();
+    expect(r.achievements.map((a) => a.id)).toContain('ENDLESS_300');
+  });
+  it('yeni görev türleri turdan doğru değeri alır', () => {
+    const s = { ...stats({ escapes: 2, survived: 200, sales: [{ rumor: 'x', buyer: 'rifat', verdict: 'reward', pay: 10 }, { rumor: 'y', buyer: 'rifat', verdict: 'lie', pay: 0 }] }), mode: 'endless' as const };
+    expect(runValue('gossipSales', s)).toBe(1);
+    expect(runValue('escapeChase', s)).toBe(2);
+    expect(runValue('endlessSurvive', s)).toBe(200);
+    expect(runValue('endlessSurvive', { ...s, mode: 'career' })).toBe(0);
   });
 });

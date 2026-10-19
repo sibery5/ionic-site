@@ -77,6 +77,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'INSPECT_PASS', name: { tr: 'Göz Önünde', en: 'Under Watch' }, desc: { tr: 'Nadir Bey\'in teftişinden alnının akıyla çık', en: "Pass one of Nadir Bey's inspections with flying colours" }, check: (c) => c.totals.inspectPassed >= 1 },
   { id: 'BACKFIRE_1', name: { tr: 'Kulakları Çınladı', en: 'Ears Burning' }, desc: { tr: 'Hakkında konuştuğun kişi duyup peşine düşsün', en: 'Get chased by the person you were gossiping about' }, check: (c) => c.totals.backfires >= 1 },
   { id: 'BOSS_BONK', name: { tr: 'Patrona Tepsi', en: 'Bonk the Boss' }, desc: { tr: 'Teftişteki patronuna tepsiyle vur', en: 'Bonk your boss with the tray during an inspection' }, check: (c) => c.totals.bossBonks >= 1 },
+  { id: 'ENDLESS_300', name: { tr: 'Demir Tepsi', en: 'Iron Tray' }, desc: { tr: 'Sonsuz Vardiya\'da 5 dakika dayan', en: 'Last 5 minutes in the Endless Shift' }, check: (c) => c.run?.mode === 'endless' && c.run.survived >= 300 },
   { id: 'END_SOLD', name: { tr: 'AVM Müdürü', en: 'Mall Manager' }, desc: { tr: 'Selim\'in teklifini kabul et', en: "Accept Selim's offer" }, check: (c) => c.endings.includes('sold') },
 ];
 

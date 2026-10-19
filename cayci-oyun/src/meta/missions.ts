@@ -14,7 +14,10 @@ export type MissionKind =
   | 'bankOnce'
   | 'combo'
   | 'runScore'
-  | 'cleanRun';
+  | 'cleanRun'
+  | 'gossipSales'
+  | 'escapeChase'
+  | 'endlessSurvive';
 
 export interface MissionDef {
   kind: MissionKind;
@@ -96,6 +99,27 @@ export const MISSION_DEFS: MissionDef[] = [
     text: () => ({ tr: 'Hiç kavanoz kaybetmeden bir vardiya bitir', en: 'Finish a shift without losing the jar' }),
     reward: () => ({ coins: 120, xp: 90 }),
   },
+  {
+    kind: 'gossipSales',
+    targets: [1, 2, 3],
+    cumulative: true,
+    text: (n) => ({ tr: `Doğru dedikoduyu doğru kişiye ${n} kez anlat`, en: `Tell the right gossip to the right person ${n} time${n > 1 ? 's' : ''}` }),
+    reward: (n) => ({ coins: n * 50, xp: n * 40 }),
+  },
+  {
+    kind: 'escapeChase',
+    targets: [1],
+    cumulative: true,
+    text: () => ({ tr: 'Seni kovalayan birinden ocağa kaç', en: 'Escape someone chasing you back to the stove' }),
+    reward: () => ({ coins: 90, xp: 70 }),
+  },
+  {
+    kind: 'endlessSurvive',
+    targets: [90, 150, 240],
+    cumulative: false,
+    text: (n) => ({ tr: `Sonsuz Vardiya'da ${n} saniye dayan`, en: `Last ${n} seconds in the Endless Shift` }),
+    reward: (n) => ({ coins: Math.round(n * 0.8), xp: Math.round(n * 0.6) }),
+  },
 ];
 
 export interface MissionState {
@@ -158,6 +182,12 @@ export function runValue(kind: MissionKind, s: RunStats): number {
       return s.score;
     case 'cleanRun':
       return s.jarsLost === 0 && s.delivered > 0 ? 1 : 0;
+    case 'gossipSales':
+      return s.sales.filter((x) => x.verdict === 'reward').length;
+    case 'escapeChase':
+      return s.escapes;
+    case 'endlessSurvive':
+      return s.mode === 'endless' ? s.survived : 0;
   }
 }
 

@@ -109,7 +109,7 @@ export class Menus {
 
   // ---------------- ana menü ----------------
 
-  title(save: SaveData, o: Record<'career' | 'daily' | 'missions' | 'leaderboard' | 'wardrobe' | 'shop' | 'gossip' | 'howTo' | 'settings' | 'credits', () => void> & { lang: (l: Lang) => void }) {
+  title(save: SaveData, o: Record<'career' | 'daily' | 'endless' | 'missions' | 'leaderboard' | 'wardrobe' | 'shop' | 'gossip' | 'howTo' | 'settings' | 'credits', () => void> & { lang: (l: Lang) => void }) {
     const p = this.open('title-screen');
     h('div', 'logo', 'ÇAYCI', p);
     h('div', 'logo-sub', t('subtitle'), p);
@@ -120,6 +120,7 @@ export class Menus {
     const dm = save.daily.missions;
     const left = dm.filter((m) => !m.done).length;
     button(`${t('daily')}`, o.daily, list);
+    button(`${t('endless')} <small>${t('endlessSub')}</small>`, o.endless, list);
     button(`${t('missions')}${dm.length && left ? ` <span class="badge">${left}</span>` : ''}`, o.missions, list);
     const row = h('div', 'btn-row', '', list);
     button(t('leaderboard'), o.leaderboard, row);
@@ -136,14 +137,15 @@ export class Menus {
       if (getLang() === l) b.classList.add('active');
     }
     button(t('credits'), o.credits, lang, 'btn small');
-    h('div', 'version', 'v0.5', p);
+    h('div', 'version', 'v0.6', p);
   }
 
   // ---------------- kariyer haritası ----------------
 
-  careerMap(save: SaveData, onPick: (i: number) => void, onMeeting: (() => void) | null, onBack: () => void) {
+  careerMap(save: SaveData, onPick: (i: number) => void, onMeeting: (() => void) | null, onBack: () => void, endless = false) {
     const p = this.open();
-    h('h2', '', t('map'), p);
+    h('h2', '', endless ? t('endless') : t('map'), p);
+    if (endless) h('p', 'dim', t('endlessPick'), p);
     profileStrip(save, p);
     const grid = h('div', 'venue-grid', '', p);
     // en üst kat yukarıda: hanın kesiti
@@ -158,7 +160,8 @@ export class Menus {
         <div class="vc-floor">${tx(v.name)}</div>
         <div class="vc-obs">${tx(v.obstacle)}</div>
         <div class="vc-stars">${open ? stars(rec?.stars ?? 0) : icon('lock') + ' ' + t('unlockHint')}</div>
-        ${open ? `<div class="vc-meta">${t('bestScore')}: <b>${rec?.best ?? 0}₺</b> · ${t('objectives')} ${objDone}/2${rival ? ` · ${t('rivalToBeat')}: ${esc(rival.name)} ${rival.score}₺` : ''}</div>` : ''}`;
+        ${open && !endless ? `<div class="vc-meta">${t('bestScore')}: <b>${rec?.best ?? 0}₺</b> · ${t('objectives')} ${objDone}/2${rival ? ` · ${t('rivalToBeat')}: ${esc(rival.name)} ${rival.score}₺` : ''}</div>` : ''}
+        ${open && endless ? `<div class="vc-meta">${t('bestScore')}: <b>${save.boards[`endless-${v.id}`]?.[0]?.score ?? 0}₺</b></div>` : ''}`;
       if (open)
         card.addEventListener('click', () => {
           audio.init();
@@ -176,9 +179,18 @@ export class Menus {
   venueIntro(v: Venue, save: SaveData, mode: RunStats['mode'], onStart: () => void, onBack: () => void) {
     const p = this.open('note-screen');
     const rec = save.venues[v.id];
-    h('div', 'note-day', mode === 'daily' ? `${t('daily')} · ${tx(v.name)}` : tx(v.name), p);
+    h('div', 'note-day', mode === 'daily' ? `${t('daily')} · ${tx(v.name)}` : mode === 'endless' ? `${t('endless')} · ${tx(v.name)}` : tx(v.name), p);
     if (mode === 'career') h('div', 'note-paper', tx(v.note), p);
     else if (mode === 'daily') h('div', 'note-paper', t('dailyInfo'), p);
+    else if (mode === 'endless') {
+      h('div', 'note-paper', t('endlessInfo'), p);
+      const best = save.boards[`endless-${v.id}`]?.[0]?.score ?? 0;
+      h('div', 'intro-box', `<h4>${t('bestScore')}</h4><div class="obj"><b>${best}₺</b></div>`, p);
+      button(t('start'), onStart, p, 'btn primary');
+      button(t('back'), onBack, p);
+      this.onKey('Enter', onStart);
+      return;
+    }
     const info = h('div', 'intro-grid', '', p);
     const obj = h('div', 'intro-box', `<h4>${t('objectives')}</h4>`, info);
     for (const ob of v.objectives) {
@@ -214,16 +226,18 @@ export class Menus {
   results(r: RunReport, s: RunStats, v: Venue, save: SaveData, o: { onAgain: () => void; onNext: (() => void) | null; onMap: () => void; onFinal: (() => void) | null }) {
     const p = this.open('results');
     h('h2', '', `${t('shiftOver')} · ${tx(v.name)}`, p);
-    if (s.mode !== 'daily') h('div', 'stars big-stars', stars(r.stars), p);
+    const ranked = s.mode === 'career' || s.mode === 'free';
+    if (ranked) h('div', 'stars big-stars', stars(r.stars), p);
+    if (s.mode === 'endless') h('div', 'rival', `${t('survived')}: <b>${Math.floor(s.survived / 60)}:${String(s.survived % 60).padStart(2, '0')}</b>`, p);
     if (r.record) h('div', 'record', t('newBest'), p);
     h('div', 'score', `${r.score}₺`, p);
     if (r.rivalBeaten) h('div', 'rival', `${esc(r.rivalBeaten.name)} (${r.rivalBeaten.score}₺) ${t('rivalBeaten')}`, p);
     else if (r.nextRival) h('div', 'rival dim', `${t('rivalToBeat')}: ${esc(r.nextRival.name)} ${r.nextRival.score}₺`, p);
-    else if (s.mode !== 'daily') h('div', 'rival', t('allRivalsBeaten'), p);
+    else if (ranked) h('div', 'rival', t('allRivalsBeaten'), p);
 
     const cols = h('div', 'res-grid', '', p);
-    const left = h('div', 'intro-box', `<h4>${t('objectives')}</h4>`, cols);
-    for (const ob of r.objectives) h('div', `obj ${ob.done ? 'done' : ''}`, `${ob.done ? icon('check') : icon('ring')} ${tx(objectiveText(ob.objective))}${ob.isNew ? ' <span class="badge">+XP</span>' : ''}`, left);
+    const left = h('div', 'intro-box', `<h4>${s.mode === 'endless' ? t('endless') : t('objectives')}</h4>`, cols);
+    if (s.mode !== 'endless') for (const ob of r.objectives) h('div', `obj ${ob.done ? 'done' : ''}`, `${ob.done ? icon('check') : icon('ring')} ${tx(objectiveText(ob.objective))}${ob.isNew ? ' <span class="badge">+XP</span>' : ''}`, left);
     const tbl = h('table', 'summary', '', left);
     const row = (a: string, b: string) => h('tr', '', `<td>${a}</td><td>${b}</td>`, tbl);
     row(t('delivered'), String(s.delivered));

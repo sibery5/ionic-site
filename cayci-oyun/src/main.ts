@@ -352,6 +352,7 @@ class Game {
     this.menus.title(this.save, {
       career: () => this.careerMap(),
       daily: () => this.dailyIntro(),
+      endless: () => this.menus.careerMap(this.save, (i) => this.venueIntro(i, 'endless'), null, () => this.showTitle(), true),
       missions: () => this.menus.missions(this.save, back),
       leaderboard: () => this.leaderboard(),
       wardrobe: () => this.wardrobe(),
@@ -383,7 +384,7 @@ class Game {
     if (mode === 'career' && index === 0 && !this.save.scenes.includes('intro')) return this.playScene('intro', () => this.venueIntro(index, mode));
     if (mode === 'career' && v.id === 'kat3' && !this.save.scenes.includes('villain')) return this.playScene('villain', () => this.venueIntro(index, mode));
     if (mode === 'career' && v.id === 'bodrum' && !this.save.scenes.includes('bodrum')) return this.playScene('bodrum', () => this.venueIntro(index, mode));
-    this.menus.venueIntro(v, this.save, mode, () => this.startRun(index, mode), () => (mode === 'daily' ? this.showTitle() : this.careerMap()));
+    this.menus.venueIntro(v, this.save, mode, () => this.startRun(index, mode), () => (mode === 'daily' || mode === 'endless' ? this.showTitle() : this.careerMap()));
   }
 
   dailyIndex() {
@@ -467,7 +468,7 @@ class Game {
     this.endRun();
     const venue: Venue = VENUES[index];
     const daily = mode === 'daily';
-    const tutorial = !daily && !this.save.tutorialDone && index === 0;
+    const tutorial = mode === 'career' && !this.save.tutorialDone && index === 0;
     // günlük mücadelede herkes aynı tohumla oynar; diğerlerinde her tur farklı
     const cfg = this.runConfig(venue, mode, daily ? dateSeed() : (Date.now() ^ (index * 7919)) >>> 0, tutorial);
     if (tutorial) {
@@ -518,7 +519,7 @@ class Game {
     this.menus.pause(
       () => this.resume(),
       () => this.lastRun && this.startRun(this.lastRun.index, this.lastRun.mode),
-      () => (this.lastRun?.mode === 'daily' ? this.showTitle() : this.careerMap()),
+      () => (this.lastRun?.mode === 'daily' || this.lastRun?.mode === 'endless' ? this.showTitle() : this.careerMap()),
     );
   }
 
@@ -547,7 +548,7 @@ class Game {
     this.menus.results(report, s, venue, this.save, {
       onAgain: go(() => this.startRun(index, s.mode)),
       onNext: nextOpen ? go(() => this.venueIntro(index + 1, 'career')) : null,
-      onMap: go(() => (s.mode === 'daily' ? this.showTitle() : this.careerMap())),
+      onMap: go(() => (s.mode === 'daily' || s.mode === 'endless' ? this.showTitle() : this.careerMap())),
       onFinal: report.finalUnlocked ? go(() => this.finalChoice()) : null,
     });
   }

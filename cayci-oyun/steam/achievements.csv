@@ -31,4 +31,5 @@ api_name,name_tr,name_en,desc_tr,desc_en,hidden
 "INSPECT_PASS","Göz Önünde","Under Watch","Nadir Bey'in teftişinden alnının akıyla çık","Pass one of Nadir Bey's inspections with flying colours","false"
 "BACKFIRE_1","Kulakları Çınladı","Ears Burning","Hakkında konuştuğun kişi duyup peşine düşsün","Get chased by the person you were gossiping about","false"
 "BOSS_BONK","Patrona Tepsi","Bonk the Boss","Teftişteki patronuna tepsiyle vur","Bonk your boss with the tray during an inspection","true"
+"ENDLESS_300","Demir Tepsi","Iron Tray","Sonsuz Vardiya'da 5 dakika dayan","Last 5 minutes in the Endless Shift","false"
 "END_SOLD","AVM Müdürü","Mall Manager","Selim'in teklifini kabul et","Accept Selim's offer","true"
