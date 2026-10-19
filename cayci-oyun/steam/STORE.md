@@ -6,7 +6,7 @@ Bu klasördeki her şey Steamworks paneline girilecek malzemedir. Görseller ve 
 |---|---|---|
 | `capsules/*.png` | Mağaza ve kütüphane kapakları (Steam'in istediği boyutlarda) | `node scripts/capsules.mjs` |
 | `screenshots/tr/*.png`, `screenshots/en/*.png` | 1920×1080 mağaza ekran görüntüleri | `W=1920 H=1080 node scripts/demo.mjs` |
-| `achievements.json` / `achievements.csv` | 30 başarım (API adları koddakiyle birebir aynı) | `npx tsx scripts/steam-kit.ts` |
+| `achievements.json` / `achievements.csv` | 33 başarım (API adları koddakiyle birebir aynı) | `npx tsx scripts/steam-kit.ts` |
 | `achievement-icons/*.png` | Başarım ikonları, 256×256, açık ve `_locked` sürümü | `python3 scripts/achievement-icons.py` |
 
 Kapak boyutları: header 920×430, small 462×174, main 1232×706, vertical 748×896, library capsule 600×900, library hero 3840×1240 (yazısız), library logo 1280×720 (şeffaf PNG).
@@ -30,11 +30,12 @@ Rıza Usta kırk yıl bu tepsiyle çay taşıdı, şimdi tepsiyi sana bırakıyo
 - **Fırıldak.** Tepsiyi tek tuşla başının üstünden çevir. Zamanlama tutarsa sonraki teslim iki kat öder. Tutmazsa bardaklar havada.
 - **Dedikodu ekonomisi.** Kulağına fısıldanan her laf cep defterine yazılır. "Dedikodu var mı?" diye soran müşteriye doğru lafı anlatırsan bahşiş ve kanıt; yalanı ya da kendi dedikodusunu anlatırsan masasından kalkıp seni kovalar.
 - **Sinir küpü.** Kalabalık yolunu kesince sinirin dolar; tepsiyle bir "DANK!" ve patronundan hemen bir mesaj.
+- **Patron teftişi.** Nadir Bey bazen bizzat kata çıkar ve her bardağı izler. Gözünün önünde kusursuz çalış... ve sakın ona vurma.
 - **Çaycının yükselişi.** Çıraktan patrona altı unvan, ara sahneler, maaş, itibar ve dört farklı son.
 - **Kule.** 6 bardaktan sonra ara tepsiyle ikinci kat başlar. Parmak ucunda yürü, yavaş dön, nefesini tut.
 - **6 mekânlı kariyer.** Her katın kendi engeli, iki görevi, üç yıldızı ve yenmen gereken rakipleri var.
 - **Günlük Mücadele.** Herkes aynı gün aynı vardiyayı oynar. Her gün üç yeni görev ve ödülleri.
-- **30 başarım, 30 seviye, unvanlar ve dolap.** Fes, kasket, aşçı şapkası, bakır ve laleli tepsiler, yaldızlı bardaklar.
+- **33 başarım, 30 seviye, unvanlar ve dolap.** Fes, kasket, aşçı şapkası, bakır ve laleli tepsiler, yaldızlı bardaklar.
 - **İki dil.** Türkçe ve İngilizce arayüz.
 
 ## Long description (EN)
@@ -48,11 +49,12 @@ Master Rıza carried tea on this tray for forty years, and now he is handing it 
 - **The Spin.** Swing the tray over your head with one button. Nail the timing and your next delivery pays double. Miss it and the glasses fly.
 - **A gossip economy.** Every whisper goes into your pocket notebook. Tell the right gossip to a customer asking "any gossip?" and earn tips and evidence; tell a lie, or gossip about themselves, and they get up and chase you.
 - **Fuming.** When the crowd blocks your way your anger builds up: one "BONK!" with the tray, and an instant message from your boss.
+- **The inspection.** Sometimes Nadir Bey walks the floor in person and watches every glass. Work flawlessly under his nose... and do not bonk him.
 - **The rise of a tea boy.** Six titles from apprentice to boss, cutscenes, salary, reputation and four different endings.
 - **Towers.** After 6 glasses a second layer goes on a plate. Tiptoe, turn slowly, hold your breath.
 - **A 6-venue career.** Every floor has its own hazard, two objectives, three stars and rivals to beat.
 - **Daily Challenge.** Everyone plays the same shift on the same day. Three new daily missions with rewards.
-- **30 achievements, 30 levels, titles and a wardrobe.** Fez, flat cap, chef hat, copper and tulip trays, gilded glasses.
+- **33 achievements, 30 levels, titles and a wardrobe.** Fez, flat cap, chef hat, copper and tulip trays, gilded glasses.
 - **Two languages.** Turkish and English interface.
 
 ## Etiketler (Steam tags)
@@ -77,7 +79,7 @@ Gerçek bir donanımda ölçülmedi. Ayarlar menüsündeki "Düşük" grafik kal
 
 ## Steamworks ayarları
 
-- **Başarımlar:** `achievements.csv` içindeki 30 satır. API adı (`FIRST_TEA` vb.) oyun koduyla birebir aynı olmalı. `END_*` başarımları gizli (sürpriz) işaretlenmeli.
+- **Başarımlar:** `achievements.csv` içindeki 33 satır. API adı (`FIRST_TEA` vb.) oyun koduyla birebir aynı olmalı. `END_*` ve `BOSS_BONK` başarımları gizli (sürpriz) işaretlenmeli.
 - **Steam Cloud:** "Steam Cloud" açılmalı, dosya `cayci-save.json`, kota 1 MB, 1 dosya. Masaüstü sarmalayıcı açılışta buluttaki kaydı okur ve yereldeki kayıttan daha ilerideyse (daha çok XP) onu kullanır.
 - **Oyun kolu:** Xbox düzeni (A teslim/demli, X açık çay, B Fırıldak, Y tepsiyi kaldır, LB parmak ucu, RB koşu, Start duraklat). Steam'de "kısmi destek" olarak işaretlenmeli. Steam Deck'te denenmedi.
 - **Diller:** Türkçe ve İngilizce arayüz (seslendirme yok; karakterler anlamsız mırıltıyla konuşur).

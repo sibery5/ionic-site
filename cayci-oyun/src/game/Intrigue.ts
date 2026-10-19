@@ -12,15 +12,17 @@ import type { Particles } from '../fx/Particles';
 import type { Hud } from '../ui/Hud';
 import { animateWalk } from '../world/models';
 import type { RunStats } from '../meta/stats';
-import type { Office, Text } from './story';
-import { PEOPLE, RUMOR, TOPICS, EVIDENCE_NEEDED, judge, saleKey, vipRumor, type Topic } from './rumors';
-import { BONK, BOSS_BONK, BOSS_CHASER, BOSS_GULSUM, CHASE, REACTION, SALE_MSG, SHIFT_START, VILLAIN_OFFER } from './lines';
+import { DAYS, type Office, type Text } from './story';
+import type { PersonOpts } from '../world/models';
+import { PEOPLE, RUMOR, TOPICS, EVIDENCE_NEEDED, judge, saleKey, vipRumor, type PersonId, type Topic } from './rumors';
+import { ASK_MORE, BACKFIRE, BONK, BOSS_BONK, BOSS_CHASER, BOSS_GULSUM, CHASE, INSPECT, REACTION, SALE_MSG, SHIFT_START, VILLAIN_OFFER } from './lines';
 
 // Vardiyanın "entrika" katmanı: dedikodu soran müşteriler, seçim paneli, kızıp bardak kıran ya da kovalayan müşteriler,
 // sinir göstergesi ve tepsiyle vurma, patronun telefon mesajları. Run'ın içini bir host arayüzüyle görür.
 
 export interface IntrigueHost {
   readonly time: number;
+  readonly duration: number;
   readonly mode: RunStats['mode'];
   readonly hud: Hud;
   readonly player: Player;
@@ -47,6 +49,22 @@ export interface IntrigueHost {
   cancelOrder(officeId: string): void;
   slowMo(sec: number): void;
   shake(v: number): void;
+  /** katta yürüyen biri ekler (teftişteki patron); yürüyecek yer yoksa null */
+  spawnWalker(look: PersonOpts, speed: number): Npc | null;
+  removeWalker(n: Npc): void;
+  /** bu katta oturan kişi */
+  customerOf(pid: PersonId): Customer | null;
+}
+
+interface Inspection {
+  npc: Npc;
+  t: number;
+  good: number;
+  bad: number;
+  over: boolean;
+  /** son "gördü" anı (aynı olayı iki kez saymasın) */
+  lastBroken: number;
+  lastJars: number;
 }
 
 interface Panel {
@@ -55,6 +73,8 @@ interface Panel {
   cards: string[];
   sel: number;
   t: number;
+  /** kaçıncı "başka?" (0: ilk soru) */
+  chain: number;
 }
 
 interface Chase {
@@ -74,6 +94,9 @@ const PANEL_TIME = 12;
 const CHASE_SPEED = 3.1; // yürüyüşten hızlı, koşudan yavaş
 const CHASE_TIME = 16;
 const ANGER_READY = 100;
+const INSPECT_TIME = 45;
+const INSPECT_SIGHT = 6.5;
+const NADIR_LOOK: PersonOpts = { ...DAYS[4].offices[0].look };
 
 export class Intrigue {
   panel: Panel | null = null;
@@ -83,10 +106,14 @@ export class Intrigue {
   private bonk: { t: number; hit: boolean; target: Npc | Chase | null } | null = null;
   private bonks = 0;
   private asks = 0;
+  private villainAsks = 0;
   private askCooldown = 9;
   private msgs: { at: number; from: string; text: Text; kind: 'boss' | 'riza' | 'villain' | 'info' }[] = [];
   private once = new Set<string>();
   private angerHint = 0;
+  private inspAt = Infinity;
+  insp: Inspection | null = null;
+  private backfires: { pid: PersonId; at: number }[] = [];
 
   constructor(private h: IntrigueHost) {
     if (h.mode === 'career') {
@@ -96,6 +123,8 @@ export class Intrigue {
     // kanıtlar birikince Selim teklif eder
     const story = h.pocket.filter((id) => RUMOR[id]?.story && RUMOR[id]?.truth).length;
     if (h.mode !== 'daily' && story >= 3 && h.rng.next() < 0.5) this.queue(35, 'villain', VILLAIN_OFFER);
+    // patron teftişi: Ocakçı olduktan sonra kariyer vardiyalarının çoğunda bir kez
+    if (h.mode === 'career' && !h.tutorial && h.title >= 1 && h.rng.next() < 0.6) this.inspAt = h.duration * h.rng.range(0.25, 0.5);
   }
 
   // ---------------- yardımcılar ----------------
@@ -140,25 +169,38 @@ export class Intrigue {
 
   // ---------------- dedikodu soran müşteriler ----------------
 
-  /** Yeni bir sipariş "dedikodu var mı?" diye mi gelsin? Konu döner ya da null. */
+  /** Yeni bir sipariş "dedikodu var mı?" diye mi gelsin? Konu döner ya da null.
+   *  Laf, lafı bilenin ayağına gelir: cebinde bu kişinin merak ettiği bir şey varsa çok daha sık sorar. */
   askFor(office: Office): Topic | null {
     const h = this.h;
-    if (h.mode === 'daily' || h.tutorial || this.asks >= 3 || this.askCooldown > 0) return null;
+    if (h.mode === 'daily' || h.tutorial || this.asks >= 5 || this.askCooldown > 0) return null;
     const p = PEOPLE[office.pid];
     if (!p?.wants.length) return null;
+    // kötü adamlar bir vardiyada en fazla iki kez ayartır
+    if (p.side === 'villain' && this.villainAsks >= 2) return null;
     const known = this.known();
-    if (!known.length && h.rng.next() > 0.35) return null;
-    if (h.rng.next() > 0.32) return null;
-    const match = p.wants.filter((tp) => known.some((id) => RUMOR[id].topic === tp));
-    const topic = match.length && h.rng.next() < 0.65 ? h.rng.pick(match) : h.rng.pick(p.wants);
+    const sold = this.sold();
+    const juicy = known.filter((id) => {
+      const v = judge(RUMOR[id], office.pid, RUMOR[id].topic, sold).verdict;
+      return v === 'reward' || v === 'betray';
+    });
+    const chance = juicy.length ? 0.8 : known.length ? 0.2 : 0.12;
+    if (h.rng.next() > chance) return null;
+    const topic = juicy.length && h.rng.next() < 0.75 ? RUMOR[h.rng.pick(juicy)].topic : h.rng.pick(p.wants);
     this.asks++;
-    this.askCooldown = 16;
+    if (p.side === 'villain') this.villainAsks++;
+    h.stats.asked++;
+    this.askCooldown = 9;
     return topic;
   }
 
   /** Bir sipariş bütünüyle teslim edildi. */
   onOrderDone(c: Customer, kind: 'normal' | 'vip' | 'rush' | 'gossip', perfect: boolean, topic?: Topic) {
     const h = this.h;
+    if (perfect && this.watching()) {
+      this.insp!.good++;
+      h.hud.toast(`👔 👍 ${t('inspectGood')}`, 'good');
+    }
     if (kind === 'gossip' && topic) {
       this.openPanel(c, topic);
       return;
@@ -171,7 +213,7 @@ export class Intrigue {
         return;
       }
     }
-    if (perfect && h.mode !== 'daily' && h.rng.next() < 0.2) {
+    if (perfect && h.mode !== 'daily' && h.rng.next() < 0.3) {
       const w = PEOPLE[c.office.pid]?.whispers.filter((id) => !known.includes(id)) ?? [];
       if (w.length) this.hear(h.rng.pick(w), t('whisperCard'));
     }
@@ -188,7 +230,7 @@ export class Intrigue {
     const cards = this.known()
       .sort((a, b) => Number(RUMOR[b].topic === topic) - Number(RUMOR[a].topic === topic))
       .slice(0, 9);
-    this.panel = { c, topic, cards, sel: cards.length ? 0 : -1, t: PANEL_TIME };
+    this.panel = { c, topic, cards, sel: cards.length ? 0 : -1, t: PANEL_TIME, chain: 0 };
     c.talk();
     audio.babble(c.voicePitch, 5);
     this.drawPanel();
@@ -199,7 +241,7 @@ export class Intrigue {
     if (!p) return this.h.hud.rumorPanel(null);
     this.h.hud.rumorPanel({
       who: this.name(p.c.office.pid),
-      ask: tx(TOPICS[p.topic].ask),
+      ask: p.chain ? tx(ASK_MORE.ask[(p.chain - 1 + p.c.office.pid.length) % ASK_MORE.ask.length]) : tx(TOPICS[p.topic].ask),
       topicIcon: TOPICS[p.topic].icon,
       cards: p.cards.map((id) => {
         const r = RUMOR[id];
@@ -241,12 +283,13 @@ export class Intrigue {
     const pid = c.office.pid;
     const who = this.name(pid);
     if (idx < 0 || !p.cards[idx]) {
-      h.hud.speech(who, tx(h.rng.pick(REACTION.dontKnow)));
+      h.hud.speech(who, tx(h.rng.pick(p.chain ? ASK_MORE.done : REACTION.dontKnow)));
       return;
     }
     const r = RUMOR[p.cards[idx]];
     const j = judge(r, pid, p.topic, this.sold());
     h.stats.sales.push({ rumor: r.id, buyer: pid, verdict: j.verdict, pay: j.pay });
+    if (j.verdict === 'reward' || j.verdict === 'betray') this.maybeBackfire(r.about, pid);
     h.stats.repDelta += j.rep;
     h.hud.speech(who, tx(h.rng.pick(REACTION[j.verdict])));
     audio.babble(c.voicePitch, j.verdict === 'reward' ? 6 : 9);
@@ -266,6 +309,12 @@ export class Intrigue {
             this.once.add('evidence');
             this.queue(1.5, 'riza', SALE_MSG.evidence);
           }
+        }
+        // han tarafı doğru lafı alınca üsteler: "başka?" (en fazla iki kez, kalan kartlarla)
+        const rest = p.cards.filter((id) => id !== r.id);
+        if (PEOPLE[pid].side === 'han' && p.chain < 2 && rest.length) {
+          this.panel = { c, topic: p.topic, cards: rest, sel: 0, t: PANEL_TIME * 0.75, chain: p.chain + 1 };
+          this.drawPanel();
         }
         break;
       }
@@ -310,7 +359,7 @@ export class Intrigue {
 
   // ---------------- kovalama ----------------
 
-  startChase(c: Customer) {
+  startChase(c: Customer, shout?: Text[]) {
     const h = this.h;
     if (this.isChasing(c.office.id)) return;
     h.cancelOrder(c.office.id);
@@ -322,7 +371,8 @@ export class Intrigue {
     audio.shout();
     h.slowMo(0.6);
     h.hud.big(`🏃 ${this.name(c.office.pid)}`, t('chasing'));
-    h.hud.speech(this.name(c.office.pid), tx(h.rng.pick(CHASE.shout)));
+    h.hud.speech(this.name(c.office.pid), tx(h.rng.pick(shout ?? CHASE.shout)));
+    if (this.watching()) this.saw();
   }
 
   private stepTowards(ch: Chase, target: THREE.Vector3, speed: number, dt: number) {
@@ -497,7 +547,26 @@ export class Intrigue {
     this.bonks++;
     h.stats.bonks++;
     const isMopper = target === h.mopper;
+    const isBoss = !!this.insp && target === this.insp.npc;
     h.stats.repDelta -= isMopper ? 8 : 5;
+    if (isBoss) {
+      // patronun ta kendisine vurdun
+      const npc = this.insp!.npc;
+      npc.knock(dir);
+      h.stats.bossBonks++;
+      h.stats.repDelta -= 15;
+      h.hud.big(t('bossHit'), '👔💥');
+      h.hud.speech(this.name('nadir'), tx(h.rng.pick(INSPECT.bossOuch)));
+      h.shake(0.3);
+      h.slowMo(1.2);
+      this.queue(1.6, 'boss', INSPECT.hitBoss);
+      const got = h.fine(30);
+      h.stats.fines += got;
+      if (got > 0) setTimeout(() => h.hud.toast(`−${got}₺ ${t('fine')}`, 'bad'), 1800);
+      this.endInspection(true);
+      return;
+    }
+    if (this.watching()) this.saw(2);
     let msg: Text = BOSS_BONK[Math.min(this.bonks - 1, BOSS_BONK.length - 1)];
     if ('state' in target) {
       // kovalayanı devirdin: kovalama biter ama patron yine kızar
@@ -537,11 +606,118 @@ export class Intrigue {
     h.hud.anger(this.anger / ANGER_READY, this.angerReady);
   }
 
+  // ---------------- patron teftişi ----------------
+
+  /** Nadir Bey katta ve Cemal'i görecek kadar yakın mı? */
+  watching() {
+    const i = this.insp;
+    return !!i && !i.over && !i.npc.isDown && i.npc.pos.distanceTo(this.h.player.pos) < INSPECT_SIGHT;
+  }
+
+  private saw(n = 1) {
+    this.insp!.bad += n;
+    this.h.hud.toast(`👔 👎 ${t('inspectBad')}`, 'bad');
+  }
+
+  private startInspection() {
+    const h = this.h;
+    const npc = h.spawnWalker(NADIR_LOOK, 0.8);
+    if (!npc) return;
+    this.insp = { npc, t: 0, good: 0, bad: 0, over: false, lastBroken: h.stats.broken, lastJars: h.stats.jarsLost };
+    h.stats.inspections++;
+    h.hud.phone(this.name('nadir'), tx(h.rng.pick(INSPECT.start)), 'boss');
+    h.hud.big(`👔 ${t('inspection')}`, t('inspectionSub'));
+    audio.click();
+  }
+
+  private endInspection(hitBoss = false) {
+    const i = this.insp;
+    const h = this.h;
+    if (!i || i.over) return;
+    i.over = true;
+    i.t = 0;
+    h.hud.inspect(null);
+    if (hitBoss) return;
+    const score = i.good - i.bad;
+    if (score >= 2) {
+      h.stats.inspectPassed++;
+      h.stats.repDelta += 5;
+      h.addJar(15);
+      h.hud.floatMoney(15);
+      h.hud.toast(`👔 ${t('inspectPass')} +15₺`, 'good');
+      audio.jingle();
+      this.queue(0.8, 'boss', INSPECT.pass);
+    } else if (score >= 0) {
+      h.stats.repDelta += 1;
+      this.queue(0.8, 'boss', INSPECT.ok);
+    } else {
+      h.stats.repDelta -= 5;
+      h.hud.toast(`👔 ${t('inspectFail')}`, 'bad');
+      this.queue(0.8, 'boss', INSPECT.fail);
+    }
+  }
+
+  private updateInspection(dt: number) {
+    const h = this.h;
+    if (!this.insp && h.time >= this.inspAt) {
+      this.inspAt = Infinity;
+      this.startInspection();
+    }
+    const i = this.insp;
+    if (!i) return;
+    i.t += dt;
+    if (i.over) {
+      // patron yerden kalkınca ya da teftiş bitince birkaç saniye sonra kattan çıkar
+      if (i.t > 4 && !i.npc.isDown) {
+        h.removeWalker(i.npc);
+        this.insp = null;
+      }
+      return;
+    }
+    const watching = this.watching();
+    if (watching) {
+      if (h.stats.broken > i.lastBroken) this.saw();
+      if (h.stats.jarsLost > i.lastJars) this.saw();
+    }
+    i.lastBroken = h.stats.broken;
+    i.lastJars = h.stats.jarsLost;
+    h.hud.inspect({ watching, good: i.good, bad: i.bad, left: INSPECT_TIME - i.t });
+    if (i.t >= INSPECT_TIME) this.endInspection();
+  }
+
+  // ---------------- dedikodunun geri tepmesi ----------------
+
+  private maybeBackfire(about: readonly PersonId[], buyer: PersonId) {
+    const h = this.h;
+    for (const pid of about) {
+      if (pid === buyer || this.backfires.some((b) => b.pid === pid) || !h.customerOf(pid)) continue;
+      h.hud.toast(`🤫 ${this.name(pid)} ${t('backfireHint')}`, 'warn');
+      if (h.rng.next() < 0.4) this.backfires.push({ pid, at: h.time + h.rng.range(12, 24) });
+    }
+  }
+
+  private updateBackfires() {
+    const h = this.h;
+    for (let i = this.backfires.length - 1; i >= 0; i--) {
+      const b = this.backfires[i];
+      if (h.time < b.at) continue;
+      this.backfires.splice(i, 1);
+      const c = h.customerOf(b.pid);
+      if (!c || c.standing || this.isChasing(c.office.id)) continue;
+      h.stats.backfires++;
+      h.stats.repDelta -= 2;
+      h.hud.toast(`👂 ${this.name(b.pid)} ${t('backfire')}`, 'bad');
+      this.startChase(c, BACKFIRE);
+    }
+  }
+
   // ---------------- her kare ----------------
 
   update(dt: number, input: Input) {
     const h = this.h;
     this.askCooldown -= dt;
+    this.updateInspection(dt);
+    this.updateBackfires();
     this.updateChases(dt);
     this.updateAnger(dt, input);
     this.updateBonk(dt, input);
@@ -553,6 +729,7 @@ export class Intrigue {
   }
 
   dispose() {
+    this.h.hud.inspect(null);
     this.h.hud.rumorPanel(null);
     this.h.hud.chase(null);
     this.h.hud.anger(0, false);

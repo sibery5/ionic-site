@@ -32,6 +32,7 @@ export interface RunStats {
   banks: number; // ocağa kaç kez para teslim edildi
   maxBank: number; // tek seferde kasaya geçen en yüksek tutar
   spilled: number; // dökülen toplam doluluk (bardak cinsinden)
+  asked: number; // "dedikodu var mı?" diye soran sipariş
   heard: string[]; // bu turda duyulan dedikodular (rumor id)
   sales: SaleRecord[]; // anlatılan dedikodular ve sonuçları
   evidence: string[]; // han tarafına ulaştırılan hikâye kanıtları
@@ -42,6 +43,10 @@ export interface RunStats {
   smashed: number; // kızgın müşterinin kırdığı bardak
   bonks: number; // tepsiyle vurulan kişi
   fines: number; // patronun kestiği ceza (₺)
+  inspections: number; // patron teftişi
+  inspectPassed: number; // iyi geçen teftiş
+  bossBonks: number; // patrona tepsiyle vurma
+  backfires: number; // hakkında konuşulanın duyup kovalaması
 }
 
 export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
@@ -68,6 +73,7 @@ export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
     banks: 0,
     maxBank: 0,
     spilled: 0,
+    asked: 0,
     heard: [],
     sales: [],
     evidence: [],
@@ -78,5 +84,9 @@ export function emptyStats(venue: string, mode: RunStats['mode']): RunStats {
     smashed: 0,
     bonks: 0,
     fines: 0,
+    inspections: 0,
+    inspectPassed: 0,
+    bossBonks: 0,
+    backfires: 0,
   };
 }

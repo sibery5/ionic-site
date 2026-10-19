@@ -197,3 +197,24 @@ describe('profil', () => {
     expect(n.look.tray).toBe('tray-nickel');
   });
 });
+
+describe('teftiş ve geri tepme', () => {
+  it('teftiş, patrona vurma ve geri tepme toplamlara ve başarımlara işlenir', () => {
+    const save = defaultSave();
+    const r = applyRunToSave(save, VENUES[0], stats({ inspections: 1, inspectPassed: 1, bossBonks: 1, backfires: 2, bonks: 1 }));
+    expect(save.totals.inspectPassed).toBe(1);
+    expect(save.totals.bossBonks).toBe(1);
+    expect(save.totals.backfires).toBe(2);
+    const ids = r.achievements.map((a) => a.id);
+    for (const id of ['INSPECT_PASS', 'BOSS_BONK', 'BACKFIRE_1', 'BONK_1']) expect(ids).toContain(id);
+  });
+  it('eski kayıtta yeni toplamlar sıfırdan başlar', () => {
+    const n = normalize({ totals: { delivered: 5 } as never });
+    expect(n.totals.delivered).toBe(5);
+    expect(n.totals.inspectPassed).toBe(0);
+    expect(n.totals.bossBonks).toBe(0);
+  });
+  it('başarım kimlikleri benzersiz', () => {
+    expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(ACHIEVEMENTS.length);
+  });
+});

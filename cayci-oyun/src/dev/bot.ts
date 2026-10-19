@@ -7,6 +7,7 @@ import { ORDERS } from '../config';
 import { Grid } from '../physics/grid';
 import type { Run } from '../game/Run';
 import type { RunStats } from '../meta/stats';
+import { judge, RUMOR, saleKey } from '../game/rumors';
 
 export interface BotPolicy {
   /** Tepsiye en fazla kaç bardak yükler (açgözlülük). */
@@ -18,6 +19,8 @@ export interface BotPolicy {
   careful: boolean;
   /** Az bardakla düz koridorda koşar. */
   run?: boolean;
+  /** "dedikodu var mı?" sorusunda doğru lafı seçme olasılığı (0..1). Yoksa hep "bilmiyorum" der. */
+  gossip?: number;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -88,7 +91,7 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1, until = Infinity)
       const c = r.customers.get(id);
       const d = Math.hypot(c.desk.center.x - r.player.pos.x, c.desk.center.z - r.player.pos.z);
       const left = o.patience - (r.time - o.createdAt);
-      const pay = o.kind === 'vip' ? 5 : o.kind === 'rush' ? 2 : 1;
+      const pay = o.kind === 'vip' ? 5 : o.kind === 'rush' ? 2 : o.kind === 'gossip' && policy.gossip !== undefined ? 4 : 1;
       const s = m * pay * 2 - d * 0.6 - (left < 8 ? -3 : 0);
       if (left > d / 1.6 + 1 && s > score) {
         score = s;
@@ -248,8 +251,8 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1, until = Infinity)
     bumps.push(r.lastBump ?? 0);
     if (bumps.length > 20) bumps.shift();
     const j0 = r.stats.jarsLost;
-    // "dedikodu var mı?" paneli: bot bilmiyorum der (denge ölçümü dedikodusuz)
-    if (r.intrigue.panel) r.intrigue.choose(-1);
+    // "dedikodu var mı?" paneli: gossip yoksa bot bilmiyorum der (skor ölçümü dedikodusuz)
+    if (r.intrigue.panel) r.intrigue.choose(policy.gossip === undefined ? -1 : pickRumor(r, policy.gossip, rand));
     r.update(dt, inp);
     if (r.stats.catTrips > lastCat) {
       lastCat = r.stats.catTrips;
@@ -278,4 +281,17 @@ export function playBot(run: Run, policy: BotPolicy, seed = 1, until = Infinity)
   if (until !== Infinity) return r.stats;
   if (!result) run.forceEnd();
   return result ?? r.stats;
+}
+
+/** Bot için dedikodu seçimi: 'skill' olasılıkla en iyi kartı (kanıt > para), yoksa rastgele bir kart ya da bilmiyorum. */
+function pickRumor(r: R, skill: number, rand: () => number): number {
+  const p = r.intrigue.panel;
+  if (!p.cards.length) return -1;
+  const sold = [...r.cfg.sold, ...r.stats.sales.filter((s: R) => s.verdict === 'reward' || s.verdict === 'betray').map((s: R) => saleKey(s.rumor, s.buyer))];
+  const good = p.cards
+    .map((id: string, i: number) => ({ i, j: judge(RUMOR[id], p.c.office.pid, p.topic, sold) }))
+    .filter((x: R) => x.j.verdict === 'reward')
+    .sort((a: R, b: R) => Number(b.j.evidence) - Number(a.j.evidence) || b.j.pay - a.j.pay);
+  if (rand() < skill) return good[0]?.i ?? -1;
+  return rand() < 0.5 ? Math.floor(rand() * p.cards.length) : -1;
 }

@@ -193,7 +193,8 @@ class Game {
   frozen = false; // galeri görseli çizilirken döngü ekrana dokunmaz
 
   loop(now: number) {
-    const dt = Math.min(1 / 20, (now - this.last) / 1000);
+    // rAF zaman damgası resume() içindeki performance.now()dan önce olabilir: adım asla negatif olmasın
+    const dt = Math.max(0, Math.min(1 / 20, (now - this.last) / 1000));
     this.last = now;
     if (this.frozen) {
       requestAnimationFrame((t) => this.loop(t));
@@ -549,6 +550,58 @@ if (import.meta.env.DEV) (window as unknown as { __cayci: unknown }).__cayci = {
       return s;
     } finally {
       Math.random = rand;
+    }
+  },
+  /** Hikâye dengesi: bot bütün kariyeri dedikodu satarak oynar (geçici kayıtla), vardiya vardiya özet döndürür. */
+  botCareer: (policy: BotPolicy, seed = 1, maxShifts = 30) => {
+    game.endRun();
+    const real = game.save;
+    const rand = Math.random;
+    const log: Record<string, unknown>[] = [];
+    game.save = defaultSave();
+    game.save.tutorialDone = true;
+    try {
+      let i = 0;
+      let cleared = false;
+      for (let n = 0; n < maxShifts; n++) {
+        const sd = seed * 1000 + n * 13;
+        const cfg: RunConfig = { ...game.runConfig(VENUES[i], 'career', sd), upgrades: new Set(), sensitivity: 1, quality: 'low', trayAssist: 'normal', camDist: 1 };
+        const rng = new Rng(sd * 7 + 3);
+        Math.random = () => rng.next();
+        const run = new Run(cfg, game.hud, () => {}, 16 / 9);
+        game.run = run;
+        game.state = 'overlay';
+        const s = playBot(run, policy, sd);
+        game.endRun();
+        const rep = applyRunToSave(game.save, VENUES[i], s);
+        const believed = liveEvidence(game.save) >= EVIDENCE_NEEDED && game.save.rep >= MEETING_REP;
+        log.push({
+          n: n + 1,
+          venue: VENUES[i].id,
+          score: s.score,
+          stars: rep.stars,
+          heard: s.heard.length,
+          asked: s.asked,
+          orders: `${s.ordersCompleted}/${s.ordersExpired}`,
+          sales: s.sales.map((x) => x.verdict[0]).join(''),
+          chases: s.chases,
+          caught: s.caught,
+          evidence: liveEvidence(game.save),
+          pocket: game.save.pocket.length,
+          rep: game.save.rep,
+          title: game.save.title,
+          believed,
+        });
+        if (i === VENUES.length - 1 && rep.stars >= 1) cleared = true;
+        if (cleared && believed) break;
+        // kariyer sırası; teras geçildikten sonra eksik kanıt için katları sırayla yeniden oyna
+        if (!cleared) i = rep.stars >= 1 ? i + 1 : i;
+        else i = (i + 1) % VENUES.length;
+      }
+      return log;
+    } finally {
+      Math.random = rand;
+      game.save = real;
     }
   },
   /** Tanıtım görseli için: mekânı aç, botla 'until' saniye oynat, sahneyi dondurmadan bırak. */

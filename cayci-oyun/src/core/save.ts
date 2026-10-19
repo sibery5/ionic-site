@@ -72,7 +72,7 @@ export function defaultSave(): SaveData {
     dailyDays: [],
     dailyBest: {},
     achievements: [],
-    totals: { delivered: 0, spins: 0, broken: 0, catTrips: 0, runs: 0, jarsLost: 0, vipPerfect: 0, sales: 0, lies: 0, escapes: 0, caught: 0, bonks: 0, betrayals: 0 },
+    totals: { delivered: 0, spins: 0, broken: 0, catTrips: 0, runs: 0, jarsLost: 0, vipPerfect: 0, sales: 0, lies: 0, escapes: 0, caught: 0, bonks: 0, betrayals: 0, inspectPassed: 0, bossBonks: 0, backfires: 0 },
     boards: {},
     playerName: lang === 'tr' ? 'Çırak' : 'Apprentice',
     tutorialDone: false,

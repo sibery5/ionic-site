@@ -28,4 +28,7 @@ api_name,name_tr,name_en,desc_tr,desc_en,hidden
 "BONK_1","Sabrın Sonu","Last Straw","Yolunu kesen birine tepsiyle vur","Bonk someone blocking your way with the tray","false"
 "BETRAY_1","Satılık Çaycı","Tea Boy for Sale","Bir kanıtı kötü adamlara sat","Sell a piece of evidence to the villains","false"
 "TITLE_BAS","Baş Çaycı","Head Tea Boy","Baş Çaycı unvanını al","Earn the Head Tea Boy title","false"
+"INSPECT_PASS","Göz Önünde","Under Watch","Nadir Bey'in teftişinden alnının akıyla çık","Pass one of Nadir Bey's inspections with flying colours","false"
+"BACKFIRE_1","Kulakları Çınladı","Ears Burning","Hakkında konuştuğun kişi duyup peşine düşsün","Get chased by the person you were gossiping about","false"
+"BOSS_BONK","Patrona Tepsi","Bonk the Boss","Teftişteki patronuna tepsiyle vur","Bonk your boss with the tray during an inspection","true"
 "END_SOLD","AVM Müdürü","Mall Manager","Selim'in teklifini kabul et","Accept Selim's offer","true"

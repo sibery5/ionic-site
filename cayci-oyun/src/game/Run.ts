@@ -198,6 +198,7 @@ export class Run {
       get time() {
         return run.time;
       },
+      duration: cfg.venue.duration,
       mode: cfg.mode,
       hud: this.hud,
       player: this.player,
@@ -238,6 +239,22 @@ export class Run {
       },
       shake: (v) => {
         run.shake = Math.max(run.shake, v);
+      },
+      spawnWalker: (look, speed) => {
+        if (!lv.npcPoints.length) return null;
+        const n = new Npc(run.grid, lv.npcPoints, run.rng, look, speed);
+        run.npcs.push(n);
+        run.scene.add(n.rig.root);
+        return n;
+      },
+      removeWalker: (n) => {
+        const i = run.npcs.indexOf(n);
+        if (i >= 0) run.npcs.splice(i, 1);
+        run.scene.remove(n.rig.root);
+      },
+      customerOf: (pid) => {
+        for (const c of run.customers.values()) if (c.office.pid === pid) return c;
+        return null;
       },
     });
 
@@ -542,7 +559,8 @@ export class Run {
     const topic = kind === 'normal' ? this.intrigue.askFor(office) : null;
     if (topic) kind = 'gossip';
     const count = kind === 'vip' ? this.rng.int(3, 4) : kind === 'rush' ? this.rng.int(1, 2) : this.rng.int(GREED.orderMin, GREED.orderMax);
-    const base = kind === 'vip' ? 30 : kind === 'rush' ? 15 : GREED.patience;
+    // dedikodu soran müşteri sohbet için daha uzun bekler
+    const base = kind === 'vip' ? 30 : kind === 'rush' ? 15 : kind === 'gossip' ? GREED.patience * 1.4 : GREED.patience;
     this.orders.set(office.id, {
       office: office.id,
       kind,

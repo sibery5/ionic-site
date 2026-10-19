@@ -117,6 +117,9 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
   save.totals.escapes += s.escapes;
   save.totals.caught += s.caught;
   save.totals.bonks += s.bonks;
+  save.totals.inspectPassed += s.inspectPassed;
+  save.totals.bossBonks += s.bossBonks;
+  save.totals.backfires += s.backfires;
 
   // XP, seviye, ödüller
   const levelBefore = levelFromXp(save.xp);

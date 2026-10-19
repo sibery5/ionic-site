@@ -17,6 +17,9 @@ export interface Totals {
   caught: number;
   bonks: number;
   betrayals: number;
+  inspectPassed: number;
+  bossBonks: number;
+  backfires: number;
 }
 
 export interface AchievementCtx {
@@ -71,6 +74,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'BONK_1', name: { tr: 'Sabrın Sonu', en: 'Last Straw' }, desc: { tr: 'Yolunu kesen birine tepsiyle vur', en: 'Bonk someone blocking your way with the tray' }, check: (c) => c.totals.bonks >= 1 },
   { id: 'BETRAY_1', name: { tr: 'Satılık Çaycı', en: 'Tea Boy for Sale' }, desc: { tr: 'Bir kanıtı kötü adamlara sat', en: 'Sell a piece of evidence to the villains' }, check: (c) => c.totals.betrayals >= 1 },
   { id: 'TITLE_BAS', name: { tr: 'Baş Çaycı', en: 'Head Tea Boy' }, desc: { tr: 'Baş Çaycı unvanını al', en: 'Earn the Head Tea Boy title' }, check: (c) => c.title >= 3 },
+  { id: 'INSPECT_PASS', name: { tr: 'Göz Önünde', en: 'Under Watch' }, desc: { tr: 'Nadir Bey\'in teftişinden alnının akıyla çık', en: "Pass one of Nadir Bey's inspections with flying colours" }, check: (c) => c.totals.inspectPassed >= 1 },
+  { id: 'BACKFIRE_1', name: { tr: 'Kulakları Çınladı', en: 'Ears Burning' }, desc: { tr: 'Hakkında konuştuğun kişi duyup peşine düşsün', en: 'Get chased by the person you were gossiping about' }, check: (c) => c.totals.backfires >= 1 },
+  { id: 'BOSS_BONK', name: { tr: 'Patrona Tepsi', en: 'Bonk the Boss' }, desc: { tr: 'Teftişteki patronuna tepsiyle vur', en: 'Bonk your boss with the tray during an inspection' }, check: (c) => c.totals.bossBonks >= 1 },
   { id: 'END_SOLD', name: { tr: 'AVM Müdürü', en: 'Mall Manager' }, desc: { tr: 'Selim\'in teklifini kabul et', en: "Accept Selim's offer" }, check: (c) => c.endings.includes('sold') },
 ];
 

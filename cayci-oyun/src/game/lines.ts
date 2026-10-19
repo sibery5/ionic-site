@@ -32,6 +32,16 @@ export const REACTION: Record<Verdict | 'dontKnow', Text[]> = {
   dontKnow: [T('Peki evlat, sağ ol çay için.', 'Alright kid, thanks for the tea.'), T('Kulağını açık tut.', 'Keep your ears open.')],
 };
 
+/** Doğru laf alan han tarafı "başka?" diye üsteler: aynı panelde bir laf daha satılabilir. */
+export const ASK_MORE = {
+  ask: [
+    T('Dur dur, başka ne biliyorsun? Anlat hepsini!', 'Wait, what else do you know? Tell me everything!'),
+    T('Bu iş büyük. Başka bir şey duydun mu?', 'This is big. Did you hear anything else?'),
+    T('Cemal, sende daha var, yüzünden anlıyorum.', 'Cemal, you know more, I can see it on your face.'),
+  ],
+  done: [T('Tamam, bu kadarı da yeter. Sağ ol evlat.', 'Alright, that is plenty. Thanks, kid.'), T('Peki peki, kulağın hep açık olsun.', 'Fine, fine. Keep those ears open.')],
+};
+
 export const CHASE = {
   shout: [T('DUR ORADA!', 'STOP RIGHT THERE!'), T('Yakalarsam görürsün!', 'Wait till I catch you!'), T('Gel buraya çaycı!', 'Come here, tea boy!')],
   caught: [T('Al sana! Bir daha laf taşıma!', 'Take that! No more gossip!'), T('Kavanozun da bende kalsın!', "I'm keeping your jar too!")],
@@ -72,3 +82,24 @@ export const SHIFT_START: { from: 'boss' | 'riza' | 'villain'; text: Text }[] = 
 
 /** Selim'in zaman zaman attığı teklif mesajı (kanıtlar birikince). */
 export const VILLAIN_OFFER = T('Duyduğun her şeyi bana getir, iki katını öderim. Kimse bilmez. — Selim', "Bring me everything you hear and I'll pay double. Nobody needs to know. — Selim");
+
+/** Patron teftişi: Nadir Bey bir süre katta dolaşır, gözünün önünde olanı tartar. */
+export const INSPECT = {
+  start: [
+    T('Kattayım. Bakalım bugün nasıl çalışıyorsun, Cemal.', "I'm on your floor. Let's see how you work today, Cemal."),
+    T('Teftiş! Ben buradayken tek damla dökülmeyecek.', 'Inspection! Not a single drop gets spilled while I am here.'),
+    T('Müşteriler şikâyet etmiş, kendim bakacağım. Geliyorum.', 'Customers complained. I will see for myself. Coming up.'),
+  ],
+  pass: T('Gördüm seni evlat, böyle devam. Kavanozuna bir şey bıraktım.', 'I saw you, kid. Keep it up. I left something in your jar.'),
+  ok: T('Fena değil. Ama senden daha iyisini bekliyorum.', 'Not bad. But I expect better from you.'),
+  fail: T('Bu ne dağınıklık Cemal? Bir dahaki teftişte böyle görmeyeyim.', 'What a mess, Cemal. I do not want to see this at the next inspection.'),
+  hitBoss: T('BANA MI VURDUN?! Maaşından 30₺ kestim. Bir daha olursa kapının önündesin!', 'YOU HIT ME?! 30₺ off your pay. One more time and you are out on the street!'),
+  bossOuch: [T('Benim kim olduğumu biliyor musun sen?!', 'Do you know who I am?!'), T('Gözlüğüm! Gözlüğüm nerede?!', 'My glasses! Where are my glasses?!')],
+};
+
+/** Dedikodunun geri tepmesi: hakkında konuşulan kişi aynı kattaysa duyar ve hesap sormaya gelir. */
+export const BACKFIRE = [
+  T('Benim hakkımda ne anlatıyormuşsun sen?!', 'What have you been saying about me?!'),
+  T('Duydum Cemal! Bütün kata benim lafımı yaymışsın!', 'I heard, Cemal! You told the whole floor about me!'),
+  T('Kulaklarım çınladı! Gel buraya bakayım!', 'My ears were burning! Come here!'),
+];

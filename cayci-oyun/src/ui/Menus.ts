@@ -135,7 +135,7 @@ export class Menus {
       if (getLang() === l) b.classList.add('active');
     }
     button(t('credits'), o.credits, lang, 'btn small');
-    h('div', 'version', 'v0.3', p);
+    h('div', 'version', 'v0.5', p);
   }
 
   // ---------------- kariyer haritası ----------------
@@ -234,6 +234,8 @@ export class Menus {
     if (s.chases) row(t('statChases'), `${s.chases} · ${t('statEscapes')} ${s.escapes} · ${t('statCaught')} ${s.caught}`);
     if (s.mode !== 'daily' && save.settings.trayAssist !== 'normal') row(t('trayAssist'), save.settings.trayAssist === 'easy' ? `${t('trayEasy')} ×0,8` : `${t('trayMaster')} ×1,25`);
     if (s.bonks) row(t('statBonks'), `${s.bonks}${s.fines ? ` (−${s.fines}₺)` : ''}`);
+    if (s.inspections) row(`👔 ${t('inspection')}`, s.bossBonks ? t('bossHit') : s.inspectPassed ? t('inspectPass') : '—');
+    if (s.backfires) row(`👂 ${t('statBackfires')}`, String(s.backfires));
     if (r.boardRank) row(t('rank'), `#${r.boardRank}`);
 
     const right = h('div', 'intro-box', '', cols);

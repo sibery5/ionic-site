@@ -57,6 +57,8 @@ export class Hud {
   private angerEl: HTMLElement;
   private angerFill: HTMLElement;
   private chaseEl: HTMLElement;
+  private inspectEl: HTMLElement;
+  private inspectKey = '';
   private lastTicketKey = '';
   private lastTrayKey = '';
   private speechTimer = 0;
@@ -96,6 +98,18 @@ export class Hud {
     this.angerEl = el('div', 'anger hidden', this.root, '<span class="anger-face">😤</span><div class="anger-bar"><div class="anger-fill"></div></div><span class="anger-label"></span>');
     this.angerFill = this.angerEl.querySelector('.anger-fill') as HTMLElement;
     this.chaseEl = el('div', 'chase-vignette hidden', this.root, '<div class="chase-label"></div>');
+    this.inspectEl = el('div', 'inspect hidden', this.root);
+  }
+
+  /** Patron teftişi rozeti: izliyor mu, kaç iyi kaç kötü gördü, kalan süre. */
+  inspect(v: { watching: boolean; good: number; bad: number; left: number } | null) {
+    const key = v ? `${v.watching}|${v.good}|${v.bad}|${Math.ceil(v.left)}` : '';
+    if (key === this.inspectKey) return;
+    this.inspectKey = key;
+    this.inspectEl.classList.toggle('hidden', !v);
+    if (!v) return;
+    this.inspectEl.classList.toggle('watching', v.watching);
+    this.inspectEl.innerHTML = `<span class="in-icon">👔</span><span class="in-text">${v.watching ? '👀 ' + t('inspectWatching') : t('inspectAround')}</span><span class="in-score">👍${v.good} 👎${v.bad}</span><span class="in-time">${Math.ceil(v.left)}</span>`;
   }
 
   /** "Dedikodu var mı?" seçim paneli. null: kapalı. */
@@ -106,7 +120,7 @@ export class Hud {
       return;
     }
     this.rumorEl.classList.remove('hidden');
-    const key = `${v.who}|${v.sel}|${v.cards.length}|${Math.ceil(v.timeLeft)}`;
+    const key = `${v.who}|${v.ask}|${v.sel}|${v.cards.length}|${Math.ceil(v.timeLeft)}`;
     if (key === this.rumorKey) return;
     this.rumorKey = key;
     const cards = v.cards
@@ -367,6 +381,7 @@ export class Hud {
     this.rumorPanel(null);
     this.anger(0, false);
     this.chase(null);
+    this.inspect(null);
     this.phoneEl.innerHTML = '';
   }
 }

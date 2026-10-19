@@ -484,7 +484,7 @@ kbd {
   text-shadow:
     0 3px 0 rgba(0, 0, 0, 0.5),
     0 0 18px rgba(0, 0, 0, 0.5);
-  animation: pop 1.6s ease-out forwards;
+  animation: toastpop 1.6s ease-out forwards;
 }
 .toast.good {
   color: #f2c230;
@@ -496,7 +496,7 @@ kbd {
   color: #fff3b8;
   font-size: 24px;
 }
-@keyframes pop {
+@keyframes toastpop {
   0% {
     transform: scale(0.6);
     opacity: 0;
@@ -1175,9 +1175,10 @@ kbd {
 }
 .rumor-panel {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  /* transform yok: 'pop' animasyonu transform'u ezer, ortalama margin ile */
+  inset: 0;
+  margin: auto;
+  height: fit-content;
   width: min(620px, calc(100% - 32px));
   max-height: 88vh;
   overflow-y: auto;
@@ -1520,4 +1521,36 @@ kbd {
 .small-note {
   font-size: 12px;
   margin: 2px 0 8px;
+}
+.inspect {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 24, 32, 0.78);
+  border: 1px solid rgba(233, 207, 122, 0.35);
+  color: #f3ead2;
+  padding: 5px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  pointer-events: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+.inspect.watching {
+  background: rgba(120, 30, 20, 0.85);
+  border-color: #ffcf5a;
+  animation: pulse 0.6s infinite alternate;
+}
+.in-icon {
+  font-size: 20px;
+}
+.in-score {
+  font-weight: bold;
+}
+.in-time {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }

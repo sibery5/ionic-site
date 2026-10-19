@@ -1,6 +1,6 @@
 # ÇAYCI — Don't Spill the Tea
 
-Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın altı katına çay yetiştirdiğin, fizik tabanlı bir risk-ödül ve dedikodu oyunu: çıraklıktan çay ocağının patronluğuna. Sürüm **0.4**.
+Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın altı katına çay yetiştirdiğin, fizik tabanlı bir risk-ödül ve dedikodu oyunu: çıraklıktan çay ocağının patronluğuna. Sürüm **0.5**.
 
 ![Ana menü](docs/gorseller/01-ana-menu.jpg)
 
@@ -13,11 +13,12 @@ Askılı çay tepsisiyle, tek damla dökmeden İstanbul'daki eski bir hanın alt
 Tepsiye istediğin kadar bardak koy: çok bardak çok bahşiş, ama tepsi ağırlaştıkça huysuzlaşır ve 6 bardaktan sonra kule başlar. Bahşişler tepsideki kavanozda durur, ancak ocağa dönünce kasaya geçer. Tepsi uçarsa kavanozdaki para da gider.
 
 - **Kariyer:** 6 mekân (Giriş Salonu → Zemin Kat → 1. Kat → 2. Kat → 3. Kat → Teras). Her mekânın kendi engeli (kalabalık, paspaslı ıslak zemin, açık/demli siparişler, kedi Paşa, elektrik kesintisi, rüzgâr), iki görevi, üç yıldızı ve yenilecek rakipleri var. Bir mekânda 1 yıldız sonrakini açar.
-- **Dedikodu ekonomisi:** VIP'ler ve memnun müşteriler kulağına laf fısıldar; hepsi cep defterine yazılır. Mor balonlu müşteri "dedikodu var mı?" diye sorar: doğru laf doğru kişiye bahşiş, itibar ve han tarafına kanıt getirir. Yalan, alakasız ya da kişinin kendisi hakkındaki laf ise bardak kırdırır ya da müşteriyi masasından kaldırıp seni kovalatır; Rıza Usta'nın ocağına kaçarsan kurtulursun. Kötü adamlar iki kat öder ama bu ihanettir.
+- **Dedikodu ekonomisi:** VIP'ler ve memnun müşteriler kulağına laf fısıldar; hepsi cep defterine yazılır. Mor balonlu müşteri "dedikodu var mı?" diye sorar: doğru laf doğru kişiye bahşiş, itibar ve han tarafına kanıt getirir. Han tarafı doğru lafı alınca "başka?" diye üsteler. Yalan, alakasız ya da kişinin kendisi hakkındaki laf ise bardak kırdırır ya da müşteriyi masasından kaldırıp seni kovalatır; hakkında konuştuğun kişi aynı kattaysa o da duyup peşine düşebilir. Rıza Usta'nın ocağına kaçarsan kurtulursun. Kötü adamlar iki kat öder ama bu ihanettir.
 - **Sinir ve tepsi:** Yolunu kesen, tepsine çarpan, ayağına dolanan oldukça sinir göstergen dolar; dolunca R ile tepsiyle vurursun. Patron Nadir Bey kameradan izliyor: telefonuna mesaj düşer, itibarın düşer, üçüncüsünde maaşından keser.
 - **Çaycının yükselişi:** Çırak → Ocakçı → Kat Çaycısı → Baş Çaycı → Han Çaycıbaşı → Çay Ocağı Patronu. Her terfi bir ara sahne ve maaş getirir. Terastaki han toplantısında kanıtlarınla gerçeği anlat, sus ya da Selim'in teklifini kabul et (4 son).
+- **Patron teftişi:** Ocakçı olduktan sonra vardiyaların çoğunda Nadir Bey 45 saniyeliğine bizzat kata çıkar. Gözünün önündeki kusursuz teslimleri ve kırılan bardakları sayar; iyi geçersen kavanoza bahşiş bırakır. Ona vurursan ayrı bir hikâye.
 - **Günlük Mücadele:** Her gün herkese aynı mekân ve aynı tohum, yükseltmeler kapalı.
-- **İlerleme:** XP ve 30 seviye, 6 unvan ve maaş, itibar, seviyeyle açılan kıyafetler (dolap), bahşişle alınan yükseltmeler (çarşı), her gün 3 yeni görev, 30 başarım, mekân ve gün başına yerel sıralama.
+- **İlerleme:** XP ve 30 seviye, 6 unvan ve maaş, itibar, seviyeyle açılan kıyafetler (dolap), bahşişle alınan yükseltmeler (çarşı), her gün 3 yeni görev, 33 başarım, mekân ve gün başına yerel sıralama.
 
 ## Çalıştırma
 
@@ -36,6 +37,7 @@ npm run dev        # tarayıcıda http://localhost:5173 açılır
 | `npm test` | Fizik, harita, ilerleme, görev, başarım ve sıralama birim testleri |
 | `npm run smoke` | Bütün kariyeri (6 mekân → han toplantısı → son), günlük mücadeleyi ve menüleri başsız tarayıcıda uçtan uca dener |
 | `npm run balance` | Denge botu her mekânda 5 farklı oyuncu tipiyle oynar, skor dağılımını ve görev tamamlanma oranlarını yazar |
+| `npm run story` | Bot bütün kariyeri dedikodu satarak oynar; kanıt, itibar ve unvanın vardiya vardiya ilerleyişini yazar |
 | `npm run shots` | Demo görsellerini `shots/` klasörüne çeker (`W=1920 H=1080 LANG_ID=en` ile mağaza boyutu ve İngilizce) |
 | `npm run steam:capsules` | Steam kapak görsellerini `steam/capsules/` içine çizer |
 | `npm run steam:kit` | Başarım listesini ve ikonlarını koddan üretir |

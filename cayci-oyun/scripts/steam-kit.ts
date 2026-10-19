@@ -8,7 +8,7 @@ const rows = ACHIEVEMENTS.map((a) => ({
   apiName: a.id,
   displayName: { turkish: a.name.tr, english: a.name.en },
   description: { turkish: a.desc.tr, english: a.desc.en },
-  hidden: a.id.startsWith('END_'), // son başarımları sürpriz kalsın
+  hidden: a.id.startsWith('END_') || a.id === 'BOSS_BONK', // sonlar ve patrona vurmak sürpriz kalsın
   icon: `steam/achievement-icons/${a.id}.png`,
 }));
 writeFileSync('steam/achievements.json', JSON.stringify(rows, null, 2) + '\n');

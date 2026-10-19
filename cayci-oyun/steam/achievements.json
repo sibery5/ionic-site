@@ -377,6 +377,45 @@
     "icon": "steam/achievement-icons/TITLE_BAS.png"
   },
   {
+    "apiName": "INSPECT_PASS",
+    "displayName": {
+      "turkish": "Göz Önünde",
+      "english": "Under Watch"
+    },
+    "description": {
+      "turkish": "Nadir Bey'in teftişinden alnının akıyla çık",
+      "english": "Pass one of Nadir Bey's inspections with flying colours"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/INSPECT_PASS.png"
+  },
+  {
+    "apiName": "BACKFIRE_1",
+    "displayName": {
+      "turkish": "Kulakları Çınladı",
+      "english": "Ears Burning"
+    },
+    "description": {
+      "turkish": "Hakkında konuştuğun kişi duyup peşine düşsün",
+      "english": "Get chased by the person you were gossiping about"
+    },
+    "hidden": false,
+    "icon": "steam/achievement-icons/BACKFIRE_1.png"
+  },
+  {
+    "apiName": "BOSS_BONK",
+    "displayName": {
+      "turkish": "Patrona Tepsi",
+      "english": "Bonk the Boss"
+    },
+    "description": {
+      "turkish": "Teftişteki patronuna tepsiyle vur",
+      "english": "Bonk your boss with the tray during an inspection"
+    },
+    "hidden": true,
+    "icon": "steam/achievement-icons/BOSS_BONK.png"
+  },
+  {
     "apiName": "END_SOLD",
     "displayName": {
       "turkish": "AVM Müdürü",
