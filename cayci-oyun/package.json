@@ -1,6 +1,6 @@
 {
   "name": "cayci",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "ÇAYCI: Don't Spill the Tea — askılı çay tepsisiyle fizik tabanlı komedi oyunu",
   "type": "module",
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "shots": "node scripts/demo.mjs",
+    "shots": "node scripts/screens.mjs",
     "smoke": "node scripts/flow.mjs",
     "tune": "tsx scripts/tune.ts",
     "tune:greed": "tsx scripts/greed-tune.ts",

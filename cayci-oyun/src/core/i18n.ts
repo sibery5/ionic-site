@@ -6,7 +6,7 @@ const UI = {
   subtitle: { tr: "Don't Spill the Tea", en: "Don't Spill the Tea" },
   tagline: { tr: 'Askılı tepsiyle, tek damla dökmeden.', en: 'One hanging tray. Not a single drop.' },
   career: { tr: 'Kariyer', en: 'Career' },
-  careerSub: { tr: 'Hanın altı katı, tek hikâye', en: 'Six floors of the han, one story' },
+  careerSub: { tr: 'Hanın yedi katı, tek hikâye', en: 'Seven floors of the han, one story' },
   daily: { tr: 'Günlük Mücadele', en: 'Daily Challenge' },
   dailyInfo: {
     tr: 'Bugünün katı ve siparişleri herkes için aynı. Yükseltmeler kapalı: sadece beceri.',

@@ -19,9 +19,9 @@ const POLICIES = {
   kosucu: { greed: 4, spin: true, timingError: 0.05, careful: true, run: true },
 };
 const SEEDS = (process.env.SEEDS || '11,22,33').split(',').map(Number);
-const only = process.argv[2] !== undefined ? [Number(process.argv[2])] : [0, 1, 2, 3, 4, 5];
+const only = process.argv[2] !== undefined ? [Number(process.argv[2])] : null;
 const venues = await page.evaluate(async () => (await import('/src/game/venues.ts')).VENUES.map((v) => ({ id: v.id, stars: v.stars, rivals: v.rivals, objectives: v.objectives })));
-for (const i of only) {
+for (const i of only ?? venues.map((_, k) => k)) {
   const v = venues[i];
   console.log(`\n== ${v.id}  yıldız ${v.stars.join('/')}  rakipler ${v.rivals.map((r) => r.score).join('/')}`);
   const all = [];

@@ -2,7 +2,7 @@ import { ARENA, LEVELS, LevelDef } from './levels';
 import { ARENA_OFFICES, DAYS, Office, Text } from './story';
 import type { RunStats } from '../meta/stats';
 
-// Kariyer: hanın altı mekânı. Her biri kendi kuralı, iki özel görevi, yıldız hedefleri ve rakipleriyle.
+// Kariyer: hanın yedi mekânı. Her biri kendi kuralı, iki özel görevi, yıldız hedefleri ve rakipleriyle.
 
 export type ObjectiveKind = 'towerDelivery' | 'spins' | 'delivered' | 'noJarLost' | 'colored' | 'noSlip' | 'noCatTrip' | 'combo' | 'vipPerfect' | 'bankOnce';
 

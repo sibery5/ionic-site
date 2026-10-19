@@ -1,5 +1,5 @@
 # ÇAYCI — Don't Spill the Tea
-## Oyun Tasarım Belgesi (GDD) · sürüm 0.5
+## Oyun Tasarım Belgesi (GDD) · sürüm 0.6
 
 > Askılı çay tepsisini sallayarak, tek damla dökmeden İstanbul'un en kaotik iş hanına çay yetiştir.
 
@@ -53,7 +53,7 @@ Zorluk eğrisi (`npm run tune:greed`, 0.3 fiziğiyle): 3 bardak normal yürüyü
 | Gerilim | Kavanoz: bahşiş ancak ocakta kasaya geçer. Kule: 6 bardaktan sonra üst kat. Son 20 saniye "çay saati": siparişler iki kat sık, bahşiş ×1,5, müzik hızlanır. |
 | Karar | Kaç bardak? Bir tur daha mı, ocağa dönüp bozdurmak mı? VIP mi, acele sipariş mi? Fırıldak riskine girmeli mi? |
 | Ustalık | Gerçek sarkaç: yumuşak kalkış, yavaş dönüş, parmak ucu. Fırıldak zamanlaması. Islak zeminde ve kedi yakınken parmak ucu. |
-| Süreklilik | 6 mekânlı kariyer; her mekânda 3 yıldız, 2 görev ve 3 rakip. Bir yıldız sonrakini açar. |
+| Süreklilik | 7 mekânlı kariyer (0.6 ile Bodrum eklendi); her mekânda 3 yıldız, 2 görev ve 3 rakip. Bir yıldız sonrakini açar. |
 | Hikâye | Rıza Usta'nın notları, VIP müşterilerin anlattığı 12 dedikodu, terasta han toplantısı ve 3 son. |
 | Her gün dönmek | Günlük Mücadele (herkese aynı tohum) ve her gün 3 yeni görev. 7 farklı gün tamamlanınca başarım. |
 | Bağlanma | Cemal'in dolabı (5 tepsi, 5 yelek, 5 şapka, 3 bardak; seviyeyle açılır), rütbeler (Çırak → Efsane Çaycı), mekân başına yerel sıralama ve geçilecek han sakinleri. |
@@ -214,6 +214,35 @@ Bir lafı (doğru kişiye ya da kötü adama) satınca, lafın hakkında olduğu
 
 Göz Önünde (teftişten geç), Kulakları Çınladı (geri tepme), Patrona Tepsi (gizli). Toplam 33.
 
+## 1.9 Sürüm 0.6: akıcılık, kendi simgeleri, bodrum, seçimler, Sonsuz Vardiya
+
+İstek: oyun kasıyor/donuyor; senaryo daha tutarlı, heyecanlı ve sürükleyici olsun; yeni harita, hikâye, seçenek, mod ve görev gelsin; kaydırma çubuğu özelleşsin; **hazır simge (emoji, yazı tipi simgesi) hiç kullanılmasın**.
+
+### Akıcılık
+Ölçüm (`scripts/dev/perf.mjs`): CPU tarafı kare başına 1–2 ms; darboğaz çizim. Varsayılan kalite "Yüksek" ekranı 2 kat çözünürlükte, ışıma ve yumuşak gölgeyle çiziyordu; sahnede ~720 ayrı parça, gölge geçişiyle 700+ çizim çağrısı vardı.
+- Sabit parçalar ve karakter eklemleri malzemeye göre birleştirilir (`src/world/bake.ts`): ~720 → ~360 parça.
+- Varsayılan kalite Orta. Yüksekte çözünürlük en fazla 1,5 kat, ışıma yarım çözünürlükte, MSAA 2. Son işlem sadece yüksekte; kenar karartma CSS katmanı.
+- Yayında `preserveDrawingBuffer` kapalı, gölgeler PCF (yumuşak değil).
+- **Otomatik kalite**: 2,5 sn'lik pencerede kare hızı 40'ın altındaysa Yüksek → Orta → Düşük → çözünürlük %60'a kadar iner. Ayarlardan kapatılabilir, FPS göstergesi açılabilir.
+- Mekân ve sahne açılırken bütün malzemeler önceden derlenir (oyunun ortasında takılma olmasın).
+- 3. katta masa ışıkları orta ve düşükte yere düşen sahte ışık halkası (her gerçek ışık her pikselin maliyetini artırır).
+Başsız tarayıcıda (yazılım çizimi) Orta kalite eski varsayılana göre kare başına ~2 kat hızlı. Gerçek ekran kartında ölçülmedi.
+
+### Kendi simge seti (`src/ui/icons.ts`)
+50 simge, 24×24 ızgarada elle yazılmış SVG yollarıyla çizildi; aynı çizim arayüzde SVG, 3B sahnedeki sipariş balonlarında canvas (Path2D) olarak kullanılır. Bütün emoji ve yazı tipi simgeleri kaldırıldı; Steam başarım ikonları da bu simgelerle üretilir (`scripts/achievement-icons.mjs`). Kaydırma çubuğu çay bardağı renginde.
+
+### Bodrum: Arşiv (yeni mekân, 3. kat ile teras arası)
+Tuğla duvar, ıslak taş zemin, tavanda paslı borular. Kural: borular 3,5–6,5 sn'de bir damlatır, yerde su birikintisi büyür (kaygan). Kişiler: Arşivci Saadet (han tarafı; tapu ve rapor merak eder), Bekçi Remzi (tarafsız; yalan "hayalet" fısıltısı), Kâtip Cevdet (kötü adam). 3 yeni hikâye kanıtı (vakıf tapusu, Remzi'nin gece gördüğü, Cevdet'in rüşvet telefonu). Eski kayıtlarda oynanmış teras kapanmaz.
+
+### Seçimler
+Ara sahnelerde 1–3 tuşu ya da tıklamayla seçilir, seçenekler replik yazılıp bitince belirir, seçim beklenirken sahne atlanamaz. Seçimler kayda bayrak olarak yazılır (`save.flags`), itibar/cüzdan/kanıta hemen işler ve sonraki sahnelerdeki replikleri değiştirir (terfi sahnesi, bodrum, han toplantısı, Patron Cemal sonu).
+
+### Sonsuz Vardiya (yeni mod)
+Süre yok, 3 can. Kaçan sipariş ve düşen kavanoz can götürür. Siparişler zamanla sıklaşır (×2,5'e kadar), sabır %55'e kadar düşer, her 90 sn'nin son 20'si çay saati. Açık her katta oynanır; kendi sıralaması var (`endless-<mekân>`), kariyer rekorunu ve yıldızları etkilemez.
+
+### Yeni görevler ve başarım
+Günlük görevlere: doğru dedikoduyu sat, kovalamacadan ocağa kaç, Sonsuz Vardiya'da N saniye dayan. Başarım: Demir Tepsi (Sonsuz Vardiya'da 5 dakika). Toplam 34.
+
 ## 2. Kurgu
 
 ### Mekân
@@ -238,17 +267,26 @@ Göz Önünde (teftişten geç), Kulakları Çınladı (geri tepme), Patrona Tep
 | 4 | 3. kat | KriptoBey A.Ş., Emlakçı Turgut, Mimar Defne | Elektrik kesintisi (karanlık) |
 | 5 | Teras | Nadir Bey ve misafirleri | Rüzgâr + hepsi |
 
-### Ana hikâye
-Rıza Usta emekli olurken askılı tepsisini ve tek kuralını bırakır: **"Çayı dökme, lafı dökme."**
-Cemal kusursuz çay götürdükçe ofislerdeki konuşmaları duyar ve **dedikodu kartları** toplar (günde 2-3, toplam 12; iyi son için 10 gerekir). Kartlar birleşince sır ortaya çıkar: Selim, Emlakçı Turgut ve bir AVM şirketiyle anlaşmış, Nadir Bey'e sahte bir "çürük bina" raporu imzalatmak üzere.
+### Ana hikâye (0.6 ile güncel)
+Rıza Usta emekli olurken askılı tepsisini ve tek kuralını bırakır: **"Çayı dökme, lafı dökme."** Nadir Bey'in yeğeni Selim, Emlakçı Turgut ve Gökdelen Yapı hanı satın alıp yıkmak için Nadir Bey'e sahte bir "bina çürük" raporu imzalatmaya çalışır.
 
-5. günün sonunda terasta han toplantısı yapılır. Oyuncu seçer:
-
-| Seçim | Koşul | Son |
+| Bölüm | Mekân | Ne olur |
 |---|---|---|
-| **Çayı dök** (dedikoduyu anlat) | 10+ kart | **Han kurtulur.** Nadir Bey Cemal'i "Han Ustası" ilan eder. |
-| **Çayı dök** | 10'dan az kart | **Kimse inanmaz.** Cemal "dedikoducu çırak" olur, han satılır. Komik-hüzünlü son. |
-| **Sus** | — | **Han satılır.** Cemal Karaköy vapurunda kendi çay ocağını açar. Tatlı-acı son. |
+| Ocağın başında | Giriş Salonu | Rıza Usta tepsiyi verir (sahne). |
+| İlk laflar | Zemin Kat, 1. Kat | Hayri, Sevim, Ferhat: Selim'in tapuyu soruşturduğu, sahte vekâlet randevusu. |
+| Paşa ve fotoğraf | 2. Kat | Lale, Selim ile Turgut'u gece ölçü alırken çekmiş. |
+| Karanlık ofis | 3. Kat | Selim zarf uzatır: **seçim** (al / geri çevir / alıp Rıza'ya götür). |
+| Kayıp tapu | Bodrum: Arşiv | Han vakıf malıdır; asıl tapu Saadet Hanım'da. Kâtip Cevdet tapuyu "kaybetmek" için Turgut'tan rüşvet alır. **Seçim**: tapuyu Rıfat'a götür / dolapta kalsın / Selim'e sat. |
+| Han toplantısı | Teras | Toplantı sahnesi önceki seçimlere göre değişir, sonra son seçim. |
+
+Kanıt: doğru dedikodu han tarafından birine ulaşınca 1 kanıt. Selim'in zarfını Rıza'ya götürmek ve tapuyu Rıfat'a teslim etmek de birer kanıt sayılır; tapuyu Selim'e satmak o kanıtı yakar. Toplantıda inanılmak için 6 kanıt ve 35 itibar gerekir.
+
+| Son | Koşul |
+|---|---|
+| **Patron Cemal** | Gerçeği anlat, 6+ kanıt ve 35+ itibar. Nadir Bey ocağın anahtarını verir. |
+| **Kimse İnanmadı** | Gerçeği anlat ama kanıt ya da itibar yetmez. |
+| **Susmak Altın** | Sus; han satılır. |
+| **AVM Müdürü** | Selim'in 500₺'lik teklifini kabul et. |
 
 Ton: sevgi dolu komedi. Çaycı alay konusu değil, binanın en becerikli kahramanı.
 
@@ -317,7 +355,7 @@ Ocağın yanında E (demli) ya da Q (açık) basılı tutuldukça tepsiye birer 
 ### 3.7 Modlar
 | Mod | İçerik |
 |---|---|
-| Kariyer | 6 mekân, yıldızlar, görevler, rakipler, dedikodular, han toplantısı ve 3 son |
+| Kariyer | 7 mekân, yıldızlar, görevler, rakipler, dedikodular, seçimler, han toplantısı ve 4 son |
 | Günlük Mücadele | Tarihe göre sabit mekân ve tohum: herkes aynı siparişleri alır, yükseltmeler kapalı. Günün en iyi skoru ve sıralaması tutulur |
 
 ### 3.8 Engeller
@@ -423,6 +461,8 @@ desktop/             Electron sarmalayıcı (Steam sürümü)
 | 0.1 | 5 gün, tüm engeller, sipariş/bahşiş, dedikodu ve 3 son, dükkân, Serbest Vardiya, Günlük Mücadele, TR/EN, sentez ses ve müzik |
 | 0.2 | Açgözlü Çaycı: kavanoz, kule, tek tuş Fırıldak |
 | 0.3 | 6 mekânlı kariyer, görevler ve yıldızlar, günlük görevler, 21 başarım, XP/seviye/rütbe, dolap, çarşı, yerel sıralama ve rakipler, yeni karakter modelleri, oyun kolu, grafik kalitesi, Steam köprüsü (başarım, bulut, oyuncu adı), mağaza kiti, bot ile denge |
-| 0.4 (bu sürüm) | Dedikodu ekonomisi, kovalama, sinir ve tepsiyle vurma, patron mesajları, unvanlar ve maaş, itibar, 8 ara sahne, yeni son, yeni dekor, son işlem, tepsi zorluğu |
+| 0.4 | Dedikodu ekonomisi, kovalama, sinir ve tepsiyle vurma, patron mesajları, unvanlar ve maaş, itibar, 8 ara sahne, yeni son, yeni dekor, son işlem, tepsi zorluğu |
+| 0.5 | Patron teftişi, dedikodunun geri tepmesi, "başka?" zinciri, dedikodu oynayan bot ve hikâye dengesi ölçümü, 33 başarım |
+| 0.6 (bu sürüm) | Takılma düzeltmeleri ve otomatik kalite, oyunun kendi simge seti, özel kaydırma çubuğu, Bodrum: Arşiv mekânı ve kayıp tapu bölümü, ara sahnelerde seçimler, Sonsuz Vardiya, yeni görevler, 34 başarım, tek dosyalık oyun (oyna/CAYCI.html) |
 | 1.0 (Steam) | Gerçek oyuncu testi ve denge, Electron paketinin kendi bilgisayarında denenmesi, çevrimiçi sıralama (Greenworks ya da küçük sunucu), fragman |
 | 1.1 | **Çay Ocağı co-op:** 2-4 kişi online, biri demler diğerleri dağıtır, yakınlık sesli sohbeti |

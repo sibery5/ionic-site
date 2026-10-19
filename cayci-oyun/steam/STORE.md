@@ -5,9 +5,9 @@ Bu klasördeki her şey Steamworks paneline girilecek malzemedir. Görseller ve 
 | Dosya | Ne işe yarar | Nasıl yeniden üretilir |
 |---|---|---|
 | `capsules/*.png` | Mağaza ve kütüphane kapakları (Steam'in istediği boyutlarda) | `node scripts/capsules.mjs` |
-| `screenshots/tr/*.png`, `screenshots/en/*.png` | 1920×1080 mağaza ekran görüntüleri | `W=1920 H=1080 node scripts/demo.mjs` |
-| `achievements.json` / `achievements.csv` | 33 başarım (API adları koddakiyle birebir aynı) | `npx tsx scripts/steam-kit.ts` |
-| `achievement-icons/*.png` | Başarım ikonları, 256×256, açık ve `_locked` sürümü | `python3 scripts/achievement-icons.py` |
+| `screenshots/tr/*.jpg`, `screenshots/en/*.jpg` | 1920×1080 mağaza ekran görüntüleri (17 adet) | `OUT=steam/screenshots/tr W=1920 H=1080 LANG_ID=tr node scripts/screens.mjs` |
+| `achievements.json` / `achievements.csv` | 34 başarım (API adları koddakiyle birebir aynı) | `npx tsx scripts/steam-kit.ts` |
+| `achievement-icons/*.png` | Başarım ikonları, 256×256, açık ve `_locked` sürümü; oyunun kendi simgeleriyle çizilir | `node scripts/achievement-icons.mjs` |
 
 Kapak boyutları: header 920×430, small 462×174, main 1232×706, vertical 748×896, library capsule 600×900, library hero 3840×1240 (yazısız), library logo 1280×720 (şeffaf PNG).
 
@@ -23,7 +23,7 @@ Kapak boyutları: header 920×430, small 462×174, main 1232×706, vertical 748�
 
 **Askılı tepsiyle, tek damla dökmeden.**
 
-Rıza Usta kırk yıl bu tepsiyle çay taşıdı, şimdi tepsiyi sana bırakıyor. Han altı kat: giriş salonu, kalabalık zemin kat, Gülsüm Abla'nın sildiği ıslak koridorlar, ayağına dolanan han kedisi Paşa, elektriği kesilen üçüncü kat ve rüzgârlı teras. Bir de hanı satın alıp yerine otopark yapmak isteyen bir şirket var. Doğru siparişleri götürürsen müşteriler konuşur, dedikoduları toplarsın ve hanın kaderine sen karar verirsin.
+Rıza Usta kırk yıl bu tepsiyle çay taşıdı, şimdi tepsiyi sana bırakıyor. Han yedi kat: giriş salonu, kalabalık zemin kat, Gülsüm Abla'nın sildiği ıslak koridorlar, ayağına dolanan han kedisi Paşa, elektriği kesilen üçüncü kat, boruları damlayan bodrum arşivi ve rüzgârlı teras. Bir de hanı satın alıp yerine otopark yapmak isteyen bir şirket var. Doğru siparişleri götürürsen müşteriler konuşur, dedikoduları toplarsın ve hanın kaderine sen karar verirsin.
 
 - **Gerçek sarkaç fiziği.** Tepsi elinde sallanır, çay bardakta dalgalanır. Ani duruş döker, yumuşak kalkış korur. Hiçbir şey hazır animasyon değil.
 - **Açgözlülük döngüsü.** Bahşişler tepsideki kavanoza girer, ancak ocağa dönünce kasaya geçer. Bir tur daha mı, yoksa şimdi bozdurmak mı?
@@ -33,16 +33,18 @@ Rıza Usta kırk yıl bu tepsiyle çay taşıdı, şimdi tepsiyi sana bırakıyo
 - **Patron teftişi.** Nadir Bey bazen bizzat kata çıkar ve her bardağı izler. Gözünün önünde kusursuz çalış... ve sakın ona vurma.
 - **Çaycının yükselişi.** Çıraktan patrona altı unvan, ara sahneler, maaş, itibar ve dört farklı son.
 - **Kule.** 6 bardaktan sonra ara tepsiyle ikinci kat başlar. Parmak ucunda yürü, yavaş dön, nefesini tut.
-- **6 mekânlı kariyer.** Her katın kendi engeli, iki görevi, üç yıldızı ve yenmen gereken rakipleri var.
+- **Seçimlerin bir bedeli var.** Selim'in zarfını al ya da geri çevir; hanın vakıf tapusunu avukata götür ya da sat. Han toplantısı senin kararlarına göre değişir.
+- **Sonsuz Vardiya.** Süre yok, üç can, giderek hızlanan siparişler. Ne kadar dayanabilirsin?
+- **7 mekânlı kariyer.** Her katın kendi engeli, iki görevi, üç yıldızı ve yenmen gereken rakipleri var.
 - **Günlük Mücadele.** Herkes aynı gün aynı vardiyayı oynar. Her gün üç yeni görev ve ödülleri.
-- **33 başarım, 30 seviye, unvanlar ve dolap.** Fes, kasket, aşçı şapkası, bakır ve laleli tepsiler, yaldızlı bardaklar.
+- **34 başarım, 30 seviye, unvanlar ve dolap.** Fes, kasket, aşçı şapkası, bakır ve laleli tepsiler, yaldızlı bardaklar.
 - **İki dil.** Türkçe ve İngilizce arayüz.
 
 ## Long description (EN)
 
 **A hanging tray. Not a single drop.**
 
-Master Rıza carried tea on this tray for forty years, and now he is handing it to you. Six floors: the entrance hall, the crowded ground floor, wet corridors freshly mopped by Gülsüm, Paşa the han cat weaving between your feet, a third floor with a blown fuse and a windy rooftop terrace. And a company that wants to buy the han and turn it into a parking lot. Serve the right orders, the customers start talking, you collect the gossip, and you decide the fate of the han.
+Master Rıza carried tea on this tray for forty years, and now he is handing it to you. Seven floors: the entrance hall, the crowded ground floor, wet corridors freshly mopped by Gülsüm, Paşa the han cat weaving between your feet, a third floor with a blown fuse, a basement archive with leaking pipes and a windy rooftop terrace. And a company that wants to buy the han and turn it into a parking lot. Serve the right orders, the customers start talking, you collect the gossip, and you decide the fate of the han.
 
 - **Real pendulum physics.** The tray swings in your hand and the tea sloshes in the glass. Sudden stops spill, gentle starts save you. Nothing is canned animation.
 - **A greed loop.** Tips go into the jar on your tray and are only banked back at the stove. One more round, or cash in now?
@@ -52,9 +54,11 @@ Master Rıza carried tea on this tray for forty years, and now he is handing it 
 - **The inspection.** Sometimes Nadir Bey walks the floor in person and watches every glass. Work flawlessly under his nose... and do not bonk him.
 - **The rise of a tea boy.** Six titles from apprentice to boss, cutscenes, salary, reputation and four different endings.
 - **Towers.** After 6 glasses a second layer goes on a plate. Tiptoe, turn slowly, hold your breath.
-- **A 6-venue career.** Every floor has its own hazard, two objectives, three stars and rivals to beat.
+- **Choices with consequences.** Take Selim's envelope or refuse it; hand the han's foundation deed to the lawyer or sell it. The han meeting changes with your decisions.
+- **Endless Shift.** No clock, three lives, ever faster orders. How long can you last?
+- **A 7-venue career.** Every floor has its own hazard, two objectives, three stars and rivals to beat.
 - **Daily Challenge.** Everyone plays the same shift on the same day. Three new daily missions with rewards.
-- **33 achievements, 30 levels, titles and a wardrobe.** Fez, flat cap, chef hat, copper and tulip trays, gilded glasses.
+- **34 achievements, 30 levels, titles and a wardrobe.** Fez, flat cap, chef hat, copper and tulip trays, gilded glasses.
 - **Two languages.** Turkish and English interface.
 
 ## Etiketler (Steam tags)
@@ -79,7 +83,7 @@ Gerçek bir donanımda ölçülmedi. Ayarlar menüsündeki "Düşük" grafik kal
 
 ## Steamworks ayarları
 
-- **Başarımlar:** `achievements.csv` içindeki 33 satır. API adı (`FIRST_TEA` vb.) oyun koduyla birebir aynı olmalı. `END_*` ve `BOSS_BONK` başarımları gizli (sürpriz) işaretlenmeli.
+- **Başarımlar:** `achievements.csv` içindeki 34 satır. API adı (`FIRST_TEA` vb.) oyun koduyla birebir aynı olmalı. `END_*` ve `BOSS_BONK` başarımları gizli (sürpriz) işaretlenmeli.
 - **Steam Cloud:** "Steam Cloud" açılmalı, dosya `cayci-save.json`, kota 1 MB, 1 dosya. Masaüstü sarmalayıcı açılışta buluttaki kaydı okur ve yereldeki kayıttan daha ilerideyse (daha çok XP) onu kullanır.
 - **Oyun kolu:** Xbox düzeni (A teslim/demli, X açık çay, B Fırıldak, Y tepsiyi kaldır, LB parmak ucu, RB koşu, Start duraklat). Steam'de "kısmi destek" olarak işaretlenmeli. Steam Deck'te denenmedi.
 - **Diller:** Türkçe ve İngilizce arayüz (seslendirme yok; karakterler anlamsız mırıltıyla konuşur).
