@@ -297,13 +297,29 @@ class Game {
     // önceki sahne hâlâ açıksa kapat; bitince yalnızca kendi sahnesini kapatsın
     this.cutscene?.dispose();
     this.state = 'cutscene';
-    const cs: Cutscene = new Cutscene(def, document.getElementById('app')!, this.save.look, window.innerWidth / window.innerHeight, () => {
-      if (this.cutscene !== cs) return;
-      cs.dispose();
-      this.cutscene = null;
-      this.state = 'overlay';
-      then();
-    });
+    const cs: Cutscene = new Cutscene(
+      def,
+      document.getElementById('app')!,
+      this.save.look,
+      window.innerWidth / window.innerHeight,
+      () => {
+        if (this.cutscene !== cs) return;
+        cs.dispose();
+        this.cutscene = null;
+        this.state = 'overlay';
+        then();
+      },
+      {
+        flags: this.save.flags,
+        // seçimin bedeli ya da ödülü hemen kayda işlenir
+        onChoice: (c) => {
+          if (c.rep) this.save.rep = Math.max(0, Math.min(100, this.save.rep + c.rep));
+          if (c.wallet) this.save.wallet += c.wallet;
+          if (c.flag === 'soldDeed' && !this.save.burned.includes('saadet_vakif')) this.save.burned.push('saadet_vakif');
+          this.persist();
+        },
+      },
+    );
     this.cutscene = cs;
     this.prewarm(cs.scene, cs.camera);
   }
@@ -366,6 +382,7 @@ class Game {
     // hikâye: ilk vardiyadan önce Rıza Usta, 3. kata ilk çıkışta Selim
     if (mode === 'career' && index === 0 && !this.save.scenes.includes('intro')) return this.playScene('intro', () => this.venueIntro(index, mode));
     if (mode === 'career' && v.id === 'kat3' && !this.save.scenes.includes('villain')) return this.playScene('villain', () => this.venueIntro(index, mode));
+    if (mode === 'career' && v.id === 'bodrum' && !this.save.scenes.includes('bodrum')) return this.playScene('bodrum', () => this.venueIntro(index, mode));
     this.menus.venueIntro(v, this.save, mode, () => this.startRun(index, mode), () => (mode === 'daily' ? this.showTitle() : this.careerMap()));
   }
 

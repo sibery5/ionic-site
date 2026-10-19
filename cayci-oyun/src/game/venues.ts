@@ -17,6 +17,8 @@ export interface VenueRules {
   dark: boolean;
   wind: boolean;
   cat: boolean;
+  /** bodrum: tavandaki borular damlatır, yerde su birikintileri çıkar */
+  leak?: boolean;
 }
 
 export interface Venue {
@@ -148,6 +150,29 @@ export const VENUES: Venue[] = [
     rivals: [
       { name: 'Turgut', score: 30 },
       { name: 'Mimar Defne', score: 55 },
+      { name: 'Rıza Usta', score: 125 },
+    ],
+  },
+  {
+    id: 'bodrum',
+    level: LEVELS[5],
+    offices: DAYS[5].offices,
+    name: { tr: 'Bodrum: Arşiv', en: 'Basement: Archive' },
+    obstacle: { tr: 'Sızdıran borular, kaygan zemin', en: 'Leaking pipes, slippery floor' },
+    note: {
+      tr: 'Toplantıdan önce bir iş daha var evlat. Hanın asıl tapusu bodrumdaki arşivde; Saadet Hanım saklıyor. Ama Kâtip Cevdet de orada ve Selim\'in adamı. Borular damlatıyor, yer göl olur: ıslak yerde parmak ucunda yürü. Bekçi Remzi gece bir şey görmüş, VIP siparişini eksiksiz götür. — Rıza Usta',
+      en: "One more job before the meeting, kid. The han's original deed is in the basement archive; Mrs. Saadet keeps it. But Cevdet the clerk is down there too, and he is Selim's man. The pipes drip and the floor turns into a pond: tiptoe on the wet spots. Remzi the watchman saw something at night; serve his whole VIP order. — Master Rıza",
+    },
+    duration: 110,
+    stars: [30, 65, 110],
+    rules: R(true, { leak: true }),
+    objectives: [
+      { kind: 'vipPerfect', target: 1 },
+      { kind: 'noSlip', target: 1 },
+    ],
+    rivals: [
+      { name: 'Kâtip Cevdet', score: 30 },
+      { name: 'Bekçi Remzi', score: 55 },
       { name: 'Rıza Usta', score: 125 },
     ],
   },

@@ -6,7 +6,7 @@ import { Grid } from '../physics/grid';
 import type { LevelDef } from '../game/levels';
 import type { Office } from '../game/story';
 import { tx, getLang } from '../core/i18n';
-import { floorTexture, plasterTexture, signTexture, wetSignTexture } from './textures';
+import { brickTexture, floorTexture, plasterTexture, signTexture, wetSignTexture } from './textures';
 import {
   makeCabinet,
   makeCafeTable,
@@ -41,6 +41,8 @@ export interface BuiltLevel {
   size: { w: number; d: number };
   /** dönen süsler (vantilatör pervaneleri, saat yelkovanı) */
   spinners: { obj: THREE.Object3D; speed: number }[];
+  /** bodrum: damlayan boru noktaları (yerde su birikir) */
+  leaks: THREE.Vector3[];
 }
 
 const DIRS: [number, number][] = [
@@ -56,6 +58,8 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
   const W = lv.w * CELL;
   const D = lv.h * CELL;
   const teras = def.theme === 'teras';
+  const leaks: THREE.Vector3[] = [];
+  const desks = new Map<string, DeskInfo>();
 
   // zemin
   const ft = floorTexture(def.theme);
@@ -100,8 +104,10 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
     });
     group.add(post);
   } else {
-    const lower = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, 1.0, CELL), wood(), walls.length);
-    const upperMat = new THREE.MeshStandardMaterial({ map: plasterTexture(), roughness: 0.95 });
+    const bodrum = def.theme === 'bodrum';
+    const brick = bodrum ? new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.95 }) : null;
+    const lower = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, 1.0, CELL), brick ?? wood(), walls.length);
+    const upperMat = brick ?? new THREE.MeshStandardMaterial({ map: plasterTexture(), roughness: 0.95 });
     const upper = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, WALL_HEIGHT - 1.0, CELL), upperMat, walls.length);
     const trim = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL + 0.02, 0.06, CELL + 0.02), mat(0x4a2c18), walls.length);
     walls.forEach(([x, z], i) => {
@@ -121,13 +127,31 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
       group.add(m);
     }
     // tavan
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat(0xe9dcc0, { rough: 1 }));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat(bodrum ? 0x3a332c : 0xe9dcc0, { rough: 1 }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(W / 2, WALL_HEIGHT, D / 2);
     group.add(ceil);
+    if (bodrum) {
+      // tavanda paslı borular; ek yerlerinden su damlar
+      const pipeM = mat(0x6a4a36, { rough: 0.6, metal: 0.5 });
+      const joint = mat(0x8a5a3a, { rough: 0.5, metal: 0.6 });
+      for (const row of [2, 5, 9]) {
+        const z = (row + 0.5) * CELL;
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, W - CELL, 8), pipeM);
+        p.rotation.z = Math.PI / 2;
+        p.position.set(W / 2, WALL_HEIGHT - 0.22, z);
+        group.add(p);
+        for (let x = 2; x < lv.w - 1; x += 3) {
+          const j = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 8), joint);
+          j.rotation.z = Math.PI / 2;
+          j.position.set((x + 0.5) * CELL, WALL_HEIGHT - 0.22, z);
+          group.add(j);
+          if (lv.cells[row]?.[x] === '.' || lv.cells[row]?.[x] === 'n' || lv.cells[row]?.[x] === 'w') leaks.push(new THREE.Vector3((x + 0.5) * CELL, 0, z));
+        }
+      }
+    }
   }
 
-  const desks = new Map<string, DeskInfo>();
   const ocak: THREE.Vector3[] = [];
   const steamPoints: THREE.Vector3[] = [];
   const wet = new Set<string>();
@@ -273,7 +297,7 @@ export function buildLevel(def: LevelDef, grid: Grid, offices: Office[]): BuiltL
   // sabit parçaları malzemeye göre birleştir (çizim çağrısı yüzlerden onlara iner)
   bakeStatic(group, [...bulbs, ...spinners.map((s) => s.obj)]);
   for (const sp of spinners) bakeStatic(sp.obj);
-  return { group, desks, ocak, steamPoints, wet, bulbs, size: { w: W, d: D }, spinners };
+  return { group, desks, ocak, steamPoints, wet, bulbs, size: { w: W, d: D }, spinners, leaks };
 }
 
 /** Hanı süsle: duvar resimleri, ilan panoları, saat, ocak köşesi (semaver, raf, afiş), kilimler, vantilatörler. */

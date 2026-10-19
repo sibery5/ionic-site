@@ -1654,3 +1654,52 @@ kbd {
 ::-webkit-scrollbar-button {
   display: none;
 }
+
+/* ---------- ara sahne seçimleri ---------- */
+.dlg-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+}
+.dlg-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  text-align: left;
+  font-size: 16px;
+  background: linear-gradient(180deg, #7a2416, #5a170c);
+  border: 2px solid #e9cf7a;
+  color: #fff6dc;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+.dlg-choice:hover {
+  transform: translateX(6px);
+  background: linear-gradient(180deg, #9a2e1c, #6d1d10);
+}
+.dc-key {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e9cf7a;
+  color: #2a1a10;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.dialogue.choosing .dlg-hint,
+.dialogue.choosing .dlg-skip {
+  display: none;
+}
+.dialogue.choosing .dlg-box {
+  cursor: default;
+}

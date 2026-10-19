@@ -262,6 +262,50 @@ export const DAYS: DayDef[] = [
       },
     ],
   },
+  {
+    floor: { tr: 'Bodrum: Arşiv', en: 'Basement: Archive' },
+    title: { tr: '6. Gün — Kayıp Tapu', en: 'Day 6 — The Missing Deed' },
+    obstacle: { tr: 'Sızdıran borular, loş arşiv', en: 'Leaking pipes, dim archive' },
+    note: {
+      tr: 'Bodrum nemlidir evlat, borular damlatır, zemin göl olur. Saadet Hanım hanın asıl tapusunu orada saklıyor. Kâtip Cevdet de orada; Selim\'in adamı olduğu söyleniyor. Gözün dosyalarda olsun. — Rıza Usta',
+      en: "The basement is damp, kid; the pipes drip and the floor turns into a pond. Mrs. Saadet keeps the han's original deed down there. Cevdet the clerk works there too; they say he is Selim's man. Keep an eye on the files. — Master Rıza",
+    },
+    offices: [
+      {
+        id: 'a',
+        pid: 'saadet',
+        name: { tr: 'Arşiv Odası', en: 'Archive Room' },
+        person: { tr: 'Arşivci Saadet', en: 'Saadet the Archivist' },
+        look: { shirt: 0x5b2c83, pants: 0x2e2a3a, skin: SKIN[1], hair: 0x9a9a9a, glasses: true },
+        lines: [
+          { tr: 'Dosyalara çay dökme sakın!', en: "Don't you spill tea on the files!" },
+          { tr: 'Bu nemde çay ilaç gibi.', en: 'In this damp, tea is medicine.' },
+        ],
+      },
+      {
+        id: 'b',
+        pid: 'remzi',
+        name: { tr: 'Bekçi Kulübesi', en: "Watchman's Booth" },
+        person: { tr: 'Bekçi Remzi', en: 'Remzi the Watchman' },
+        look: { shirt: 0x2d4a3a, pants: 0x222831, skin: SKIN[3], hair: 0x1a120c, mustache: true },
+        lines: [
+          { tr: 'Gece nöbetinden sonra çay şart.', en: 'After a night shift, tea is a must.' },
+          { tr: 'Sağ ol aslanım.', en: 'Thanks, lion.' },
+        ],
+      },
+      {
+        id: 'c',
+        pid: 'cevdet',
+        name: { tr: 'Tapu Kâtipliği', en: 'Deed Office' },
+        person: { tr: 'Kâtip Cevdet', en: 'Cevdet the Clerk' },
+        look: { shirt: 0xd8d0b8, pants: 0x3a3a46, skin: SKIN[0], hair: 0x111111, tie: 0x6b2a2a, glasses: true, bald: true },
+        lines: [
+          { tr: 'Koy şuraya, konuşma.', en: "Put it there, don't talk." },
+          { tr: 'Kimseye bir şey görmedin, değil mi?', en: "You didn't see anything, right?" },
+        ],
+      },
+    ],
+  },
 ];
 
 

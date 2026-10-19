@@ -131,7 +131,8 @@ describe('profil', () => {
   });
   it('teras ilk kez geçilince final açılır, son kaydedilince başarım gelir', () => {
     const save = defaultSave();
-    const r = applyRunToSave(save, VENUES[5], { ...stats({ score: VENUES[5].stars[0] }), venue: 'teras' });
+    const teras = VENUES.find((v) => v.id === 'teras')!;
+    const r = applyRunToSave(save, teras, { ...stats({ score: teras.stars[0] }), venue: 'teras' });
     expect(r.finalUnlocked).toBe(true);
     const got = recordEnding(save, 'saved');
     expect(got.map((a) => a.id)).toContain('END_SAVED');
@@ -217,5 +218,21 @@ describe('teftiş ve geri tepme', () => {
   });
   it('başarım kimlikleri benzersiz', () => {
     expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(ACHIEVEMENTS.length);
+  });
+});
+
+describe('bodrum (0.6)', () => {
+  it('bodrum 3. kat ile teras arasında; eski kayıtta oynanmış teras açık kalır', () => {
+    const ids = VENUES.map((v) => v.id);
+    expect(ids.indexOf('bodrum')).toBe(ids.indexOf('kat3') + 1);
+    expect(ids.indexOf('teras')).toBe(ids.indexOf('bodrum') + 1);
+    const save = defaultSave();
+    save.venues.kat3 = { best: 80, stars: 2, objectives: [], plays: 2 };
+    save.venues.teras = { best: 60, stars: 1, objectives: [], plays: 1 };
+    expect(isUnlocked(save, ids.indexOf('bodrum'))).toBe(true);
+    expect(isUnlocked(save, ids.indexOf('teras'))).toBe(true);
+    const fresh = defaultSave();
+    fresh.venues.kat3 = { best: 80, stars: 2, objectives: [], plays: 2 };
+    expect(isUnlocked(fresh, ids.indexOf('teras'))).toBe(false);
   });
 });

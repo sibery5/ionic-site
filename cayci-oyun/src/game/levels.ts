@@ -7,7 +7,7 @@
 
 export interface LevelDef {
   grid: string[];
-  theme: 'han' | 'teras';
+  theme: 'han' | 'teras' | 'bodrum';
   dark?: boolean;
   wind?: boolean;
   cat?: boolean;
@@ -102,6 +102,26 @@ export const LEVELS: LevelDef[] = [
     ],
   },
 ];
+
+/** Bodrum arşivi (LEVELS[5]): raf sıraları arasında dar koridorlar, sızdıran borular. */
+LEVELS.push({
+  theme: 'bodrum',
+  npcCount: 3,
+  grid: [
+    '########################',
+    '#k.k.k.k.#....a.....kpk#',
+    '#........#.............#',
+    '#k.k.k.k.D....n........#',
+    '#####D####..........##D#',
+    '#P....n.....ww.....n...#',
+    '#O.........k.k.k.......#',
+    '#O..n......k.k.k...n...#',
+    '#.....ww...........#####',
+    '#..b...n...k.k.k...D.c.#',
+    '#.p.............n..#...#',
+    '########################',
+  ],
+});
 
 /** Açgözlü Çaycı arenası: tek büyük salon, ocak solda, dört masa köşelerde. */
 export const ARENA: LevelDef = {

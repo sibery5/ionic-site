@@ -96,6 +96,25 @@ export function setupLights(scene: THREE.Scene, built: BuiltLevel, def: LevelDef
     }
     return { flashlight: fl };
   }
+  if (def.theme === 'bodrum') {
+    // bodrum: nemli, loş, yeşilimsi; ocağın sıcak ışığı tek gerçek ışık kaynağı
+    scene.background = new THREE.Color(0x14120f);
+    scene.fog = new THREE.Fog(0x1a1a16, 7, 24);
+    scene.add(new THREE.HemisphereLight(0xb8c8b0, 0x2a2018, 0.62));
+    scene.add(new THREE.AmbientLight(0xc8d8c0, 0.14));
+    const sun = new THREE.DirectionalLight(0xcfe0c8, 0.85);
+    sun.position.set(w * 0.4, 9, -3);
+    sun.target.position.set(w / 2, 0, d / 2);
+    shadowSun(sun, Math.max(w, d), quality);
+    scene.add(sun, sun.target);
+    for (const o of built.ocak) {
+      const pl = new THREE.PointLight(0xffa050, 3.2, 6, 1.5);
+      pl.position.copy(o).setY(2.2);
+      scene.add(pl);
+    }
+    if (quality !== 'high') for (const desk of built.desks.values()) scene.add(glowDisc(desk.center, 2.2, 0xffd890, 0.22));
+    return { flashlight: null };
+  }
   scene.fog = new THREE.Fog(0x3a2a1a, 15, 36);
   scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b4a33, 1.0));
   scene.add(new THREE.AmbientLight(0xffe8c8, 0.25));

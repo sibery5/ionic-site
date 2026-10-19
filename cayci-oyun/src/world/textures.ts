@@ -32,9 +32,33 @@ function grain(ctx: CanvasRenderingContext2D, w: number, h: number, amount: numb
 }
 
 /** Karaköy han mozaiği: krem ve kiremit karolar, ortada küçük baklava. */
-export function floorTexture(theme: 'han' | 'teras') {
+export function floorTexture(theme: 'han' | 'teras' | 'bodrum') {
   const [c, ctx] = canvas(256, 256);
-  if (theme === 'han') {
+  if (theme === 'bodrum') {
+    // ıslak taş döşeme: düzensiz kesme taşlar, koyu derz, yer yer nem lekesi
+    ctx.fillStyle = '#2b2620';
+    ctx.fillRect(0, 0, 256, 256);
+    const rows = [0, 70, 132, 196, 256];
+    for (let r = 0; r < rows.length - 1; r++) {
+      let x = r % 2 ? -40 : 0;
+      while (x < 256) {
+        const w = 70 + ((x * 7 + r * 13) % 50);
+        const g = 88 + ((x + r * 31) % 26);
+        ctx.fillStyle = `rgb(${g},${g - 6},${g - 14})`;
+        ctx.fillRect(x + 3, rows[r] + 3, w - 6, rows[r + 1] - rows[r] - 6);
+        x += w;
+      }
+    }
+    for (let i = 0; i < 7; i++) {
+      const gx = (i * 97) % 256;
+      const gy = (i * 61) % 256;
+      const grd = ctx.createRadialGradient(gx, gy, 2, gx, gy, 40);
+      grd.addColorStop(0, 'rgba(20,30,34,0.45)');
+      grd.addColorStop(1, 'rgba(20,30,34,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(gx - 40, gy - 40, 80, 80);
+    }
+  } else if (theme === 'han') {
     const a = '#efe6d2';
     const b = '#b5543a';
     for (let y = 0; y < 2; y++)
@@ -77,6 +101,23 @@ export function floorTexture(theme: 'han' | 'teras') {
     ctx.strokeRect(128, 128, 126, 126);
   }
   grain(ctx, 256, 256, 18);
+  return tex(c);
+}
+
+/** Bodrum duvarı: eski tuğla, kireçli derz. */
+export function brickTexture() {
+  const [c, ctx] = canvas(128, 128);
+  ctx.fillStyle = '#b8ad98';
+  ctx.fillRect(0, 0, 128, 128);
+  for (let r = 0; r < 8; r++) {
+    const off = r % 2 ? 16 : 0;
+    for (let x = -32 + off; x < 128; x += 32) {
+      const k = (x * 5 + r * 11) & 31;
+      ctx.fillStyle = `rgb(${120 + k},${62 + (k >> 1)},${44 + (k >> 2)})`;
+      ctx.fillRect(x + 1.5, r * 16 + 1.5, 29, 13);
+    }
+  }
+  grain(ctx, 128, 128, 26);
   return tex(c);
 }
 

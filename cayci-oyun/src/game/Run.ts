@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ORDERS, TEA, TRAY, WIND } from '../config';
+import { ORDERS, TEA, TRAY, WALL_HEIGHT, WIND } from '../config';
 import { Grid } from '../physics/grid';
 import { TraySim } from '../physics/tray';
 import { SPIN, SpinDriver, meterAt, spinQuality } from '../physics/spin';
@@ -117,6 +117,7 @@ export class Run {
   private shake = 0;
   private spillMsgCooldown = 0;
   private mopTimer = 0;
+  private leakTimer = 2;
   private rushHour = false;
   private lockUsed = false;
   private pourBlocked = false;
@@ -349,6 +350,16 @@ export class Run {
           B.z += nz * push;
         }
       }
+    // bodrum: borular damlatır, yerde su birikintisi büyür (kayarsın)
+    if (this.venue.rules.leak && this.built.leaks.length) {
+      this.leakTimer -= dt;
+      if (this.leakTimer <= 0) {
+        this.leakTimer = this.rng.range(3.5, 6.5);
+        const p = this.rng.pick(this.built.leaks);
+        this.fx.spill(new THREE.Vector3(p.x, WALL_HEIGHT - 0.3, p.z), new THREE.Vector3(0, -1, 0), 0.25, 0x9cc8dc);
+        this.fx.addPuddle(p.x, p.z, 0.7, true, 22);
+      }
+    }
     if (this.mopper) {
       this.mopTimer -= dt;
       if (this.mopTimer <= 0 && this.mopper.vel.lengthSq() > 0.05) {

@@ -8,8 +8,8 @@ import { cosmetic } from '../meta/progress';
 import { Dialogue } from '../ui/Dialogue';
 import { makeCabinet, makeCafeTable, makeCat, makeCeilingLamp, makeChair, makeDesk, makeGlass, makeOcak, makePerson, makePlant, makeTray, mat, sitPose, type PersonRig } from '../world/models';
 import { makeCeilingFan, makeCoatRack, makeFrame, makeGlassShelf, makeKey, makeNoticeBoard, makePriceSign, makeRug, makeSemaver, makeWallClock } from '../world/decor';
-import { floorTexture, plasterTexture, skyTexture } from '../world/textures';
-import type { SceneDef, SetKind } from './scenes';
+import { brickTexture, floorTexture, plasterTexture, skyTexture } from '../world/textures';
+import type { SceneChoice, SceneDef, SceneLine, SetKind } from './scenes';
 import { getLang } from '../core/i18n';
 
 // Ara sahne oynatıcısı: küçük bir set kurar, oyuncuları dizer, konuşana kamerayı çevirir, replikleri yazar.
@@ -29,6 +29,7 @@ export class Cutscene {
   camera: THREE.PerspectiveCamera;
   private actors: ActorRt[] = [];
   private dlg: Dialogue;
+  private lines: SceneLine[];
   private line = -1;
   private camPos = new THREE.Vector3(0, 2.4, 6);
   private camLook = new THREE.Vector3(0, 1.1, 0);
@@ -45,7 +46,9 @@ export class Cutscene {
     look: Record<CosmeticSlot, string>,
     aspect: number,
     private onDone: () => void,
+    private story: { flags: string[]; onChoice: (c: SceneChoice) => void } = { flags: [], onChoice: () => {} },
   ) {
+    this.lines = def.lines.slice();
     this.camera = new THREE.PerspectiveCamera(42, aspect, 0.05, 120);
     this.buildSet(def.set);
     // yönler otomatik: herkes Cemal ile seyirci arasına, Cemal grubun ortasına bakar
@@ -93,7 +96,7 @@ export class Cutscene {
         o.receiveShadow = true;
       }
     });
-    this.dlg = new Dialogue(root, tx(def.title), () => this.advance(), () => this.finish());
+    this.dlg = new Dialogue(root, tx(def.title), () => this.advance(), () => !this.dlg.choosing && this.finish());
     this.advance();
   }
 
@@ -102,17 +105,19 @@ export class Cutscene {
   private buildSet(kind: SetKind) {
     const s = this.scene;
     const outdoor = kind === 'teras';
-    const dark = kind === 'karanlik';
+    const dark = kind === 'karanlik' || kind === 'arsiv';
+    const arsiv = kind === 'arsiv';
     s.background = outdoor ? skyTexture() : new THREE.Color(dark ? 0x07070a : 0x1a110b);
     s.fog = new THREE.Fog(outdoor ? 0xe8b88a : dark ? 0x07070a : 0x1a110b, outdoor ? 14 : 7, outdoor ? 45 : 16);
-    const ft = floorTexture(outdoor ? 'teras' : 'han');
+    const ft = floorTexture(outdoor ? 'teras' : arsiv ? 'bodrum' : 'han');
     ft.repeat.set(7, 6);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 8), new THREE.MeshStandardMaterial({ map: ft, roughness: 0.55 }));
     floor.rotation.x = -Math.PI / 2;
     s.add(floor);
     const lang = getLang();
     if (!outdoor) {
-      const wallM = new THREE.MeshStandardMaterial({ map: plasterTexture(dark ? '#5a5048' : '#efe2c4'), roughness: 1 });
+      const wallM = new THREE.MeshStandardMaterial({ map: arsiv ? brickTexture() : plasterTexture(dark ? '#5a5048' : '#efe2c4'), roughness: 1 });
+      if (arsiv) wallM.map!.repeat.set(4, 1.4);
       const back = new THREE.Mesh(new THREE.PlaneGeometry(10, 3.4), wallM);
       back.position.set(0, 1.7, -2);
       s.add(back);
@@ -157,6 +162,23 @@ export class Cutscene {
       cat.root.position.set(1.8, 0, -0.8);
       cat.root.rotation.y = -0.6;
       s.add(cat.root);
+    } else if (arsiv) {
+      // bodrum arşivi: dosya dolabı sıraları, tavanda paslı boru, masada lamba
+      for (let i = 0; i < 6; i++) {
+        const cab = makeCabinet();
+        cab.position.set(-2.7 + i * 0.55, 0, -1.65);
+        s.add(cab);
+      }
+      const desk = makeDesk();
+      desk.position.set(1.9, 0, -1.0);
+      s.add(desk);
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 10, 10), mat(0x6a4a36, { rough: 0.6, metal: 0.5 }));
+      pipe.rotation.z = Math.PI / 2;
+      pipe.position.set(0, 3.05, -1.4);
+      s.add(pipe);
+      const lamp = makeCeilingLamp();
+      lamp.position.set(0.2, 3.3, -0.2);
+      s.add(lamp);
     } else if (kind === 'ofis' || kind === 'karanlik') {
       const desk = makeDesk();
       desk.position.set(-1.2, 0, -0.95);
@@ -276,7 +298,10 @@ export class Cutscene {
   private advance() {
     if (this.done) return;
     this.line++;
-    const l = this.def.lines[this.line];
+    // bayrağa bağlı replikler: koşulu tutmayanları atla
+    const ok = (x: SceneLine) => (!x.if || this.story.flags.includes(x.if)) && (!x.unless || !this.story.flags.includes(x.unless));
+    while (this.lines[this.line] && !ok(this.lines[this.line])) this.line++;
+    const l = this.lines[this.line];
     if (!l) return this.finish();
     const a = this.actor(l.who);
     const name = this.def.actors.find((x) => x.id === l.who)?.name;
@@ -291,6 +316,26 @@ export class Cutscene {
       this.wantLook.copy(a.base).setY(1.3);
       if (l.beat === 'key') this.showKey(a);
       if (l.beat === 'envelope') this.showEnvelope(a);
+    }
+    if (l.choice) {
+      const opts = l.choice;
+      this.dlg.choices(
+        opts.map((c) => tx(c.text)),
+        (i) => {
+          const c = opts[i];
+          // aynı sorunun eski cevabı (sahne yeniden izlendiyse) silinir
+          for (const o of opts) {
+            const k = this.story.flags.indexOf(o.flag);
+            if (k >= 0) this.story.flags.splice(k, 1);
+          }
+          this.story.flags.push(c.flag);
+          this.story.onChoice(c);
+          audio.click();
+          // seçimin hemen ardından oynayacak replikler
+          if (c.then?.length) this.lines.splice(this.line + 1, 0, ...c.then);
+          this.advance();
+        },
+      );
     }
   }
 
@@ -322,7 +367,8 @@ export class Cutscene {
     if (this.done) return;
     this.time += dt;
     // önceki ekrandan kalan tuş basışı yeni sahneyi atlatmasın
-    if (this.time > 0.4 && input.wasPressed('Escape')) return this.finish();
+    if (this.time > 0.4 && input.wasPressed('Escape') && !this.dlg.choosing) return this.finish();
+    if (this.dlg.choosing) for (let i = 1; i <= 4; i++) if (input.wasPressed(`Digit${i}`) || input.wasPressed(`Numpad${i}`)) this.dlg.choose(i - 1);
     if (input.wasPressed('KeyE') || input.wasPressed('Space') || input.wasPressed('Enter')) this.dlg.next();
     this.dlg.update(dt);
     const k = 1 - Math.exp(-2.2 * dt);
@@ -330,7 +376,7 @@ export class Cutscene {
     this.camLook.lerp(this.wantLook, k);
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camLook);
-    const speaking = this.def.lines[this.line]?.who;
+    const speaking = this.lines[this.line]?.who;
     for (const a of this.actors) {
       a.t += dt;
       a.rig.blink(dt);

@@ -22,7 +22,10 @@ export type PersonId =
   | 'defne'
   | 'nadir'
   | 'gokdelen'
-  | 'gulsum';
+  | 'gulsum'
+  | 'saadet'
+  | 'remzi'
+  | 'cevdet';
 
 export type Topic = 'tapu' | 'para' | 'rapor' | 'foto' | 'kulis' | 'kedi';
 
@@ -63,6 +66,9 @@ export const PEOPLE: Record<PersonId, Person> = {
   nadir: { name: { tr: 'Nadir Bey', en: 'Nadir Bey' }, side: 'han', wants: ['tapu', 'rapor', 'foto'], whispers: [] },
   gokdelen: { name: { tr: 'Gökdelen Yapı', en: 'Skyscraper Corp.' }, side: 'villain', wants: ['rapor', 'foto', 'tapu'], whispers: [] },
   gulsum: { name: { tr: 'Gülsüm Abla', en: 'Gülsüm' }, side: 'han', wants: ['kulis', 'kedi'], whispers: ['f_balik'] },
+  saadet: { name: { tr: 'Arşivci Saadet', en: 'Saadet the Archivist' }, side: 'han', wants: ['tapu', 'rapor'], whispers: [] },
+  remzi: { name: { tr: 'Bekçi Remzi', en: 'Remzi the Watchman' }, side: 'neutral', wants: ['kulis', 'kedi'], whispers: ['f_hayalet'] },
+  cevdet: { name: { tr: 'Kâtip Cevdet', en: 'Cevdet the Clerk' }, side: 'villain', wants: ['tapu', 'foto'], whispers: [] },
 };
 
 export interface Rumor {
@@ -280,6 +286,47 @@ export const RUMORS: Rumor[] = [
     story: false,
     value: 12,
     text: { tr: '"Paşa\'yı kim şişmanlatıyor biliyor musun? Ferhat Bey. Çekmecesinde hamsi saklıyor."', en: '"You know who\'s fattening up Paşa? Mr. Ferhat. He keeps anchovies in his drawer."' },
+  },
+  // bodrum: hanın asıl tapusu arşivde
+  {
+    id: 'saadet_vakif',
+    topic: 'tapu',
+    source: 'saadet',
+    about: [],
+    truth: true,
+    story: true,
+    value: 50,
+    text: { tr: '"Hanın asıl tapusu bende, bodrumda. Bu han vakıf malı evlat; kimse tek imzayla satamaz."', en: '"The han\'s original deed is with me, in the basement. This han belongs to a foundation, kid; nobody can sell it with a single signature."' },
+  },
+  {
+    id: 'remzi_gece',
+    topic: 'foto',
+    source: 'remzi',
+    about: ['cevdet', 'turgut'],
+    truth: true,
+    story: true,
+    value: 45,
+    text: { tr: '"Gece nöbetteydim. Kâtip Cevdet arşivden bir dosya çıkarıp Turgut\'un arabasına koydu. Gözümle gördüm."', en: '"I was on night watch. Cevdet the clerk took a file from the archive and put it in Turgut\'s car. I saw it with my own eyes."' },
+  },
+  {
+    id: 'cevdet_rusvet',
+    topic: 'para',
+    source: 'cevdet',
+    about: ['cevdet', 'turgut'],
+    truth: true,
+    story: true,
+    value: 45,
+    text: { tr: '"(Telefonda) Turgut Bey, tapu dosyası kayıp sayılır. Paramı Cuma\'ya kadar yatırın, yoksa bulunur."', en: '"(On the phone) Turgut Bey, consider the deed file lost. Pay me by Friday, or it gets found."' },
+  },
+  {
+    id: 'f_hayalet',
+    topic: 'kulis',
+    source: 'remzi',
+    about: [],
+    truth: false,
+    story: false,
+    value: 15,
+    text: { tr: '"Bodrumda gece hayalet dolaşıyor. Kırk yıl önceki çaycının hayaleti, tepsisi hâlâ elinde!"', en: '"A ghost walks the basement at night. The tea boy from forty years ago, still holding his tray!"' },
   },
 ];
 

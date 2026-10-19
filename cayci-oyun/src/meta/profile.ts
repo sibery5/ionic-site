@@ -200,7 +200,8 @@ export function applyRunToSave(save: SaveData, venue: Venue, s: RunStats, date =
 export function isUnlocked(save: SaveData, index: number): boolean {
   if (index <= 0) return true;
   const prev = VENUES[index - 1];
-  return (save.venues[prev.id]?.stars ?? 0) >= 1;
+  // 0.6'da bodrum araya girdi: daha önce oynanmış bir mekân kapanmasın
+  return (save.venues[prev.id]?.stars ?? 0) >= 1 || (save.venues[VENUES[index].id]?.plays ?? 0) > 0;
 }
 
 /** Son seçimden sonra başarımları yeniden kontrol eder (son sahnesi için). */

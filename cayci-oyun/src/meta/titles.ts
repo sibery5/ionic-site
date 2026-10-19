@@ -15,7 +15,9 @@ export interface Title {
 }
 
 const stars = (s: SaveData, v: string) => s.venues[v]?.stars ?? 0;
-export const liveEvidence = (s: SaveData) => s.evidence.filter((e) => !s.burned.includes(e)).length;
+/** Han tarafına ulaşmış, yakılmamış kanıtlar; ara sahnedeki seçimler de kanıt sayılır (Selim'in zarfı, vakıf tapusu). */
+export const liveEvidence = (s: SaveData) =>
+  s.evidence.filter((e) => !s.burned.includes(e)).length + (s.flags?.includes('doubleAgent') ? 1 : 0) + (s.flags?.includes('deedToRifat') ? 1 : 0);
 
 export const TITLES: Title[] = [
   { id: 'cirak', name: { tr: 'Çırak', en: 'Apprentice' }, salary: 0, needs: [] },

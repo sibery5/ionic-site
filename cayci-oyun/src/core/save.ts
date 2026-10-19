@@ -28,6 +28,7 @@ export interface SaveData {
   sales: string[]; // "rumor>kişi": kime ne anlatıldı
   evidence: string[]; // han tarafına ulaşan hikâye kanıtları
   burned: string[]; // kötü adamlara satılıp yok edilen kanıtlar
+  flags: string[]; // ara sahnelerdeki seçimler (ör. 'tookEnvelope')
   rep: number; // itibar 0..100
   title: number; // unvan sırası (TITLES)
   scenes: string[]; // izlenen ara sahneler
@@ -63,6 +64,7 @@ export function defaultSave(): SaveData {
     sales: [],
     evidence: [],
     burned: [],
+    flags: [],
     rep: 50,
     title: 0,
     scenes: [],

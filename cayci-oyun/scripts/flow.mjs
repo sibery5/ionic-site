@@ -61,7 +61,7 @@ await shot('00-title');
 await click('.btn.primary');
 await shot('01-map');
 const STAR3 = await ev(async () => (await import('/src/game/venues.ts')).VENUES.map((v) => v.stars[2]));
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < STAR3.length; i++) {
   // en alttaki açık kart = sıradaki mekân (harita yukarıdan aşağı tersten dizili)
   const cards = page.locator('.venue-card:not(.locked)');
   const n = await cards.count();
@@ -87,7 +87,7 @@ for (let i = 0; i < 6; i++) {
   if (i === 0) await shot('04-results');
   const stars = await page.locator('.big-stars .st .ic-star').count();
   if (stars !== 3) fail(`mekân ${i}: 3 yıldız yok (${stars})`);
-  if (i < 5) {
+  if (i < STAR3.length - 1) {
     // harita (terfi olduysa önce terfi sahnesi)
     await page.locator('button', { hasText: lang === 'tr' ? 'Harita' : 'Map' }).first().click();
     await page.waitForTimeout(400);
@@ -108,7 +108,7 @@ console.log('kariyer sonrası', { xp: save.xp, wallet: save.wallet, pocket: save
 if (save.endings[0] !== 'saved') fail('son "saved" olmalıydı');
 if (save.title !== 5) fail(`unvan patron olmalıydı: ${save.title}`);
 console.log('izlenen sahneler:', scenesSeen.join(' | '), '· kayıttaki:', save.scenes.join(','));
-for (const id of ['intro', 'promo_1', 'promo_2', 'promo_3', 'promo_4', 'villain', 'meeting', 'end_saved']) if (!save.scenes.includes(id)) fail(`sahne oynamadı: ${id}`);
+for (const id of ['intro', 'promo_1', 'promo_2', 'promo_3', 'promo_4', 'villain', 'bodrum', 'meeting', 'end_saved']) if (!save.scenes.includes(id)) fail(`sahne oynamadı: ${id}`);
 if (!save.achievements.includes('END_SAVED') || !save.achievements.includes('ALL_3STAR') || !save.achievements.includes('SALE_1') || !save.achievements.includes('TITLE_BAS')) fail('başarımlar eksik: ' + save.achievements.join(','));
 
 // ana menü: günlük
