@@ -20,7 +20,15 @@ Tepsiye istediğin kadar bardak koy: çok bardak çok bahşiş, ama tepsi ağır
 - **Günlük Mücadele:** Her gün herkese aynı mekân ve aynı tohum, yükseltmeler kapalı.
 - **İlerleme:** XP ve 30 seviye, 6 unvan ve maaş, itibar, seviyeyle açılan kıyafetler (dolap), bahşişle alınan yükseltmeler (çarşı), her gün 3 yeni görev, 33 başarım, mekân ve gün başına yerel sıralama.
 
-## Çalıştırma
+## Hemen oyna (kurulum yok)
+
+`oyna/CAYCI.html` dosyasını indirip çift tıkla. Oyunun tamamı bu tek dosyanın içinde; internet ve kurulum gerekmez, kayıt tarayıcıda kalır. (Chrome, Edge veya Firefox önerilir.)
+
+Windows'ta klasördeki `start.bat` dosyasına çift tıklamak da olur: Node.js kuruluysa geliştirme sunucusunu açar, kurulu değilse bu hazır dosyayı açar. Mac/Linux için `start.sh`.
+
+Kodu değiştirdikten sonra hazır dosyayı yenilemek için: `npm run oyna`.
+
+## Çalıştırma (geliştirme)
 
 Gerekenler: [Node.js](https://nodejs.org) 20 veya üstü (ücretsiz).
 
