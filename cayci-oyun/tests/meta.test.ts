@@ -193,7 +193,8 @@ describe('profil', () => {
     const n = normalize({ xp: 50, settings: { lang: 'en' } as never });
     expect(n.xp).toBe(50);
     expect(n.settings.lang).toBe('en');
-    expect(n.settings.quality).toBe('high');
+    expect(n.settings.quality).toBe('medium'); // 0.6: varsayılan orta, otomatik kalite açık
+    expect(n.settings.autoQuality).toBe(true);
     expect(n.look.tray).toBe('tray-nickel');
   });
 });
