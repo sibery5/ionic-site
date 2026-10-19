@@ -46,7 +46,12 @@ const shot = async (name, wait = WAIT) => {
   await page.screenshot({ path: file, ...(ext === 'jpg' ? { type: 'jpeg', quality: 88 } : {}) });
   console.log('  ', file);
 };
+// ONLY_SCENES=1: sadece ara sahne kareleri (mağaza setinde 15-17), yarım kalan bir üretimi tamamlamak için
+const ONLY = !!process.env.ONLY_SCENES;
+const SCENE_STEPS = ['secim', 'bodrum-sahne', 'patron'];
+if (ONLY) n = DOCS ? 17 : 15;
 const step = async (name, f) => {
+  if (ONLY && !SCENE_STEPS.includes(name)) return;
   try {
     await f();
   } catch (e) {
@@ -190,7 +195,7 @@ const toChoice = async (id) => {
     await page.waitForTimeout(300);
   }
 };
-// sahneler temiz bir sayfada (önceki vardiyalar kapansın). ONLY_SCENES=1: sadece sahne kareleri (15-17)
+// sahneler temiz bir sayfada (önceki vardiyalar kapansın)
 await page.goto('http://localhost:5219/');
 await page.waitForTimeout(2000);
 await step('secim', async () => {
