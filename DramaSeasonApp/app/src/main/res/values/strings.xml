@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DramaSeason</string>
+    <string name="error_title">Bağlantı kurulamadı</string>
+    <string name="error_message">İnternet bağlantınızı kontrol edip tekrar deneyin.</string>
+    <string name="retry">Tekrar Dene</string>
+    <string name="admin_blocked">Bu sayfa mobil uygulamada kullanılamaz.</string>
+    <string name="no_app_for_link">Bu bağlantıyı açabilecek bir uygulama (ör. kripto cüzdanı) bulunamadı.</string>
+    <string name="file_chooser_error">Dosya seçici açılamadı.</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Sitenizin renklerini buraya yazın (CSS'teki body arka planı ve ana vurgu rengi).
+        ds_background: açılış ekranı, ikon arka planı ve sayfa yüklenirken görünen renk.
+        Sayfa yüklendikten sonra durum çubuğu otomatik olarak sitenin rengini alır.
+    -->
+    <color name="ds_background">#0E0E13</color>
+    <color name="ds_accent">#E50914</color>
+    <color name="ds_on_accent">#FFFFFF</color>
+    <color name="ds_text">#FFFFFF</color>
+    <color name="ds_text_secondary">#B3B3B8</color>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DramaSeason" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ds_background</item>
+        <item name="android:colorAccent">@color/ds_accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Android 12+ açılış ekranı: uygulama ikonu sitenin arka plan renginde -->
+        <item name="android:windowSplashScreenBackground">@color/ds_background</item>
+    </style>
+</resources>
