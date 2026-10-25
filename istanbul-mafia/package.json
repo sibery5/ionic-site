@@ -1,0 +1,22 @@
+{
+  "name": "istanbul-mafia",
+  "productName": "Istanbul Mafia",
+  "version": "1.0.0",
+  "description": "Istanbul Mafia - acik dunya 3D mafya oyunu",
+  "main": "electron/main.js",
+  "author": "Istanbul Mafia Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "build:web": "node scripts/build.js",
+    "start": "npm run build:web && electron .",
+    "dist:win": "npm run build:web && electron-builder --win nsis portable",
+    "dist:linux": "npm run build:web && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
+    "esbuild": "^0.20.2",
+    "three": "^0.160.0"
+  }
+}
