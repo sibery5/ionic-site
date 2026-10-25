@@ -1,0 +1,11 @@
+"AppBuild"
+{
+	"AppID" "APP_ID"
+	"Desc" "Istanbul Mafya build"
+	"ContentRoot" "../dist/win-unpacked/"
+	"BuildOutput" "./output/"
+	"Depots"
+	{
+		"DEPOT_ID" "depot_build.vdf"
+	}
+}

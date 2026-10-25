@@ -9,14 +9,66 @@
   "private": true,
   "scripts": {
     "build:web": "node scripts/build.js",
-    "start": "npm run build:web && electron .",
-    "dist:win": "npm run build:web && electron-builder --win nsis portable",
-    "dist:linux": "npm run build:web && electron-builder --linux AppImage"
+    "start": "node scripts/build.js && electron .",
+    "dist:win": "node scripts/build.js && electron-builder --win nsis --x64",
+    "dist:linux": "node scripts/build.js && electron-builder --linux AppImage",
+    "icon": "node scripts/make-icon.js"
   },
   "devDependencies": {
     "electron": "^30.5.1",
     "electron-builder": "^24.13.3",
     "esbuild": "^0.20.2",
     "three": "^0.160.0"
+  },
+  "build": {
+    "appId": "com.istanbulmafya.game",
+    "productName": "Istanbul Mafya",
+    "copyright": "Istanbul Mafya",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "İstanbul Mafya",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "IstanbulMafya-Kurulum-${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game"
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sibery5/ionic-site.git"
   }
 }

@@ -1,0 +1,25 @@
+name: İstanbul Mafya - Windows Kurulum
+
+on:
+  push:
+    paths: ['istanbul-mafia/**', '.github/workflows/istanbul-mafya.yml']
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: istanbul-mafia
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IstanbulMafya-Windows-Kurulum
+          path: istanbul-mafia/dist/*.exe
+          retention-days: 30
