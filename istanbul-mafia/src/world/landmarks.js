@@ -63,7 +63,8 @@ function minaret(g, cols, x, z, h, mat, capMat, r = 1.0) {
   }
   add(g, new THREE.ConeGeometry(r * 0.95, h * 0.18, 12), capMat, x, h + h * 0.09, z);
   add(g, new THREE.CylinderGeometry(0.06, 0.06, 2.4, 4), M('gold', { color: 0xd4af37, metalness: 0.9, roughness: 0.3 }), x, h + h * 0.18 + 1.2, z, false);
-  cols.add(x - r * 1.4, z - r * 1.4, x + r * 1.4, z + r * 1.4, 0, h, 'minaret');
+  cols.addCircle(x, z, r * 1.4, 0, 4, 'minaret');
+  cols.addCircle(x, z, r * 1.0, 4, h * 1.18, 'minaret');
 }
 
 function mosque(g, cols, cx, cz, S, opt) {
@@ -109,7 +110,7 @@ function mosque(g, cols, cx, cz, S, opt) {
     // şadırvan
     add(g, new THREE.CylinderGeometry(2.5, 2.5, 2.5, 8), wall, cx, 1.25, cz2);
     add(g, new THREE.SphereGeometry(2.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), dome, cx, 2.5, cz2);
-    cols.add(cx - 2.5, cz2 - 2.5, cx + 2.5, cz2 + 2.5, 0, 4, 'fountain');
+    cols.addCircle(cx, cz2, 2.55, 0, 5, 'fountain');
   }
   // minareler
   const mh = opt.minaretH || S * 0.95;
@@ -155,6 +156,7 @@ export function buildLandmark(type, b, cols) {
       add(g, new THREE.ConeGeometry(R + 0.6, 14, 24), lead, cx, 58, cz);
       add(g, new THREE.CylinderGeometry(0.1, 0.1, 3, 4), M('gold', { color: 0xd4af37, metalness: 0.9, roughness: 0.3 }), cx, 66.5, cz, false);
       cols.add(cx - R, cz - R, cx + R, cz + R, 0, 66, 'galata');
+      cols.addCircle(cx, cz, R + 0.8, 0, 4, 'galataBase');
       landmarkDoors.push({ x: cx, z: cz + R + 1.5, type: 'tower', name: 'Galata Kulesi' });
       add(g, new THREE.BoxGeometry(2.2, 3, 0.4), M('mdoor', { color: 0x3a2412 }), cx, 1.5, cz + R + 0.5, false);
       break;
@@ -165,14 +167,16 @@ export function buildLandmark(type, b, cols) {
       add(g, new THREE.BoxGeometry(8, 1.2, 8), stone, cx, 0.6, cz);
       add(g, new THREE.BoxGeometry(5, 9, 5), white, cx, 5.7, cz);
       add(g, new THREE.BoxGeometry(6, 1, 6), stone, cx, 10.7, cz);
-      cols.add(cx - 4, cz - 4, cx + 4, cz + 4, 0, 11, 'monument');
+      cols.add(cx - 4, cz - 4, cx + 4, cz + 4, 0, 1.2, 'monument');
+      cols.add(cx - 2.5, cz - 2.5, cx + 2.5, cz + 2.5, 0, 10.2, 'monument');
+      cols.add(cx - 3, cz - 3, cx + 3, cz + 3, 10.2, 11.2, 'monument');
       // bayrak direği
       const pole = add(g, new THREE.CylinderGeometry(0.15, 0.2, 24, 8), M('pole', { color: 0xdddddd, metalness: 0.7 }), cx + 18, 12, cz - 12);
       void pole;
       const flag = add(g, new THREE.PlaneGeometry(9, 6), M('flag', { map: flagTexture(), side: THREE.DoubleSide }), cx + 22.6, 20.5, cz - 12, false);
       flag.userData.flag = true;
       g.userData.flag = flag;
-      cols.add(cx + 17.8, cz - 12.2, cx + 18.2, cz - 11.8, 0, 24, 'pole');
+      cols.addCircle(cx + 18, cz - 12, 0.2, 0, 24, 'pole');
       // AKM benzeri kültür merkezi (bloğun kuzey kenarı)
       const akmW = W * 0.8;
       add(g, new THREE.BoxGeometry(akmW, 14, 12), M('akm', { color: 0x2b2b2b, roughness: 0.4, metalness: 0.4 }), cx, 7, b.z0 + 7);
@@ -206,6 +210,7 @@ export function buildLandmark(type, b, cols) {
       // payandalar
       for (const sx of [-1, 1]) for (const sz of [-0.3, 0.3]) {
         add(g, new THREE.BoxGeometry(3, 16, 6), pink, cx + sx * S * 0.34, 8, cz + sz * S * 0.64);
+        cols.add(cx + sx * S * 0.34 - 1.5, cz + sz * S * 0.64 - 3, cx + sx * S * 0.34 + 1.5, cz + sz * S * 0.64 + 3, 0, 16, 'buttress');
       }
       break;
     }
@@ -226,6 +231,7 @@ export function buildLandmark(type, b, cols) {
       g.add(im);
       // Nuruosmaniye kapısı
       add(g, new THREE.BoxGeometry(8, 10, 2), MM('bzGate'), cx, 5, cz + bd / 2 + 0.5);
+      cols.add(cx - 4, cz + bd / 2 - 0.5, cx + 4, cz + bd / 2 + 1.5, 0, 10, 'bazaarGate');
       add(g, new THREE.BoxGeometry(3.2, 5, 0.3), M('mdoor', { color: 0x3a2412 }), cx, 2.5, cz + bd / 2 + 1.6, false);
       landmarkDoors.push({ x: cx, z: cz + bd / 2 + 2.6, type: 'bazaar', name: 'Kapalıçarşı' });
       break;
@@ -238,6 +244,7 @@ export function buildLandmark(type, b, cols) {
       const colMat = M('palCol', { color: 0xf4f0e6 });
       for (let x = cx - pw / 2 + 3; x < cx + pw / 2; x += 4) {
         add(g, new THREE.CylinderGeometry(0.4, 0.45, 13, 10), colMat, x, 6.5, cz + pd / 2 + 0.6);
+        cols.addCircle(x, cz + pd / 2 + 0.6, 0.45, 0, 13, 'column');
       }
       add(g, new THREE.BoxGeometry(pw + 1, 1.2, pd + 2), colMat, cx, 16.6, cz);
       add(g, new THREE.SphereGeometry(8, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), lead, cx, 17, cz);
@@ -257,7 +264,7 @@ export function buildLandmark(type, b, cols) {
       for (const sx of [-1, 1]) {
         add(g, new THREE.CylinderGeometry(4, 4, 26, 16), brick, cx + sx * hw / 2, 13, cz - hd / 2);
         add(g, new THREE.ConeGeometry(4.4, 9, 16), M('hroof', { color: 0x5a6e78, metalness: 0.4 }), cx + sx * hw / 2, 30.5, cz - hd / 2);
-        cols.add(cx + sx * hw / 2 - 4, cz - hd / 2 - 4, cx + sx * hw / 2 + 4, cz - hd / 2 + 4, 0, 26, 'station');
+        cols.addCircle(cx + sx * hw / 2, cz - hd / 2, 4, 0, 26, 'station');
       }
       add(g, new THREE.BoxGeometry(hw * 0.98, 1.4, hd * 1.05), M('hroof', { color: 0x5a6e78, metalness: 0.4 }), cx, 18.6, cz);
       landmarkDoors.push({ x: cx, z: cz + hd / 2 + 1, type: 'station', name: 'Haydarpaşa Garı' });
@@ -278,7 +285,8 @@ export function buildLandmark(type, b, cols) {
       for (let i = 0; i < 24; i++) {
         const a = (i / 24) * Math.PI * 2;
         const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-        cols.add(x - 4, z - 4, x + 4, z + 4, 0, 18, 'stadium');
+        // halka duvarı: teğet döndürülmüş kutular (boşluksuz)
+        cols.addOBB(x, z, 2.2, 2 * Math.PI * R / 24 + 0.6, -a, 0, 18, 'stadium');
       }
       break;
     }

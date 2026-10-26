@@ -2,6 +2,7 @@
 // Türk bayrağı, "POLİS" tabelası, park yeri çizgileri (araç doğma noktaları POLICE_STATIONS[].parking).
 import * as THREE from 'three';
 import { GeoBuilder } from './instancer.js';
+import { addBarrier } from './zones.js';
 
 export const POLICE_PROP_DEFS = {
   booth: () => new GeoBuilder().box(1.6, 2.5, 1.6, { color: 0xe8ecf0, rough: 0.5 }).box(1.5, 0.9, 0.03, { y: 1.2, z: 0.81, uv: 'glass', rough: 0.05 }).box(1.5, 0.9, 0.03, { y: 1.2, z: -0.81, uv: 'glass', rough: 0.05 })
@@ -32,15 +33,15 @@ export function buildPoliceStations(city) {
     city.fenceLine(b.x0, inner, b.x0, fz, 'ironfence', 1.8);
     city.fenceLine(b.x1, inner, b.x1, fz, 'ironfence', 1.8);
     for (const x of [gx0 - 0.4, gx1 + 0.4]) { P.gatepost.addTRS(x, 0.15, fz, 0); cols.add(x - 0.35, fz - 0.35, x + 0.35, fz + 0.35, 0, 2.6, 'gatepost'); }
-    P.barrier.addTRS(gx0, 0.15, fz, 0);
+    P.barrier.addTRS(gx0, 0.15, fz, 0); addBarrier(city, gx0, fz, 0, 0.15);
     const bx = gx1 + 1.8, bz = fz - nz * 1.4;
-    P.booth.addTRS(bx, 0.15, bz, nz > 0 ? 0 : Math.PI); cols.add(bx - 0.8, bz - 0.8, bx + 0.8, bz + 0.8, 0, 2.6, 'booth');
+    P.booth.addTRS(bx, 0.15, bz, nz > 0 ? 0 : Math.PI); cols.add(bx - 0.85, bz - 0.85, bx + 0.85, bz + 0.85, 0, 2.7, 'booth');
     // bayrak
-    P.flagpole.addTRS(c.flag.x, 0.15, c.flag.z, 0); cols.add(c.flag.x - 0.12, c.flag.z - 0.12, c.flag.x + 0.12, c.flag.z + 0.12, 0, 9, 'pole');
+    P.flagpole.addTRS(c.flag.x, 0.15, c.flag.z, 0); cols.addCircle(c.flag.x, c.flag.z, 0.12, 0, 9.2, 'pole');
     // kapı üstü "POLİS" tabelası (iki yüz)
     city.addSign('polis', c.gateX, 3.1, fz + nz * 0.02, nz > 0 ? 0 : Math.PI, 4.2, 0.9);
     city.addSign('polis', c.gateX, 3.1, fz - nz * 0.02, nz > 0 ? Math.PI : 0, 4.2, 0.9);
-    for (const x of [gx0 - 0.4, gx1 + 0.4]) { P.bollard.addTRS(x, 0.15, fz + nz * 0.8, 0); }
+    for (const x of [gx0 - 0.4, gx1 + 0.4]) { P.bollard.addTRS(x, 0.15, fz + nz * 0.8, 0); cols.breakable(cols.addCircle(x, fz + nz * 0.8, 0.09, 0, 1.05, 'bollard'), 'bollard', 40, P.bollard, x, 0.15, fz + nz * 0.8, 0); }
     // kapı üstü kiriş
     city.addTrimBox(gx1 - gx0 + 1.6, 0.35, 0.4, c.gateX, 2.6, fz, [0.84, 0.82, 0.78]);
     // park yerleri: beyaz çizgiler

@@ -109,17 +109,25 @@ export function buildAirport(city) {
   city.addZoneBuilding(AP.x0 + 6, -800, 868, -772, 11.2, 4, '#7a8e9c', 0, 0);
   city.addSign('airport', (AP.x0 + 6 + 868) / 2, 9.0, -771.8, 0, 14, 1.6);
   AP.terminal = { x0: AP.x0 + 6, z0: -800, x1: 868, z1: -772, door: { x: 838, z: -771 } };
-  P.ctower.addTRS(884, 0, -790, 0); cols.add(881, -793, 887, -787, 0, 30, 'ctower');
-  P.windsock.addTRS(rw.x1 + 8, 0, -620, 0);
+  P.ctower.addTRS(884, 0, -790, 0); cols.addCircle(884, -790, 2.8, 0, 26, 'ctower'); cols.addCircle(884, -790, 4.4, 26, 30.6, 'ctower');
+  P.windsock.addTRS(rw.x1 + 8, 0, -620, 0); cols.addCircle(rw.x1 + 8, -620, 0.1, 0, 6, 'pole');
   // perimetre çiti (batı kapısı z -520..-490)
   city.fenceLine(AP.x0, AP.z0, AP.x1, AP.z0, 'chain', 2.6, 'razor');
   city.fenceLine(AP.x1, AP.z0, AP.x1, AP.z1, 'chain', 2.6, 'razor');
   city.fenceLine(AP.x0, AP.z1, AP.x1, AP.z1, 'chain', 2.6, 'razor');
   city.fenceLine(AP.x0, AP.z0, AP.x0, -522, 'chain', 2.6, 'razor');
   city.fenceLine(AP.x0, -488, AP.x0, AP.z1, 'chain', 2.6, 'razor');
-  P.booth.addTRS(AP.x0 + 3, 0, -484, -Math.PI / 2);
-  P.barrier.addTRS(AP.x0, 0, -520, Math.PI / 2);
-  for (let z = -500; z > -700; z -= 40) P.lampModern.addTRS(899, 0, z, Math.PI / 2);
+  P.booth.addTRS(AP.x0 + 3, 0, -484, -Math.PI / 2); cols.addOBB(AP.x0 + 3, -484, 1.7, 1.7, -Math.PI / 2, 0, 2.7, 'booth');
+  P.barrier.addTRS(AP.x0, 0, -520, Math.PI / 2); addBarrier(city, AP.x0, -520, Math.PI / 2, 0);
+  for (let z = -500; z > -700; z -= 40) { P.lampModern.addTRS(899, 0, z, Math.PI / 2); cols.addCircle(899, z, 0.2, 0, 6.6, 'lamp'); }
+}
+
+// Bariyer: sabit direk + kırılabilir kol (araç çarpınca kırılır, yayalar üstünden atlar)
+export function addBarrier(city, x, z, rot, y = 0.15) {
+  const cols = city.physics.city;
+  const post = cols.addCircle(x, z, 0.22, 0, 1.05, 'barrierPost');
+  const arm = cols.breakable(cols.addLocal(x, z, rot, 2.6, 0, 4.8, 0.14, 0, 1.0, 'barrier'), 'barrier', 15, city.props.barrier, x, y, z, rot);
+  arm.brk.extra = [post];
 }
 
 export function buildMarina(city) {
@@ -130,18 +138,17 @@ export function buildMarina(city) {
   // kazıklar, babalar, lambalar
   for (const p of MR.piers) {
     const horiz = p.x1 - p.x0 > p.z1 - p.z0;
-    if (horiz) for (let x = p.x0 + 2; x < p.x1; x += 6) for (const z of [p.z0 + 0.2, p.z1 - 0.2]) { P.piling.addTRS(x, 0, z, 0); P.cleat.addTRS(x + 3, 0, z, 0); }
-    else for (let z = p.z0 + 2; z < p.z1; z += 6) for (const x of [p.x0 + 0.2, p.x1 - 0.2]) P.piling.addTRS(x, 0, z, 0);
-    if (horiz) P.lampClassic.addTRS(p.x1 - 1.2, 0, (p.z0 + p.z1) / 2, 0);
+    if (horiz) for (let x = p.x0 + 2; x < p.x1; x += 6) for (const z of [p.z0 + 0.2, p.z1 - 0.2]) { P.piling.addTRS(x, 0, z, 0); cols.addCircle(x, z, 0.19, -6, 0.5, 'piling'); P.cleat.addTRS(x + 3, 0, z, 0); }
+    else for (let z = p.z0 + 2; z < p.z1; z += 6) for (const x of [p.x0 + 0.2, p.x1 - 0.2]) { P.piling.addTRS(x, 0, z, 0); cols.addCircle(x, z, 0.19, -6, 0.5, 'piling'); }
+    if (horiz) { P.lampClassic.addTRS(p.x1 - 1.2, 0, (p.z0 + p.z1) / 2, 0); cols.addCircle(p.x1 - 1.2, (p.z0 + p.z1) / 2, 0.25, 0, 4.9, 'lamp'); }
   }
-  for (let z = MR.z0 + 8; z < MR.z1; z += 22) P.lampClassic.addTRS(203, 0, z, 0);
+  for (let z = MR.z0 + 8; z < MR.z1; z += 22) { P.lampClassic.addTRS(203, 0, z, 0); cols.addCircle(203, z, 0.25, 0, 4.9, 'lamp'); }
   // kulüp binası (beyaz villa üslubu, kıyıya bakar)
   city.addZoneBuilding(209, -577, 226, -563, 7.0, 5, '#f4f2ec', 3, 0);
   city.addSign('marina', 208.8, 5.6, -570, -Math.PI / 2, 9, 0.9);
   // dekor yatlar (bazı yerler dolu), diğerleri yat satın alma/doğma noktası
-  for (const b of MR.berths) if (b.decor) P.yacht.addTRS(b.x, WATER_Y - 0.3, b.z, b.heading, 1, 1, 1);
-  P.flagpole.addTRS(205, 0, -578, 0);
-  void cols;
+  for (const b of MR.berths) if (b.decor) { P.yacht.addTRS(b.x, WATER_Y - 0.3, b.z, b.heading, 1, 1, 1); cols.addLocal(b.x, b.z, b.heading, 0, 0, 4.4, 14, WATER_Y - 1.5, WATER_Y + 3.6, 'yacht'); }
+  P.flagpole.addTRS(205, 0, -578, 0); cols.addCircle(205, -578, 0.12, 0, 9, 'pole');
 }
 
 export function buildVillas(city) {
@@ -161,7 +168,7 @@ export function buildVillas(city) {
     const ox = seaLeft ? p.x1 - t : p.x0;
     wall(ox, p.z0, ox + t, p.z1);
     wall(p.x0, p.z0, p.x1, p.z0 + t); wall(p.x0, p.z1 - t, p.x1, p.z1);
-    for (const z of [gz - 2.7, gz + 2.7]) P.gatepost.addTRS(sx + t / 2, 0.15, z, 0);
+    for (const z of [gz - 2.7, gz + 2.7]) { P.gatepost.addTRS(sx + t / 2, 0.15, z, 0); cols.add(sx + t / 2 - 0.36, z - 0.36, sx + t / 2 + 0.36, z + 0.36, 0, 2.75, 'gatepost'); }
     city.addSign('villa', sx + (seaLeft ? -0.05 : t + 0.05), 1.3, gz - 4.2, seaLeft ? -Math.PI / 2 : Math.PI / 2, 2.2, 0.55);
     // havuz, ağaçlar, çit
     P.pool.addTRS(v.pool.x, 0.15, v.pool.z, 0, v.pool.w, 1, v.pool.d);

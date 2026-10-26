@@ -178,11 +178,12 @@ export function buildBuildings(city) {
         if (b.floors > 25) roofs.add(boxG(0.4, 14, 0.4, cx, b.h + 4, cz, 1, [0.8, 0.8, 0.8]), cx, cz);
       } else {
         // güneş enerjili su ısıtıcısı / su deposu / çanak anten
-        if (r.chance(0.45)) P.solar.addTRS(b.x0 + r.float(2, Math.max(2.1, w - 3)), b.h, b.z0 + r.float(2, Math.max(2.1, d - 3)), r.chance(0.5) ? 0 : Math.PI, 1, 1, 1);
-        if (r.chance(0.3)) P.tank.addTRS(b.x0 + 1.6, b.h, b.z1 - 1.6, 0);
+        if (r.chance(0.45)) { const sx = b.x0 + r.float(2, Math.max(2.1, w - 3)), sz = b.z0 + r.float(2, Math.max(2.1, d - 3)); P.solar.addTRS(sx, b.h, sz, r.chance(0.5) ? 0 : Math.PI, 1, 1, 1); cols.add(sx - 1, sz - 0.75, sx + 1, sz + 0.75, b.h, b.h + 1.85, 'roofProp'); }
+        if (r.chance(0.3)) { P.tank.addTRS(b.x0 + 1.6, b.h, b.z1 - 1.6, 0); cols.addCircle(b.x0 + 1.6, b.z1 - 1.6, 0.7, b.h, b.h + 1.7, 'roofProp'); }
       }
     } else if (b.roof === 'dome') {
       group.add(buildSmallMosqueTop(b));
+      { const mw = Math.min(w, d); cols.addCircle(cx, cz, mw * 0.4, b.h, b.h + mw * 0.4, 'dome'); cols.addCircle(b.x1 - 1.2, b.z0 + 1.2, 0.8, 0, 26, 'minaret'); }
     }
     if (style !== 4 && r.chance(0.35)) {
       const [ax, az] = [b.x0 + r.float(1, Math.max(1.1, w - 1)), b.z0 + r.float(1, Math.max(1.1, d - 1))];
@@ -199,6 +200,7 @@ export function buildBuildings(city) {
       if (ch > 2.5) {
         m.compose(v3.set(px, 3.8, pz), q.identity(), s3.set(fcode < 2 ? wid : 0.9, ch, fcode < 2 ? 0.9 : wid));
         shells.add(m, col, { aStyle: [style, ((b.colorIdx * 7) % 997) / 997, fcode, 2], aInfo: [0, 0, 3.2, age * 0.6] });
+        { const hw = (fcode < 2 ? wid : 0.9) / 2, hd = (fcode < 2 ? 0.9 : wid) / 2; cols.add(px - hw, pz - hd, px + hw, pz + hd, 3.45, 3.8 + ch + 0.2, 'cumba'); }
         // konsol (kademeli taban) + cumba çatısı
         roofs.add(boxG(fcode < 2 ? wid : 0.7, 0.35, fcode < 2 ? 0.7 : wid, px - nx * 0.1, 3.45, pz - nz * 0.1, 1, trimCol), cx, cz);
         roofs.add(boxG(fcode < 2 ? wid + 0.3 : 1.2, 0.2, fcode < 2 ? 1.2 : wid + 0.3, px, 3.8 + ch, pz, 1, trimCol), cx, cz);
@@ -243,7 +245,7 @@ export function buildBuildings(city) {
       signs.add(m, null, { aUV: atlas.uv(key) });
       if (b.type === 'apartment' || SHOP_TYPES.has(b.type)) P.awning.addTRS(px, 2.95, dd.z + nz * 0.05, rotY, sw / 4.2, 1, 1, new THREE.Color(['#a01818', '#1d5a2d', '#1d3d6e', '#c98a1a', '#6e1d5a', '#e0e0e0'][b.colorIdx % 6]));
     }
-    if (b.type === 'bank' || (b.sign >= 0 && b.colorIdx % 9 === 0)) { const [ax, az] = frontPos(Math.min(L - 1, 1.2), 0.02); P.atm.addTRS(ax, 0.15, az, rotY); }
+    if (b.type === 'bank' || (b.sign >= 0 && b.colorIdx % 9 === 0)) { const [ax, az] = frontPos(Math.min(L - 1, 1.2), 0.02); P.atm.addTRS(ax, 0.15, az, rotY); cols.addLocal(ax, az, rotY, 0, 0.18, 0.95, 0.38, 0, 1.85, 'atm'); }
     if (b.forSale && fcode < 2) { const [px, pz] = frontPos(L / 2, 0.06); P.forsale.addTRS(px, 4.6, pz, rotY); }
     // ---- grafiti: dükkânsız zemin kat cephesi ----
     if (!(flags & 1) && style !== 4 && style !== 5 && !special && r.chance(0.22) && fcode < 2) {
