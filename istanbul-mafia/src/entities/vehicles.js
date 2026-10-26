@@ -8,6 +8,10 @@ import { CARS } from '../game/economy.js';
 import { clamp, angleDiff, rng, RNG } from '../core/util.js';
 import { makeCanvas, signTexture } from '../core/textures.js';
 import { audio } from '../core/audio.js';
+// Çarpışma ve trafik YZ'si ayrı modüllerde (model kodundan bağımsız):
+import { integrateVehicle, collideAllVehicles } from './vehicle_physics.js';
+import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
+import { Debris } from '../world/debris.js';
 
 // ======================================================================
 // Malzemeler
@@ -1303,7 +1307,10 @@ export class Vehicle {
       if (!hb) wT = clamp(wT, -wMax, wMax); else wT *= 1.5;
     }
     this.yawRate += (wT - this.yawRate) * Math.min(1, dt * (hb ? 4 : 9));
-    this.heading += this.yawRate * dt;
+    // [çarpışma] darbe kaynaklı ek açısal hız (vehicle_physics.js), lastik sürtünmesiyle söner
+    const spin = this.spin || 0;
+    this.heading += (this.yawRate + spin) * dt;
+    if (spin) { this.spin = spin * Math.exp(-dt * (hb || this.destroyed ? 1.4 : 2.6)); if (Math.abs(this.spin) < 0.005) this.spin = 0; }
     // dünya hızı (eski çerçevede) → kayma bir sonraki karede yanal hız olarak görünür
     this.vx = fx * fs + rx * ls;
     this.vz = fz * fs + rz * ls;
@@ -1341,10 +1348,8 @@ export class Vehicle {
       if (Math.random() < slip * 0.6) g.particles.dust({ x: this.pos.x - fx * def.len * 0.4, y: 0.1, z: this.pos.z - fz * def.len * 0.4 });
     }
 
-    // konum
-    this.pos.x += this.vx * dt;
-    this.pos.z += this.vz * dt;
-    this.collideStatic(phys, isPlayer);
+    // konum + statik çarpışma (alt adımlı OBB çözücü)
+    integrateVehicle(this, dt, phys, isPlayer);
     // suya düşme
     if (phys.inWater(this.pos.x, this.pos.z)) {
       if (this.sinking === 0) { audio.splash(this.pos.x, this.pos.z); g.particles.splash({ x: this.pos.x, y: -1.3, z: this.pos.z }); }
@@ -1378,37 +1383,8 @@ export class Vehicle {
     this.sync();
   }
 
-  collideStatic(phys, isPlayer) {
-    if (this.pos.y >= 1.5) return;
-    const g = this.game;
-    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
-    const half = this.def.len * 0.3;
-    let pushX = 0, pushZ = 0;
-    for (let k = 0; k < 3; k++) {
-      const s = k === 0 ? 1 : k === 1 ? -1 : 0;
-      _push.x = this.pos.x + fx * half * s; _push.z = this.pos.z + fz * half * s;
-      const px = _push.x, pz = _push.z;
-      phys.resolveCircle(_push, this.radius, 0.1, 1.4, 0.3);
-      const dx = _push.x - px, dz = _push.z - pz;
-      if (dx || dz) { this.pos.x += dx; this.pos.z += dz; pushX += dx; pushZ += dz; }
-    }
-    const pl = Math.hypot(pushX, pushZ);
-    if (pl > 1e-4) {
-      const nx = pushX / pl, nz = pushZ / pl;
-      const vn = this.vx * nx + this.vz * nz;
-      if (vn < 0) {
-        this.vx -= nx * vn * 1.25; this.vz -= nz * vn * 1.25;
-        const imp = -vn;
-        if (imp > 5) {
-          this.damage(imp * imp * 0.9 * (this.P.steer === 0 ? 0.1 : 1), null);
-          this.impact(this.pos.x - nx * this.radius * 1.2, this.pos.z - nz * this.radius * 1.2, nx, nz, imp);
-          audio.crash(this.pos.x, this.pos.z, Math.min(1.5, imp / 15));
-          g.particles.sparks({ x: this.pos.x - nx * this.radius, y: 0.6, z: this.pos.z - nz * this.radius }, 8);
-          if (isPlayer) g.cameraShake(Math.min(0.6, imp / 30));
-        }
-      }
-    }
-  }
+  // [çarpışma] eski API: tek adımlık statik çözüm (vehicle_physics.js)
+  collideStatic(phys, isPlayer) { integrateVehicle(this, 0, phys, isPlayer); }
 
   updateLights(dt, throttle, hb, isPlayer) {
     const g = this.game, ud = this.mesh.userData;
@@ -1467,7 +1443,6 @@ export class Vehicle {
 // ======================================================================
 // Trafik ve polis yöneticisi
 // ======================================================================
-const CIRC = [-0.3, 0, 0.3];
 const _sirens = [];
 export class VehicleManager {
   constructor(game) {
@@ -1477,6 +1452,7 @@ export class VehicleManager {
     game.scene.add(this.group);
     this.spawnT = 0;
     this.skids = new SkidMarks(game.scene);
+    this.debris = new Debris(game); // [çarpışma] kırılan eşyaların enkazı
   }
 
   add(type, x, z, heading, color) {
@@ -1552,8 +1528,9 @@ export class VehicleManager {
     for (const v of this.list) if (Math.abs(v.pos.x - x) < 7 && Math.abs(v.pos.z - z) < 7) return null;
     const r = Math.random();
     const t = r < 0.55 ? 'kartal' : r < 0.72 ? 'sedan' : r < 0.82 ? 'suv' : r < 0.9 ? 'motor' : r < 0.95 ? 'gt' : 'taksi';
-    const v = this.add(t, x, z, Math.atan2(fx, fz) + (side > 0 ? Math.PI : 0));
-    v.parked = true;
+    // sağdan akan trafikte park: aracın sağ tarafı kaldırıma, yüzü trafik yönüne
+    const v = this.add(t, x, z, Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI));
+    v.parked = true; v.parkedAI = true;
     return v;
   }
 
@@ -1584,186 +1561,8 @@ export class VehicleManager {
     return o;
   }
 
-  driveAI(v, dt) {
-    const ai = v.ai;
-    const g = this.game;
-    if (ai.empty || ai.frozen) { v.controls.throttle = 0; v.controls.handbrake = true; v.ind = null; return; }
-    const player = g.player;
-    let tx, tz, desired = ai.cruise;
-    let lightStop = false;
-    v.ind = null;
-    if (ai.mode === 'direct' || ai.mode === 'race') {
-      const tgt = ai.mode === 'race' ? ai.points[ai.idx] : ai.target;
-      if (!tgt) { v.controls.throttle = 0; v.controls.handbrake = true; return; }
-      tx = tgt.x; tz = tgt.z;
-      desired = ai.mode === 'race' ? v.def.maxSpeed * (ai.skill || 0.85) : ai.cruise;
-      if (ai.mode === 'race' && Math.hypot(tx - v.pos.x, tz - v.pos.z) < 14) { ai.idx++; if (ai.idx >= ai.points.length) { ai.finished = true; ai.idx = ai.points.length - 1; } }
-      if (ai.mode === 'race' && ai.points[ai.idx + 1]) {
-        const n = ai.points[ai.idx + 1];
-        const a1 = Math.atan2(tx - v.pos.x, tz - v.pos.z), a2 = Math.atan2(n.x - tx, n.z - tz);
-        const turn = Math.abs(angleDiff(a1, a2));
-        const dd = Math.hypot(tx - v.pos.x, tz - v.pos.z);
-        if (turn > 0.8 && dd < 40) desired = Math.min(desired, 14 + dd * 0.3);
-      }
-    } else {
-      if (!ai.to) { ai.to = g.map.other(ai.from.edges[0], ai.from); }
-      if (!ai.next) ai.next = this.chooseNext(ai.to, ai.from, ai.mode === 'chase' ? player.pos : null);
-      if (ai.outer === undefined) ai.outer = Math.random() < 0.5;
-      let L = this.laneTarget(ai.from, ai.to, ai.laneCur === undefined ? (ai.laneCur = this.laneFor(ai, ai.from, ai.to)) : ai.laneCur, this._L || (this._L = {}));
-      let s = (v.pos.x - L.ax) * L.fx + (v.pos.z - L.az) * L.fz;
-      // sonraki dönüş yönü ve şerit seçimi
-      const turnInfo = () => {
-        const n = ai.next;
-        const nx = n.x - ai.to.x, nz = n.z - ai.to.z, nl = Math.hypot(nx, nz) || 1;
-        return angleDiff(Math.atan2(L.fx, L.fz), Math.atan2(nx / nl, nz / nl));
-      };
-      let turn = turnInfo();
-      const wantOuter = turn < -0.5 ? true : turn > 0.5 ? false : ai.outer;
-      const remain0 = L.l - s;
-      if (remain0 < 45) ai.outer = wantOuter;
-      const laneWant = this.laneFor(ai, ai.from, ai.to) + (ai.yieldT > 0 ? 1.0 : 0) + (ai.dodge || 0);
-      ai.laneCur += clamp(laneWant - ai.laneCur, -1.4 * dt, 1.4 * dt);
-      const nextLane = this.laneFor(ai, ai.to, ai.next);
-      let N = this.laneTarget(ai.to, ai.next, nextLane, this._N || (this._N = {}));
-      // köşe noktası: iki şerit çizgisinin kesişimi
-      const corner = () => {
-        const cr = L.fx * N.fz - L.fz * N.fx;
-        if (Math.abs(cr) < 0.2) return { px: L.bx, pz: L.bz, sP: L.l };
-        const t = ((N.ax - L.ax) * N.fz - (N.az - L.az) * N.fx) / cr;
-        const tc = clamp(t, L.l - 16, L.l + 16);
-        return { px: L.ax + L.fx * tc, pz: L.az + L.fz * tc, sP: tc };
-      };
-      let C = corner();
-      if (s >= C.sP - 0.6) {
-        ai.from = ai.to; ai.to = ai.next;
-        ai.next = this.chooseNext(ai.to, ai.from, ai.mode === 'chase' ? player.pos : null);
-        ai.laneCur = nextLane;
-        L = this.laneTarget(ai.from, ai.to, ai.laneCur, this._L);
-        s = (v.pos.x - L.ax) * L.fx + (v.pos.z - L.az) * L.fz;
-        N = this.laneTarget(ai.to, ai.next, this.laneFor(ai, ai.to, ai.next), this._N);
-        C = corner();
-        turn = turnInfo();
-      }
-      // ileri bakış noktası (yumuşak viraj)
-      const look = 5 + Math.abs(v.fs) * 0.55;
-      const sl = Math.max(0, s) + look;
-      if (sl <= C.sP) { tx = L.ax + L.fx * sl; tz = L.az + L.fz * sl; }
-      else { const rem = sl - C.sP; tx = C.px + N.fx * rem; tz = C.pz + N.fz * rem; }
-      const toCorner = C.sP - s;
-      if (Math.abs(turn) > 0.5) {
-        if (toCorner < 30) desired = Math.min(desired, 5.5 + toCorner * 0.25);
-        if (toCorner < 42) v.ind = turn > 0 ? 'L' : 'R';
-      }
-      // trafik ışığı
-      const tl = g.traffic;
-      if (tl && ai.mode === 'traffic' && !v.sirenOn && ai.to.edges.length >= 3) {
-        const st = tl.lightState(ai.to, ai.from);
-        if (st !== 'green') {
-          const stopS = L.l - tl.stopOffset(ai.to, ai.from);
-          const dStop = stopS - s - v.def.len * 0.5;
-          if (dStop > -0.8) {
-            const canStop = st === 'red' || dStop > (v.fs * v.fs) / (2 * 5.5) + 0.5;
-            if (canStop) { lightStop = true; desired = Math.min(desired, Math.sqrt(Math.max(0, 2 * 4.5 * (dStop - 0.3)))); if (dStop < 0.8) desired = 0; }
-          }
-        }
-      }
-      ai.waitLight = lightStop;
-      if (ai.mode === 'chase') {
-        desired = v.def.maxSpeed * 0.85;
-        const tg = player.vehicle || player;
-        const d = Math.hypot(tg.pos.x - v.pos.x, tg.pos.z - v.pos.z);
-        if (d < 60 && g.physics.lineOfSight(v.pos.x, 1, v.pos.z, tg.pos.x, 1, tg.pos.z)) {
-          // takip/sıkıştırma: hedefin gelecekteki konumuna yönel
-          const lead = clamp(d / 25, 0, 1.2);
-          const tvx = player.vehicle ? player.vehicle.vx : 0, tvz = player.vehicle ? player.vehicle.vz : 0;
-          tx = tg.pos.x + tvx * lead; tz = tg.pos.z + tvz * lead;
-          desired = player.vehicle ? v.def.maxSpeed : Math.min(desired, d < 14 ? 0 : d);
-          if (!player.vehicle && d < 14) desired = 0;
-          ai.direct = true;
-        } else ai.direct = false;
-      }
-    }
-    // engeller: araç takibi (kuyruk), yayalar
-    if (ai.mode !== 'race' && !(ai.mode === 'chase' && ai.direct)) {
-      const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
-      const range = 6 + Math.abs(v.fs) * 1.6;
-      let gap = 1e9, blocker = null, oFs = 0;
-      if (ai.ignoreT > 0) ai.ignoreT -= dt;
-      for (const o of this.list) {
-        if (o === v || o.kind === 'air' || o.pos.y > 2) continue;
-        const dx = o.pos.x - v.pos.x, dz = o.pos.z - v.pos.z;
-        if (Math.abs(dx) > 35 || Math.abs(dz) > 35) continue;
-        if (ai.ignoreT > 0 && o === ai.ignore) continue;
-        const fd = dx * fx + dz * fz;
-        if (fd < 0.5 || fd > range + v.def.len) continue;
-        const lat = Math.abs(dx * -fz + dz * fx);
-        const lim = (v.def.wid + o.def.wid) * 0.5 + (o.ai && !o.ai.empty ? 0.25 : 0.05);
-        if (lat > lim) continue;
-        const gp = fd - (v.def.len + o.def.len) * 0.5;
-        if (gp < gap) { gap = gp; blocker = o; oFs = Math.max(0, o.vx * fx + o.vz * fz); }
-      }
-      const pedCheck = (x, z) => {
-        const dx = x - v.pos.x, dz = z - v.pos.z;
-        const fd = dx * fx + dz * fz;
-        if (fd < 0.5 || fd > range + v.def.len * 0.5) return;
-        if (Math.abs(dx * -fz + dz * fx) > v.def.wid * 0.5 + 0.6) return;
-        const gp = fd - v.def.len * 0.5 - 0.4;
-        if (gp < gap) { gap = gp; blocker = null; oFs = 0; ai.pedBlock = true; }
-      };
-      ai.pedBlock = false;
-      if (!player.vehicle && !player.inInterior) pedCheck(player.pos.x, player.pos.z);
-      if (ai.pedBlock) ai.honkFor = (ai.honkFor || 0) + dt;
-      for (const n of g.npcs.list) if (!n.dead && !n.vehicle && Math.abs(n.pos.x - v.pos.x) < 30 && Math.abs(n.pos.z - v.pos.z) < 30) pedCheck(n.pos.x, n.pos.z);
-      ai.blocker = blocker;
-      if (gap < 1e8) {
-        const follow = gap < 1.0 ? 0 : Math.max(0, (gap - 2.0) * 0.9 + oFs * 0.5);
-        if (follow < desired) {
-          desired = follow;
-          if (desired < 0.6) {
-            ai.blockT = (ai.blockT || 0) + dt;
-            // kilitlenme çözümü
-            const bl = blocker;
-            if (bl && ai.blockT > 4 && !(bl.ai && bl.ai.waitLight)) {
-              const mutual = bl.ai && (bl.ai.blocker === v || bl.ai.blockT > 4);
-              if (mutual && v.id < bl.id) { ai.ignore = bl; ai.ignoreT = 2.5; }
-              else if (!bl.ai || bl.ai.empty || bl.parked || bl.destroyed || (bl.driver && bl.speed < 0.3)) { ai.dodge = -3.2; ai.dodgeT = 3; }
-            }
-            if (ai.blockT > 12 && !(bl && bl.ai && bl.ai.waitLight)) { ai.ignore = bl; ai.ignoreT = 2; ai.blockT = 0; }
-          }
-        } else ai.blockT = 0;
-        if (ai.honkFor > 1.2 && v.honkT <= 0) { audio.horn(v.pos.x, v.pos.z); v.honkT = 3; ai.honkFor = 0; }
-      } else ai.blockT = 0;
-      if (ai.dodgeT > 0) { ai.dodgeT -= dt; if (ai.dodgeT <= 0) ai.dodge = 0; }
-      // siren duyunca kenara çekil
-      if (ai.mode === 'traffic' && !v.sirenOn) {
-        if (ai.yieldT > 0) ai.yieldT -= dt;
-        for (const sv of _sirens) {
-          const dx = sv.pos.x - v.pos.x, dz = sv.pos.z - v.pos.z;
-          const fd = dx * fx + dz * fz;
-          if (fd < -2 && fd > -40 && Math.abs(dx * -fz + dz * fx) < 5) { ai.yieldT = 2; break; }
-        }
-        if (ai.yieldT > 0) desired = Math.min(desired, 3);
-      }
-      if (ai.panic > 0) { ai.panic -= dt; desired = v.def.maxSpeed * 0.8; }
-    }
-    v.honkT -= dt;
-    // saf takip direksiyonu
-    const want = Math.atan2(tx - v.pos.x, tz - v.pos.z);
-    const diff = angleDiff(v.heading, want);
-    const reverse = ai.reverseT > 0;
-    const ld = Math.max(3, Math.hypot(tx - v.pos.x, tz - v.pos.z));
-    const wb = v.mesh.userData.template ? v.mesh.userData.template.wheelbase || v.def.len * 0.6 : v.def.len * 0.6;
-    const steerMax = (v.P.steer || 0.6) / (1 + (v.fs * v.fs) / 700);
-    const delta = Math.atan2(2 * wb * Math.sin(diff), ld);
-    v.controls.steer = clamp(v.P.steer === 0 ? diff * 2 : delta / steerMax, -1, 1) * (reverse ? -1 : 1);
-    const err = desired - v.fs;
-    v.controls.throttle = reverse ? -1 : clamp(err * 0.35, -1, 1);
-    v.controls.handbrake = desired === 0 && Math.abs(v.fs) < 2;
-    // sıkışma tespiti
-    if (desired > 3 && Math.abs(v.fs) < 0.8) { v.stuckT += dt; if (v.stuckT > 2.5) { ai.reverseT = 1.4; v.stuckT = 0; } } else v.stuckT = 0;
-    if (ai.reverseT > 0) ai.reverseT -= dt;
-    if (ai.rammedT > 0) { ai.rammedT -= dt; v.controls.throttle = -0.8; }
-  }
+  // [trafik YZ] traffic_ai.js
+  driveAI(v, dt) { driveVehicleAI(this, v, dt); }
 
   edgeWidth(a, b) {
     for (const e of a.edges) if (e.a === b || e.b === b) return e.width;
@@ -1794,6 +1593,9 @@ export class VehicleManager {
       if (v.parked && !v.driver) parkedCount++;
       if (v.sirenOn && !v.destroyed) _sirens.push(v);
     }
+    this.sirens = _sirens;
+    this.debris.update(dt);
+    this.parkTick(dt, px, pz, parkedCount);
     const base = g.settings.quality === 'low' ? 14 : g.settings.quality === 'medium' ? 20 : 28;
     const maxTraffic = Math.round(base * this.densityFactor());
     if (this.spawnT <= 0 && !p.inInterior) {
@@ -1817,62 +1619,33 @@ export class VehicleManager {
         continue;
       }
       if (d > 320 && !v.mission) continue;
-      if (v.ai && !v.driver && !v.destroyed) this.driveAI(v, dt);
+      if (v.ai && !v.driver && !v.destroyed) {
+        // [trafik YZ] uzak araçlar seyrek düşünür (zaman dilimleme); fizik her kare
+        if (d > 150 && v.ai.mode === 'traffic') { v.aiAcc = (v.aiAcc || 0) + dt; if (v.aiAcc >= 0.2) { this.driveAI(v, v.aiAcc); v.aiAcc = 0; } }
+        else this.driveAI(v, dt);
+      }
       v.update(dt);
     }
     this.collideVehicles();
   }
 
-  collideVehicles() {
+  // [çarpışma] OBB araç-araç (vehicle_physics.js)
+  collideVehicles() { collideAllVehicles(this); }
+
+  // [trafik YZ] ara sıra bir trafik aracı kenara park eder, park etmiş biri trafiğe çıkar
+  parkTick(dt, px, pz, parkedCount) {
+    this.parkT = (this.parkT || 0) - dt;
+    this.clock = (this.clock || 0) + dt;
+    for (const v of this.list) if (v.bornAt === undefined) v.bornAt = this.clock;
+    if (this.parkT > 0 || this.game.player.inInterior) return;
+    this.parkT = 1;
     const L = this.list;
-    for (let i = 0; i < L.length; i++) {
-      const a = L[i];
-      for (let j = i + 1; j < L.length; j++) {
-        const b = L[j];
-        const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
-        const lim = (a.def.len + b.def.len) * 0.5;
-        if (Math.abs(dx) > lim || Math.abs(dz) > lim) continue;
-        if (Math.abs(a.pos.y - b.pos.y) > 2) continue;
-        let hit = false;
-        const afx = Math.sin(a.heading), afz = Math.cos(a.heading), bfx = Math.sin(b.heading), bfz = Math.cos(b.heading);
-        for (const sa of CIRC) for (const sb of CIRC) {
-          const ax = a.pos.x + afx * a.def.len * sa, az = a.pos.z + afz * a.def.len * sa;
-          const bx2 = b.pos.x + bfx * b.def.len * sb, bz = b.pos.z + bfz * b.def.len * sb;
-          const ddx = bx2 - ax, ddz = bz - az;
-          const d = Math.hypot(ddx, ddz);
-          const r = a.radius + b.radius;
-          if (d < r && d > 1e-4) {
-            const nx = ddx / d, nz = ddz / d, pen = (r - d) / 2;
-            const ma = a.def.mass || a.def.hp, mb = b.def.mass || b.def.hp, tot = ma + mb;
-            a.pos.x -= nx * pen * (mb / tot) * 2; a.pos.z -= nz * pen * (mb / tot) * 2;
-            b.pos.x += nx * pen * (ma / tot) * 2; b.pos.z += nz * pen * (ma / tot) * 2;
-            const rv = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
-            if (rv < 0 && !hit) {
-              hit = true;
-              const jimp = (-1.4 * rv) / (1 / ma + 1 / mb);
-              a.vx -= (jimp / ma) * nx; a.vz -= (jimp / ma) * nz;
-              b.vx += (jimp / mb) * nx; b.vz += (jimp / mb) * nz;
-              const imp = -rv;
-              if (imp > 4) {
-                a.damage(imp * imp * 0.6 * (mb / tot) * 2, b.driver); b.damage(imp * imp * 0.6 * (ma / tot) * 2, a.driver);
-                const cx = ax + nx * a.radius, cz = az + nz * a.radius;
-                a.impact(cx, cz, -nx, -nz, imp); b.impact(cx, cz, nx, nz, imp);
-                audio.crash(a.pos.x, a.pos.z, Math.min(1.5, imp / 12));
-                this.game.particles.sparks({ x: cx, y: 0.6, z: cz }, 10);
-                const pl = this.game.player;
-                if (a.driver === pl || b.driver === pl) {
-                  this.game.cameraShake(Math.min(0.6, imp / 25));
-                  const other = a.driver === pl ? b : a;
-                  if (other.type === 'police' || other.type === 'swat') this.game.wanted.crime('hit_police_car', other.pos);
-                  if (other.ai && other.ai.mode === 'traffic') other.ai.panic = 3;
-                  if (other.ai && other.ai.mode === 'chase') other.ai.rammedT = 0.7;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    if (!L.length) return;
+    const v = L[Math.floor(Math.random() * L.length)];
+    const d = Math.hypot(v.pos.x - px, v.pos.z - pz);
+    if (d < 30 || d > 150) return;
+    if (v.ai && v.ai.mode === 'traffic' && !v.ai.empty && parkedCount < 14 && Math.random() < 0.12) maybePark(this, v);
+    else if (v.parked && v.parkedAI && d > 80 && v !== this.game.player.lastVehicle && this.clock - (v.bornAt ?? (v.bornAt = this.clock)) > 120 && Math.random() < 0.15) maybeUnpark(this, v);
   }
 
   // Yönlendirilmiş dikdörtgene uzaklıkla en yakın binilebilir araç (tekne/uçak dahil)

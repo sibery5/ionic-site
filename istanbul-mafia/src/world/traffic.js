@@ -85,7 +85,7 @@ export class TrafficLights {
       const rot = Math.atan2(a.dx, a.dz);
       Q.setFromAxisAngle(UP, rot);
       M.compose(P.set(px, 0, pz), Q, S.set(1, 1, 1)); this.poles.setMatrixAt(a.idx, M);
-      cols.add(px - 0.15, pz - 0.15, px + 0.15, pz + 0.15, 0, 5.5, 'trafik');
+      cols.addCircle(px, pz, 0.2, 0, 5.5, 'trafik');
       // kol yola doğru uzanır
       const armLen = Math.min(a.hw * 0.75, 5);
       // kolun yerel +X'i yol ortasına

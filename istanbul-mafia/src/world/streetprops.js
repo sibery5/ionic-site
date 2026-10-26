@@ -140,6 +140,7 @@ export function buildStreetProps(city) {
   const doors = city.doors;
   const nearDoor = (x, z, d = 2.2) => { for (const dd of doors) if (Math.abs(dd.x - x) < d && Math.abs(dd.z - z) < d) return true; return false; };
   const lamps = [];
+  const benches = city.benches || (city.benches = []);
   const halos = [];
   const wires = [];
   for (const rd of map.roads) {
@@ -164,13 +165,13 @@ export function buildStreetProps(city) {
         const classic = historic && !rd.bridge;
         const y0 = inBridge(x, z) ? 0 : 0.15;
         (classic ? P.lampClassic : P.lampModern).addTRS(x, y0, z, rot);
-        cols.add(x - 0.15, z - 0.15, x + 0.15, z + 0.15, 0, 6, 'lamp');
+        cols.addCircle(x, z, 0.2, 0, classic ? 4.9 : 6.6, 'lamp');
         if (classic) halos.push(x, y0 + 4.75, z);
         else { const hx = x - Math.sin(rot) * 1.6, hz = z - Math.cos(rot) * 1.6; halos.push(hx, y0 + 6.4, hz); }
         // lamba dibinde çöp kovası
         if (r.chance(0.18) && !rd.bridge) {
           const bx = horiz ? x + 1.3 : x, bz = horiz ? z : z + 1.3;
-          if (!nearDoor(bx, bz)) { P.bin.addTRS(bx, 0.15, bz, r.float(0, 6.28)); cols.add(bx - 0.28, bz - 0.28, bx + 0.28, bz + 0.28, 0, 0.9, 'bin'); }
+          if (!nearDoor(bx, bz)) { const br = r.float(0, 6.28); P.bin.addTRS(bx, 0.15, bz, br); cols.breakable(cols.addCircle(bx, bz, 0.28, 0, 1.05, 'bin'), 'bin', 25, P.bin, bx, 0.15, bz, br); }
         }
       }
     }
@@ -187,28 +188,37 @@ export function buildStreetProps(city) {
         const rot = faceRot(-side);
         if (main && k < 0.045) {
           const [bx, bz] = at(t, side * (hw + 1.9));
-          P.busstop.addTRS(bx, 0.15, bz, faceRot(-side) + Math.PI);
-          const fx = horiz ? 4.2 : 0.5, fz = horiz ? 0.5 : 4.2;
-          const [cx2, cz2] = at(t, side * (hw + 2.6));
-          cols.add(cx2 - fx / 2, cz2 - fz / 2, cx2 + fx / 2, cz2 + fz / 2, 0, 2.6, 'busstop');
+          const brot = faceRot(-side) + Math.PI;
+          P.busstop.addTRS(bx, 0.15, bz, brot);
+          // durak: arka cam, yan cam, oturak, ön direkler, tabela direği, çatı (yerel koordinatta)
+          cols.addLocal(bx, bz, brot, 0, -0.7, 4.2, 0.14, 0, 2.6, 'busstop');
+          cols.addLocal(bx, bz, brot, 2.0, -0.05, 0.12, 1.4, 0, 2.6, 'busstop');
+          cols.addLocal(bx, bz, brot, -1.98, -0.05, 0.14, 1.4, 0, 2.6, 'busstop');
+          cols.addLocal(bx, bz, brot, 0, -0.45, 2.6, 0.45, 0, 0.55, 'busstop');
+          for (const lx of [-2, 2]) cols.addLocalCircle(bx, bz, brot, lx, 0.6, 0.07, 0, 2.6, 'busstop');
+          cols.addLocalCircle(bx, bz, brot, 2.5, 0.6, 0.07, 0, 3.4, 'busstop');
+          cols.addLocal(bx, bz, brot, 0, -0.05, 4.4, 1.8, 2.55, 2.75, 'busstopRoof');
           t += 8;
         } else if (k < 0.1) {
-          P.bench.addTRS(x, 0.15, z, rot + Math.PI); cols.add(x - 0.9, z - 0.9, x + 0.9, z + 0.9, 0, 0.5, 'bench');
+          P.bench.addTRS(x, 0.15, z, rot + Math.PI); cols.breakable(cols.addLocal(x, z, rot + Math.PI, 0, -0.04, 1.8, 0.56, 0, 0.9, 'bench'), 'bench', 70, P.bench, x, 0.15, z, rot + Math.PI); benches.push([x, z, rot + Math.PI]);
         } else if (k < 0.15) {
-          P.hydrant.addTRS(x, 0.15, z, 0); cols.add(x - 0.15, z - 0.15, x + 0.15, z + 0.15, 0, 0.8, 'hydrant');
+          P.hydrant.addTRS(x, 0.15, z, 0); cols.breakable(cols.addCircle(x, z, 0.17, 0, 1.0, 'hydrant'), 'hydrant', 60, P.hydrant, x, 0.15, z, 0);
         } else if (k < 0.24) {
-          P.scooter.addTRS(x, 0.15, z, faceRot(0) + (horiz ? Math.PI / 2 : 0) + r.float(-0.3, 0.3), 1, 1, 1, new THREE.Color().setHSL(r.next(), 0.5, 0.45));
+          const sr = faceRot(0) + (horiz ? Math.PI / 2 : 0) + r.float(-0.3, 0.3);
+          P.scooter.addTRS(x, 0.15, z, sr, 1, 1, 1, new THREE.Color().setHSL(r.next(), 0.5, 0.45));
+          cols.breakable(cols.addOBB(x, z, 0.5, 1.45, sr, 0, 1.2, 'scooter'), 'scooter', 110, P.scooter, x, 0.15, z, sr);
         } else if (k < 0.27 && main) {
-          P.simit.addTRS(x, 0.15, z, rot); cols.add(x - 0.7, z - 0.7, x + 0.7, z + 0.7, 0, 1.6, 'simit');
+          P.simit.addTRS(x, 0.15, z, rot); cols.breakable(cols.addLocal(x, z, rot, 0, 0.03, 1.35, 0.85, 0, 1.75, 'simit'), 'simit', 80, P.simit, x, 0.15, z, rot);
         } else if (k < 0.285) {
-          P.phone.addTRS(x, 0.15, z, rot); cols.add(x - 0.5, z - 0.5, x + 0.5, z + 0.5, 0, 2.4, 'phone');
+          P.phone.addTRS(x, 0.15, z, rot); cols.addOBB(x, z, 1.05, 1.05, rot, 0, 2.6, 'phone');
         } else if (k < 0.31 && main) {
-          P.news.addTRS(x, 0.15, z, rot); cols.add(x - 0.7, z - 0.7, x + 0.7, z + 0.7, 0, 1.6, 'news');
+          P.news.addTRS(x, 0.15, z, rot); cols.breakable(cols.addOBB(x, z, 1.45, 0.6, rot, 0, 1.75, 'news'), 'news', 70, P.news, x, 0.15, z, rot);
         } else if (k < 0.33 && main && r.chance(0.5)) {
           const [bx, bz] = at(t, side * (hw + 1.0));
           P.billboard.addTRS(bx, 0.15, bz, rot);
           city.addAd(bx, 0.15 + 7 + 1.8, bz, rot, r.int(0, AD_COUNT - 1), 7.0, 3.4, 0.01);
-          cols.add(bx - 0.35, bz - 0.35, bx + 0.35, bz + 0.35, 0, 7, 'billboard');
+          cols.addCircle(bx, bz, 0.35, 0, 7, 'billboard');
+          cols.addLocal(bx, bz, rot, 0, -0.25, 7.4, 0.35, 7.1, 10.8, 'billboard');
           t += 10;
         }
       }
@@ -223,7 +233,7 @@ export function buildStreetProps(city) {
     for (const tt of [hw + 3.5, len - hw - 3.5]) for (const side of [-1, 1]) for (let k = 0; k < 3; k++) {
       const [x, z] = at(tt + (tt < len / 2 ? k * 1.4 : -k * 1.4), side * (hw + 0.35));
       if (!isLand(x, z)) continue;
-      P.bollard.addTRS(x, 0.15, z, 0); cols.add(x - 0.08, z - 0.08, x + 0.08, z + 0.08, 0, 0.9, 'bollard');
+      P.bollard.addTRS(x, 0.15, z, 0); cols.breakable(cols.addCircle(x, z, 0.09, 0, 1.05, 'bollard'), 'bollard', 40, P.bollard, x, 0.15, z, 0);
     }
     // eski semtlerde ahşap elektrik/telefon direkleri ve telleri
     if (dist && (dist.id === 'eyup' || dist.id === 'uskudar' || dist.id === 'fatih') && !main) {
@@ -233,7 +243,7 @@ export function buildStreetProps(city) {
         const [x, z] = at(t, side * (hw + SIDEWALK - 0.5));
         if (!isLand(x, z) || nearDoor(x, z, 1.5)) { prev = null; continue; }
         P.pole.addTRS(x, 0.15, z, horiz ? 0 : Math.PI / 2);
-        cols.add(x - 0.15, z - 0.15, x + 0.15, z + 0.15, 0, 9, 'pole');
+        cols.addCircle(x, z, 0.16, 0, 9.2, 'pole');
         if (prev) for (const o of [-0.75, 0, 0.75]) {
           const ax = prev[0] + (horiz ? o : 0), az = prev[1] + (horiz ? 0 : o), bx = x + (horiz ? o : 0), bz = z + (horiz ? 0 : o);
           const N = 8;
@@ -254,7 +264,7 @@ export function buildStreetProps(city) {
     const cx = r.chance(0.5) ? b.x0 - SIDEWALK + 2.2 : b.x1 + SIDEWALK - 2.2, cz = r.chance(0.5) ? b.z0 - SIDEWALK + 1.8 : b.z1 + SIDEWALK - 1.8;
     if (nearDoor(cx, cz, 3)) continue;
     const rot = cz < b.cz ? Math.PI : 0;
-    P.kiosk.addTRS(cx, 0.15, cz, rot); cols.add(cx - 1.1, cz - 0.9, cx + 1.1, cz + 0.9, 0, 2.6, 'kiosk');
+    P.kiosk.addTRS(cx, 0.15, cz, rot); cols.addOBB(cx, cz, 2.2, 1.75, rot, 0, 2.75, 'kiosk');
   }
   // çatı reklam panoları (yüksek düz çatılar, ana yollara yakın)
   for (const bl of map.buildings) {
@@ -262,6 +272,7 @@ export function buildStreetProps(city) {
     const nz = bl.door.nz || 1, x = (bl.x0 + bl.x1) / 2, z = nz > 0 ? bl.z1 - 2 : bl.z0 + 2;
     const rot = nz > 0 ? 0 : Math.PI;
     P.roofboard.addTRS(x, bl.h, z, rot);
+    cols.addLocal(x, z, rot, 0, -0.12, 7.4, 0.3, bl.h, bl.h + 5.4, 'roofboard');
     city.addAd(x, bl.h + 1.5 + 0.0, z + nz * 0.02, rot, r.int(0, AD_COUNT - 1), 7.0, 3.4, 0);
   }
   // teller

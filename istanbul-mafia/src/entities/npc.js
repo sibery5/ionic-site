@@ -10,6 +10,8 @@ import { districtAt, isLand } from '../world/map.js';
 import { GANGS, rankOf } from '../game/economy.js';
 import { WEAPONS } from '../game/weapons.js';
 import { audio } from '../core/audio.js';
+import { N_FREE, N_LOW, N_BLOCK } from '../world/navgrid.js';
+import { actorVsVehicle } from './vehicle_physics.js';
 
 const lookRng = new RNG(777);
 const tmp = new THREE.Vector3();
@@ -226,7 +228,8 @@ export class NPC extends Actor {
     g.npcs.onNpcDeath(this, attacker, kind);
   }
 
-  // kaldırım boyunca yürüme yol noktaları
+  // Kaldırım boyunca yürüme: düğüm çevresindeki dört blok köşesi (kadran) üzerinden; yol yalnız yaya geçidinden
+  // (iki komşu kadran arası) geçilir, geçiş noktaları `cross` bilgisiyle işaretlenir (ışıkta bekleme).
   planWalk() {
     const map = this.game.map;
     if (!this.cur) {
@@ -236,26 +239,187 @@ export class NPC extends Actor {
       this.cur = map.other(n.edges[Math.floor(Math.random() * n.edges.length)], n);
     }
     const from = this.prev, to = this.cur;
-    const e = from.edges.find((ed) => map.other(ed, from) === to);
-    const hw = e ? e.width / 2 : 6;
     const dx = to.x - from.x, dz = to.z - from.z, l = Math.hypot(dx, dz) || 1;
     const fx = dx / l, fz = dz / l;
-    const rx = -fz, rz = fx;
-    const off = hw + 1.5;
-    let cross = 6;
-    for (const ed of to.edges) if (ed !== e) cross = Math.max(cross, ed.width / 2);
-    this.path = [
-      { x: to.x - fx * (cross + 1.5) + rx * off * this.side, z: to.z - fz * (cross + 1.5) + rz * off * this.side },
-    ];
-    // sonraki kenar
+    // sonraki kenar: geri dönmeyi sevme
     const opts = to.edges.map((ed) => map.other(ed, to)).filter((nn) => nn !== from);
     const next = opts.length ? opts[Math.floor(Math.random() * opts.length)] : from;
-    const e2 = to.edges.find((ed) => map.other(ed, to) === next);
-    const hw2 = e2 ? e2.width / 2 : 6;
     const dx2 = next.x - to.x, dz2 = next.z - to.z, l2 = Math.hypot(dx2, dz2) || 1;
     const fx2 = dx2 / l2, fz2 = dz2 / l2;
-    this.path.push({ x: to.x + fx2 * (cross + 1.5) + -fz2 * (hw2 + 1.5) * this.side, z: to.z + fz2 * (cross + 1.5) + fx2 * (hw2 + 1.5) * this.side });
+    const sd = this.side;
+    // kadran: (gidiş yönünün tersi + sağ*taraf) bileşen işaretleri; sağ = (-fz, fx)
+    const q1x = Math.sign(-fx + -fz * sd) || 1, q1z = Math.sign(-fz + fx * sd) || 1;
+    const q3x = Math.sign(fx2 + -fz2 * sd) || 1, q3z = Math.sign(fz2 + fx2 * sd) || 1;
+    let hx = 5.5, hz = 5.5; // düğümdeki yolların yarı genişlikleri (x: dikey yollar, z: yatay yollar)
+    for (const ed of to.edges) { const o = map.other(ed, to); if (Math.abs(o.x - to.x) > Math.abs(o.z - to.z)) hz = Math.max(hz, ed.width / 2); else hx = Math.max(hx, ed.width / 2); }
+    const corner = (qx, qz) => ({ x: to.x + qx * (hx + 1.6), z: to.z + qz * (hz + 1.6) });
+    const path = [corner(q1x, q1z)];
+    const hasLight = to.edges.length >= 3;
+    const step = (ax, az, bx, bz) => {
+      const p = corner(bx, bz);
+      // x işareti değişti → dikey (z boyunca akan) yolu geçiyor: o yoldaki araç ekseni 0
+      if (ax !== bx || az !== bz) p.cross = { node: to, axis: ax !== bx ? 0 : 1, light: hasLight };
+      path.push(p);
+    };
+    if (q1x !== q3x && q1z !== q3z) {
+      // iki yol: önce birini sonra diğerini geç
+      if (Math.random() < 0.5) { step(q1x, q1z, q3x, q1z); step(q3x, q1z, q3x, q3z); } else { step(q1x, q1z, q1x, q3z); step(q1x, q3z, q3x, q3z); }
+    } else if (q1x !== q3x || q1z !== q3z) step(q1x, q1z, q3x, q3z);
+    this.path = path;
     this.prev = to; this.cur = next;
+  }
+
+  // ---------------- gezinme: ızgara A* + yerel yönlendirme ----------------
+  // (tx,tz)'ye git; engel varsa yol bul, duvara sürtme yok, alçak engellerin üstünden atla. Hedefe uzaklık döner.
+  navTo(tx, tz, speed, dt, vaultOK = true) {
+    const g = this.game, nav = g.physics.nav;
+    const px = this.pos.x, pz = this.pos.z;
+    const dist = Math.hypot(tx - px, tz - pz);
+    if (dist < 0.05) { this.speed = 0; return dist; }
+    const N = this.navS || (this.navS = { gx: 1e9, gz: 1e9, path: [], i: 0, t: 0, direct: true, chkT: 0, lx: px, lz: pz, stuck: 0, replan: false, macro: null, mx: 1e9, mz: 1e9 });
+    // uzak / pencereye sığmayan hedef: kaldırım köşeleri üzerinden kaba rota (yol grafiği), yerel A* ara noktalara
+    if (N.macro && (Math.abs(N.mx - tx) + Math.abs(N.mz - tz) > 4)) N.macro = null;
+    if (N.macro && N.macro.length) {
+      const m = N.macro[0];
+      if (Math.hypot(m.x - px, m.z - pz) < 1.6) { N.macro.shift(); N.gx = 1e9; }
+      if (N.macro.length) { const m2 = N.macro[0]; this._navLocal(N, m2.x, m2.z, speed, dt, vaultOK, true); return dist; }
+      N.macro = null;
+    }
+    this._navLocal(N, tx, tz, speed, dt, vaultOK, false);
+    if (N.wantMacro && !N.macro) {
+      N.wantMacro = false;
+      N.macro = g.npcs.sidewalkRoute(px, pz, tx, tz); N.mx = tx; N.mz = tz; N.gx = 1e9;
+    }
+    return dist;
+  }
+  _navLocal(N, tx, tz, speed, dt, vaultOK, isMacro) {
+    const g = this.game, nav = g.physics.nav;
+    const px = this.pos.x, pz = this.pos.z;
+    const dist = Math.hypot(tx - px, tz - pz);
+    N.t -= dt;
+    const moved = Math.abs(N.gx - tx) + Math.abs(N.gz - tz);
+    if (moved > (dist > 15 ? 3 : 1.0) || N.t <= 0 || N.replan) {
+      N.gx = tx; N.gz = tz; N.t = 1.2 + Math.random() * 0.8;
+      const forced = N.replan; N.replan = false;
+      if (!forced && dist < 70 && nav.clearLine(px, pz, tx, tz, false)) { N.path.length = 0; N.direct = true; }
+      else if (g.npcs.pathBudget > 0) {
+        g.npcs.pathBudget--;
+        const found = nav.findPath(px, pz, tx, tz, N.path, { lowCost: vaultOK ? 2.5 : 9, maxExpand: 4500 });
+        N.i = 0; N.direct = N.path.length === 0;
+        if (N.path.partial) N.t = 0.9;
+        if (!found && !isMacro && dist > 8) N.wantMacro = true;
+      } else { N.t = 0.1; N.replan = forced; }
+    }
+    let wx = tx, wz = tz, vseg = false;
+    if (!N.direct && N.i < N.path.length) {
+      let w = N.path[N.i];
+      while (N.i < N.path.length - 1 && Math.hypot(w.x - px, w.z - pz) < 0.8) { N.i++; w = N.path[N.i]; }
+      if (N.i === N.path.length - 1 && !N.path.partial && Math.hypot(w.x - px, w.z - pz) < 0.8) { N.direct = true; }
+      else { wx = w.x; wz = w.z; vseg = w.vault; }
+    }
+    this.steerMove(wx, wz, speed, dt, vaultOK || vseg);
+    // sıkışma: 1 sn'de 0.3 m'den az ilerleme → yeniden yol bul, yön değiştir
+    N.chkT += dt;
+    if (N.chkT >= 1) {
+      const prog = Math.hypot(this.pos.x - N.lx, this.pos.z - N.lz);
+      if (prog < 0.3 && speed > 0.5 && dist > 1.2 && !this.vault) {
+        N.stuck++; N.replan = true; this.side = -this.side;
+        if (N.stuck >= 3) { N.stuck = 0; if (this.onStuck) this.onStuck(); }
+      } else if (prog > 0.6) N.stuck = 0;
+      N.chkT = 0; N.lx = this.pos.x; N.lz = this.pos.z;
+    }
+  }
+  navReset() { if (this.navS) { this.navS.path.length = 0; this.navS.direct = true; this.navS.gx = 1e9; this.navS.macro = null; } }
+
+  // Yerel yönlendirme: bıyıklar (ızgarada ileri bakış), ayrışma (diğer yayalar), alçak engelde atlama
+  steerMove(wx, wz, speed, dt, vaultOK) {
+    const g = this.game, nav = g.physics.nav;
+    const px = this.pos.x, pz = this.pos.z;
+    const dx = wx - px, dz = wz - pz, d = Math.hypot(dx, dz);
+    if (d < 0.03) { this.speed = 0; return; }
+    let want = Math.atan2(dx, dz);
+    const look = Math.min(1.1, d);
+    const blocked = (a, L) => { const v = nav.at(px + Math.sin(a) * L, pz + Math.cos(a) * L); return v >= N_BLOCK || (v === N_LOW && !vaultOK); };
+    if (look > 0.35 && (blocked(want, look) || blocked(want, look * 0.5))) {
+      const sd = this.side;
+      for (let k = 0; k < 6; k++) {
+        const da = [0.45, -0.45, 0.9, -0.9, 1.4, -1.4][k] * sd;
+        if (!blocked(want + da, look) && !blocked(want + da, look * 0.5)) { want += da; break; }
+      }
+    }
+    // ayrışma: yakın yayalardan uzaklaş
+    let sx = Math.sin(want), sz = Math.cos(want);
+    const nb = g.npcs.neighbors(px, pz);
+    if (nb) {
+      for (let i = 0; i < nb.length; i++) {
+        const o = nb[i];
+        if (o === this || o.dead) continue;
+        const ox = px - o.pos.x, oz = pz - o.pos.z, od2 = ox * ox + oz * oz;
+        if (od2 > 0.85 * 0.85 || od2 < 1e-6) continue;
+        const od = Math.sqrt(od2), k = (0.85 - od) / 0.85 * 1.4;
+        sx += (ox / od) * k; sz += (oz / od) * k;
+      }
+    }
+    want = Math.atan2(sx, sz);
+    if (this.detourT > 0) { this.detourT -= dt; want += this.side * 1.25; }
+    this.heading = dampAngle(this.heading, want, 10, dt);
+    const s = Math.min(speed, d / Math.max(dt, 1e-3));
+    const hx = Math.sin(this.heading), hz = Math.cos(this.heading);
+    // alçak engel tam önde: üstünden atla
+    if (vaultOK && s > 0.9 && !this.vault) {
+      const v = nav.at(px + hx * 0.55, pz + hz * 0.55);
+      if (v === N_LOW && this.startVault(hx, hz)) return;
+    }
+    this.pos.x += hx * s * dt;
+    this.pos.z += hz * s * dt;
+    this.speed = s;
+  }
+
+  // Alçak engelin (≤1.25 m: bank, çit, korkuluk, kova) üstünden atlama/tırmanma. vaultT 0..1 animasyon bayrağı.
+  startVault(hx, hz) {
+    const g = this.game, nav = g.physics.nav, px = this.pos.x, pz = this.pos.z;
+    let e = -1;
+    for (let s = 0.6; s <= 2.6; s += 0.2) {
+      const v = nav.at(px + hx * s, pz + hz * s);
+      if (v === N_FREE) { e = s; break; }
+      if (v < 0 || v >= N_BLOCK) return false;
+    }
+    if (e < 0) return false;
+    let top = 0.5;
+    const boxes = g.physics.active.query(Math.min(px, px + hx * e) - 0.3, Math.min(pz, pz + hz * e) - 0.3, Math.max(px, px + hx * e) + 0.3, Math.max(pz, pz + hz * e) + 0.3, coverBoxes);
+    for (const b of boxes) if (b.y1 <= 1.3 && b.y1 > top && b.y0 < 0.5) top = b.y1;
+    const end = e + 0.3;
+    this.vault = { t: 0, dur: 0.42 + top * 0.22, sx: px, sz: pz, sy: this.pos.y, ex: px + hx * end, ez: pz + hz * end, top };
+    this.jumping = true;
+    this.heading = Math.atan2(hx, hz);
+    return true;
+  }
+  updateVault(dt) {
+    const V = this.vault;
+    V.t += dt;
+    const u = Math.min(1, V.t / V.dur), e = u * u * (3 - 2 * u);
+    this.pos.x = V.sx + (V.ex - V.sx) * e; this.pos.z = V.sz + (V.ez - V.sz) * e;
+    this.pos.y = V.sy + Math.max(0, V.top + 0.1) * Math.sin(Math.PI * Math.min(1, u * 1.1));
+    this.vaultT = Math.max(0.001, u);
+    this.speed = Math.hypot(V.ex - V.sx, V.ez - V.sz) / V.dur;
+    if (u >= 1) { this.vault = null; this.vaultT = 0; this.jumping = false; this.pos.y = V.sy; }
+  }
+
+  // Kaçış planı: (1) yakındaki, tehdide ters yöndeki bir binanın kapısından içeri, (2) siper, (3) sokak boyunca uzaklaş
+  planFlee(cont) {
+    const g = this.game, from = this.fleeFrom || g.player.pos;
+    this.fleeSrc = this.fleeFrom;
+    const canDoor = !this.mission && !this.persistent && !this.inInterior && (this.faction === 'civilian' || this.kind === 'resident');
+    let F = null;
+    if (canDoor && !cont && Math.random() < 0.6) { const d = g.npcs.doorAway(this.pos, from, 30); if (d) F = { x: d.x, z: d.z, door: true }; }
+    if (!F && !cont && !this.mission && Math.random() < 0.2) { const c = this.findCover({ pos: from }); if (c) F = { x: c.x, z: c.z, cover: true }; }
+    if (!F) { const p = g.npcs.streetAway(this.pos, from, 28 + Math.random() * 14, this); F = { x: p.x, z: p.z, street: true }; }
+    this.flee = F;
+    this.navReset();
+  }
+  onStuck() {
+    if (this.state === 'flee') { const F = this.flee; if (F && F.door) this.flee = null; else this.planFlee(true); }
+    else if (this.state === 'walk') { this.path = []; this.cur = null; this.side = -this.side; }
   }
 
   moveToward(tx, tz, speed, dt) {
@@ -416,6 +580,14 @@ export class NPC extends Actor {
       this.knock.t -= dt;
       this.pos.x += this.knock.x * dt * 3; this.pos.z += this.knock.z * dt * 3;
     }
+    if (this.carHitT > 0) this.carHitT -= dt;
+    // engel üstünden atlama sürüyor: yalnız hareketi oynat
+    if (this.vault) {
+      this.updateVault(dt);
+      if (full) this.model.animate(dt, this.animState());
+      this.sync();
+      return;
+    }
     if (this.thinkT <= 0) this.think();
     this.handsUp = false;
     let crouch = false;
@@ -424,9 +596,18 @@ export class NPC extends Actor {
         if (!this.path.length) this.planWalk();
         const wp = this.path[0];
         if (wp) {
-          const d = this.moveToward(wp.x, wp.z, this.walkSpeed, dt);
+          // yaya geçidi: araç ışığı kırmızı olana kadar kaldırımda bekle (en çok 25 sn)
+          if (wp.cross && wp.cross.light && !this.crossOK) {
+            const tl = g.traffic;
+            const n = wp.cross.node;
+            const st = tl ? tl.lightState(n, wp.cross.axis ? { x: n.x + 10, z: n.z } : { x: n.x, z: n.z + 10 }) : 'red';
+            this.crossWait = (this.crossWait || 0) + dt;
+            if (st === 'red' || this.crossWait > 25) { this.crossOK = true; this.crossWait = 0; }
+            else { this.heading = dampAngle(this.heading, Math.atan2(wp.x - this.pos.x, wp.z - this.pos.z), 4, dt); speed = 0; break; }
+          }
+          const d = this.navTo(wp.x, wp.z, wp.cross ? this.walkSpeed * 1.25 : this.walkSpeed, dt, false);
           speed = this.speed;
-          if (d < 0.8) this.path.shift();
+          if (d < 0.9) { this.path.shift(); this.crossOK = false; this.navReset(); }
         }
         break;
       }
@@ -434,8 +615,7 @@ export class NPC extends Actor {
         // betik yolu (görevler, kaçış, eskort)
         const wp = this.path[0];
         if (wp) {
-          const d = this.moveToward(wp.x, wp.z, this.moveSpeed || 4, dt); speed = this.speed;
-          this.avoid();
+          const d = this.navTo(wp.x, wp.z, this.moveSpeed || 4, dt, true); speed = this.speed;
           if (d < (wp.r || 0.7)) { this.path.shift(); if (!this.path.length) { this.state = this.afterMove || 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(this); } } }
         } else this.state = this.afterMove || 'idle';
         break;
@@ -445,8 +625,7 @@ export class NPC extends Actor {
         if (!pts || !pts.length) { this.state = 'guard'; break; }
         if (this.waitT > 0) { this.waitT -= dt; this.heading += Math.sin(performance.now() * 0.001 + this.id) * dt * 0.6; break; }
         const wp = pts[this.patrolIdx % pts.length];
-        const d = this.moveToward(wp.x, wp.z, this.walkSpeed * 0.9, dt); speed = this.speed;
-        this.avoid();
+        const d = this.navTo(wp.x, wp.z, this.walkSpeed * 0.9, dt, true); speed = this.speed;
         if (d < 0.8) { this.patrolIdx++; this.waitT = 1.5 + Math.random() * 3; }
         break;
       }
@@ -455,13 +634,13 @@ export class NPC extends Actor {
         if (!L || L.dead) { this.state = 'idle'; break; }
         if (L.vehicle) break; // araca binme görev tarafında
         const dx = L.pos.x - this.pos.x, dz = L.pos.z - this.pos.z, d = Math.hypot(dx, dz);
-        if (d > 3.2) { this.moveToward(L.pos.x - dx / d * 2.2 + this.side * 0.8, L.pos.z - dz / d * 2.2, d > 8 ? 5.5 : 3.6, dt); speed = this.speed; this.avoid(); }
+        if (d > 3.2) { this.navTo(L.pos.x - dx / d * 2.2 + this.side * 0.8, L.pos.z - dz / d * 2.2, d > 8 ? 5.5 : 3.6, dt, true); speed = this.speed; }
         else this.heading = dampAngle(this.heading, Math.atan2(dx, dz), 4, dt);
         if (d > 60 && !L.inInterior) { this.pos.set(L.pos.x - 2, L.pos.y, L.pos.z - 2); }
         break;
       }
       case 'idle': case 'guard': {
-        if (this.home && Math.hypot(this.home.x - this.pos.x, this.home.z - this.pos.z) > 1.5) { this.moveToward(this.home.x, this.home.z, 1.5, dt); speed = this.speed; }
+        if (this.home && Math.hypot(this.home.x - this.pos.x, this.home.z - this.pos.z) > 1.5) { this.navTo(this.home.x, this.home.z, 1.5, dt, true); speed = this.speed; }
         else if (this.faceYaw !== undefined) this.heading = dampAngle(this.heading, this.faceYaw, 4, dt);
         this.talking = this.kind === 'gang' && Math.sin(performance.now() * 0.0005 + this.id) > 0.6;
         break;
@@ -517,17 +696,26 @@ export class NPC extends Actor {
         break;
       }
       case 'flee': {
-        if (this.reactT > 0) { this.reactT -= dt; break; }
+        if (this.reactT > 0) { this.reactT -= dt; this.heading = dampAngle(this.heading, Math.atan2(this.pos.x - (this.fleeFrom || player.pos).x, this.pos.z - (this.fleeFrom || player.pos).z), 6, dt); break; }
         this.fleeT -= dt;
+        // kaçış planı: kapıya / sipere / sokak boyunca (yeni tehdit gelince yeniden planla)
+        if (!this.flee || this.fleeSrc !== this.fleeFrom) this.planFlee(false);
+        const F = this.flee;
         const from = this.fleeFrom || player.pos;
-        const dx = this.pos.x - from.x, dz = this.pos.z - from.z;
-        const d = Math.hypot(dx, dz) || 1;
-        this.moveToward(this.pos.x + (dx / d) * 5, this.pos.z + (dz / d) * 5, 5.2, dt); speed = this.speed;
-        this.avoid();
-        if (this.fleeT <= 0) {
+        const dT = Math.hypot(this.pos.x - from.x, this.pos.z - from.z);
+        const d = this.navTo(F.x, F.z, dT < 25 ? 5.4 : 4.4, dt, true); speed = this.speed;
+        if (d < (F.door ? 0.9 : 1.4)) {
+          if (F.door) { this.state = 'gone'; break; } // binaya girdi
+          if (F.cover) { this.state = 'cower'; this.fleeT = 6 + Math.random() * 8; break; }
+          if (this.fleeT > 0 && dT < 45) this.planFlee(true);
+          else this.fleeT = 0;
+        }
+        if (this.fleeT <= 0 && !F.door) {
           if (this.faction === 'civilian' && !this.mission && Math.random() < 0.65) { this.state = 'cower'; this.fleeT = 6 + Math.random() * 8; }
           else { this.state = this.restState(); this.path = []; this.cur = null; }
+          this.flee = null;
         }
+        if (F.door && this.fleeT < -25) { this.flee = null; this.fleeT = 3; }
         break;
       }
       case 'arrest': case 'attack': {
@@ -610,16 +798,16 @@ export class NPC extends Actor {
     if (this.losT <= 0) { this.losT = 0.2 + Math.random() * 0.15; this.los = g.physics.lineOfSight(this.pos.x, ey, this.pos.z, t.pos.x, t.pos.y + 1.2, t.pos.z); }
     const los = this.los;
     if (los) { if (!this.lastSeen) this.lastSeen = new THREE.Vector3(); this.lastSeen.copy(t.pos); this.aimT += dt; } else this.aimT = Math.max(0, this.aimT - dt * 2);
-    if (this.alertT > 0) { this.alertT -= dt; this.heading = dampAngle(this.heading, want, 6, dt); if (d > 30) { this.moveToward(t.pos.x, t.pos.z, 3.5, dt); out.speed = this.speed; } return out; }
+    if (this.alertT > 0) { this.alertT -= dt; this.heading = dampAngle(this.heading, want, 6, dt); if (d > 30) { this.navTo(t.pos.x, t.pos.z, 3.5, dt, true); out.speed = this.speed; } return out; }
     if (this.state === 'arrest') {
-      if (d > 1.3) { this.moveToward(t.pos.x, t.pos.z, d > 6 ? 4.8 : 2.4, dt); out.speed = this.speed; this.avoid(); }
+      if (d > 1.3) { this.navTo(t.pos.x, t.pos.z, d > 6 ? 4.8 : 2.4, dt, true); out.speed = this.speed; }
       else this.heading = dampAngle(this.heading, want, 10, dt);
       if (d < 14) this.say(BARKS.arrest, dt * 3);
       if (d < 10) { this.aiming = this.wdef.type !== 'melee'; }
       return out;
     }
     if (melee) {
-      if (d > def.range * 0.8) { this.moveToward(t.pos.x, t.pos.z, 5.0, dt); out.speed = this.speed; this.avoid(); }
+      if (d > def.range * 0.8) { this.navTo(t.pos.x, t.pos.z, 5.0, dt, true); out.speed = this.speed; }
       else this.heading = dampAngle(this.heading, want, 10, dt);
       if (d < def.range && this.fireCd <= 0 && !(g.missions && g.missions.cutscene)) this.tryFire(this.pos, tmp2.set(0, 0, 1));
       if (d > 120) { this.state = this.restState(); this.target = null; }
@@ -633,7 +821,7 @@ export class NPC extends Actor {
     if (this.tac === 'cover' && this.coverPt) {
       const cd = Math.hypot(this.coverPt.x - this.pos.x, this.coverPt.z - this.pos.z);
       if (cd > 0.6) {
-        this.moveToward(this.coverPt.x, this.coverPt.z, 4.6, dt); out.speed = this.speed; moving = true; this.avoid();
+        this.navTo(this.coverPt.x, this.coverPt.z, 4.6, dt, true); out.speed = this.speed; moving = true;
       } else {
         // siperde: saklan / dışarı çık ve ateş et
         this.peekT -= dt;
@@ -645,16 +833,15 @@ export class NPC extends Actor {
       }
     } else if (this.tac === 'flank' && this.flankPt) {
       const fd = Math.hypot(this.flankPt.x - this.pos.x, this.flankPt.z - this.pos.z);
-      if (fd > 1) { this.moveToward(this.flankPt.x, this.flankPt.z, 5.0, dt); out.speed = this.speed; moving = true; this.avoid(); }
+      if (fd > 1) { this.navTo(this.flankPt.x, this.flankPt.z, 5.0, dt, true); out.speed = this.speed; moving = true; }
       else { this.tac = 'engage'; this.tacT = 3; }
     } else if (d > ideal || !los) {
       let tx = t.pos.x, tz = t.pos.z;
       if (!los && this.lastSeen) { tx = this.lastSeen.x; tz = this.lastSeen.z; }
-      this.moveToward(tx, tz, d > 30 ? 4.8 : 3.6, dt); out.speed = this.speed; moving = true;
-      this.avoid();
+      this.navTo(tx, tz, d > 30 ? 4.8 : 3.6, dt, true); out.speed = this.speed; moving = true;
     } else if (d < ideal * 0.4 && this.kind !== 'boss') {
       // çok yakın: geri çekil
-      this.moveToward(this.pos.x - dx / d * 3, this.pos.z - dz / d * 3, 2.2, dt); out.speed = this.speed;
+      this.steerMove(this.pos.x - dx / d * 3, this.pos.z - dz / d * 3, 2.2, dt, false); out.speed = this.speed; this.heading = dampAngle(this.heading, want, 10, dt);
     }
     if (!moving || this.tac === 'flank' || los) {
       if (!moving) this.heading = dampAngle(this.heading, want, 10, dt);
@@ -706,6 +893,133 @@ export class NPCManager {
     this.slotT = 0;
     this.barkT = 3;
     this.counts = { civ: 0, police: 0, military: 0 };
+    this.pathBudget = 4;
+    this.hash = new Map(); this.hashPool = [];
+    this.doorGrid = null;
+    this.stats = { full: 0, lod: 0 };
+  }
+
+  // ---- uzamsal ızgara (ayrışma, araç çarpması): 2 m hücre, her kare yeniden ----
+  buildHash() {
+    const H = this.hash;
+    for (const arr of H.values()) { arr.length = 0; this.hashPool.push(arr); }
+    H.clear();
+    const add = (a) => {
+      const k = (Math.floor(a.pos.x / 2) + 2048) * 4096 + Math.floor(a.pos.z / 2) + 2048;
+      let arr = H.get(k);
+      if (!arr) { arr = this.hashPool.pop() || []; H.set(k, arr); }
+      arr.push(a);
+    };
+    for (const n of this.list) if (!n.dead && !n.vehicle) add(n);
+    const p = this.game.player;
+    if (p && !p.vehicle && !p.dead) add(p);
+  }
+  // (x,z) çevresindeki 3x3 hücredeki aktörler (paylaşılan dizi)
+  neighbors(x, z) {
+    const out = this._nb || (this._nb = []);
+    out.length = 0;
+    const cx = Math.floor(x / 2), cz = Math.floor(z / 2);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const arr = this.hash.get((cx + i + 2048) * 4096 + cz + j + 2048);
+      if (arr) for (let k = 0; k < arr.length; k++) out.push(arr[k]);
+    }
+    return out;
+  }
+  // tehdide ters yöndeki en yakın bina kapısı (city.doors, 32 m ızgarada dizinlenir)
+  doorAway(pos, threat, R) {
+    const g = this.game;
+    if (!this.doorGrid) {
+      this.doorGrid = new Map();
+      for (const d of g.city.doors) { const k = Math.floor(d.x / 32) * 4096 + Math.floor(d.z / 32); if (!this.doorGrid.has(k)) this.doorGrid.set(k, []); this.doorGrid.get(k).push(d); }
+    }
+    const tx = threat.x - pos.x, tz = threat.z - pos.z, tl = Math.hypot(tx, tz) || 1;
+    let best = null, bs = 1e9;
+    const cx = Math.floor(pos.x / 32), cz = Math.floor(pos.z / 32);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const arr = this.doorGrid.get((cx + i) * 4096 + cz + j);
+      if (!arr) continue;
+      for (const d of arr) {
+        const dx = d.x - pos.x, dz = d.z - pos.z, dd = Math.hypot(dx, dz);
+        if (dd > R || dd < 0.5) continue;
+        const cos = (dx * tx + dz * tz) / (dd * tl);
+        if (cos > 0.25) continue; // tehdide doğru koşma
+        if (Math.hypot(d.x - threat.x, d.z - threat.z) < 7) continue;
+        if (d.building && (d.building.type === 'police' || d.building.villa)) continue;
+        const sc = dd * (1.2 + cos);
+        if (sc < bs) { bs = sc; best = d; }
+      }
+    }
+    return best;
+  }
+  // Kaldırım köşeleri üzerinden kaba rota: yol grafiğinde A*, her düğümde bir önceki noktaya en yakın blok köşesi
+  sidewalkRoute(sx, sz, tx, tz) {
+    const map = this.game.map;
+    const nodes = map.path(sx, sz, tx, tz);
+    const out = [];
+    let lx = sx, lz = sz;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      let hx = 5.5, hz = 5.5;
+      for (const ed of n.edges) { const o = map.other(ed, n); if (Math.abs(o.x - n.x) > Math.abs(o.z - n.z)) hz = Math.max(hz, ed.width / 2); else hx = Math.max(hx, ed.width / 2); }
+      // ilk düğüm: hedef yönündeki köşe; diğerleri: önceki noktaya yakın köşe
+      let best = null, bd = 1e9;
+      for (const qx of [-1, 1]) for (const qz of [-1, 1]) {
+        const x = n.x + qx * (hx + 1.6), z = n.z + qz * (hz + 1.6);
+        const d = Math.hypot(x - lx, z - lz) + Math.hypot(x - tx, z - tz) * 0.35;
+        if (d < bd) { bd = d; best = { x, z }; }
+      }
+      out.push(best); lx = best.x; lz = best.z;
+    }
+    return out.slice(0, 8);
+  }
+
+  // Sokak boyunca tehditten uzaklaşan kaldırım noktası (köşeyi dönerek devam edebilir)
+  streetAway(pos, threat, dist, npc) {
+    const map = this.game.map;
+    let best = null, bd = 1e9;
+    for (const e of map.edges) {
+      const ax = e.a.x, az = e.a.z, dx = e.b.x - ax, dz = e.b.z - az;
+      if (Math.abs(pos.x - (ax + dx / 2)) > Math.abs(dx) / 2 + 30 || Math.abs(pos.z - (az + dz / 2)) > Math.abs(dz) / 2 + 30) continue;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = clamp(((pos.x - ax) * dx + (pos.z - az) * dz) / l2, 0, 1);
+      const d = Math.hypot(ax + dx * t - pos.x, az + dz * t - pos.z);
+      if (d < bd) { bd = d; best = { e, t }; }
+    }
+    const ax0 = pos.x - threat.x, az0 = pos.z - threat.z, al = Math.hypot(ax0, az0) || 1;
+    if (!best || bd > 25) return { x: pos.x + (ax0 / al) * dist, z: pos.z + (az0 / al) * dist };
+    const e = best.e, L = e.len;
+    const ux = (e.b.x - e.a.x) / L, uz = (e.b.z - e.a.z) / L;
+    // kaldırım tarafı: NPC'nin bulunduğu taraf
+    const lat = (pos.x - e.a.x) * -uz + (pos.z - e.a.z) * ux;
+    const side = lat >= 0 ? 1 : -1;
+    const off = (e.width / 2 + 1.6) * side;
+    let dir = Math.sign(ux * ax0 + uz * az0);
+    if (!dir) dir = Math.random() < 0.5 ? 1 : -1;
+    // tehdit kaldırım hattında önümüzdeyse karşı yöne
+    let s = best.t * L + dir * dist;
+    let cross = 6; for (const n of [e.a, e.b]) for (const ed of n.edges) cross = Math.max(cross, ed.width / 2);
+    const lo = cross + 1.6, hi = L - cross - 1.6;
+    if (s > hi || s < lo) {
+      // köşeye kadar git, sonra tehditten en çok uzaklaşan kenara dön
+      const node = s > hi ? e.b : e.a;
+      const sc = s > hi ? hi : lo;
+      let bestE = null, bdot = -2;
+      for (const ed of node.edges) {
+        if (ed === e) continue;
+        const o = map.other(ed, node), ox = o.x - node.x, oz = o.z - node.z, ol = Math.hypot(ox, oz) || 1;
+        const dot = (ox * ax0 + oz * az0) / (ol * al);
+        if (dot > bdot) { bdot = dot; bestE = { ed, o, ox: ox / ol, oz: oz / ol }; }
+      }
+      if (bestE && bdot > -0.3) {
+        const sideN = Math.sign((pos.x - node.x) * -bestE.oz + (pos.z - node.z) * bestE.ox) || side;
+        const off2 = (bestE.ed.width / 2 + 1.6) * sideN;
+        const run = Math.min(dist * 0.6, bestE.ed.len - cross * 2 - 4);
+        return { x: node.x + bestE.ox * (cross + 1.6 + run) - bestE.oz * off2, z: node.z + bestE.oz * (cross + 1.6 + run) + bestE.ox * off2 };
+      }
+      s = sc;
+    }
+    void npc;
+    return { x: e.a.x + ux * s - uz * off, z: e.a.z + uz * s + ux * off };
   }
 
   add(kind, x, z, look, opts) {
@@ -832,7 +1146,8 @@ export class NPCManager {
     }
     const kind = Math.random() < 0.05 ? 'police' : 'civilian';
     const n = this.add(kind, s.x, s.z);
-    n.side = s.side;
+    // taraf yürüyüş yönüne göre (kenar a→b'ye göre değil)
+    n.side = s.fwd ? s.side : -s.side;
     n.prev = s.fwd ? s.e.a : s.e.b; n.cur = s.fwd ? s.e.b : s.e.a;
     n.planWalk();
     if (kind === 'civilian' && Math.random() < 0.15) n.walkSpeed *= 1.5; // aceleci işe gidenler
@@ -947,6 +1262,9 @@ export class NPCManager {
     const g = this.game;
     const p = g.player;
     this.coverBudget = 3;
+    this.pathBudget = 4;
+    if (g.physics.nav) g.physics.nav.tick();
+    this.buildHash();
     this.barkT -= dt;
     this.slotT -= dt;
     if (this.slotT <= 0) { this.slotT = 0.5; this.assignSlots(); }
@@ -984,35 +1302,48 @@ export class NPCManager {
     this.carHits();
   }
 
-  // araç - yaya çarpışması
+  // araç - yaya çarpışması: OBB (aracın içine girilmez), süpürülmüş test, bekleme süresiyle tek darbe
   carHits() {
     const g = this.game;
-    const L = this.list;
+    const dt = g.dt || 1 / 60;
+    const p = g.player;
+    if (p.carHitT > 0) p.carHitT -= dt;
     for (const v of g.vehicles.list) {
-      const sp = v.speed;
-      if (sp < 3 || v.pos.y > 1.5) continue;
-      const f = v.fwd;
-      for (let i = -1; i < L.length; i++) {
-        const a = i < 0 ? g.player : L[i];
-        if (a.dead || a.vehicle || a.inInterior) continue;
-        const dx = a.pos.x - v.pos.x, dz = a.pos.z - v.pos.z;
-        if (Math.abs(dx) > 6 || Math.abs(dz) > 6) continue;
-        const lon = dx * f.x + dz * f.z, lat = dx * -f.z + dz * f.x;
-        if (Math.abs(lon) < v.def.len / 2 + 0.3 && Math.abs(lat) < v.def.wid / 2 + 0.3) {
-          const dmg = sp * sp * 0.35 + sp * 2;
-          a.takeDamage(dmg, v.driver, 'car');
-          a.knock = { x: v.vx * 0.6 + (lat > 0 ? -f.z : f.z) * 3, z: v.vz * 0.6 + (lat > 0 ? f.x : -f.x) * 3, t: 0.4 };
-          audio.punch(a.pos.x, a.pos.z);
-          g.particles.blood({ x: a.pos.x, y: 1, z: a.pos.z }, 6);
-          v.vx *= 0.85; v.vz *= 0.85;
-          if (a.isPlayer) g.ui.damageFlash();
-          if (v.driver && v.driver.isPlayer && !a.dead && a.faction === 'civilian') g.wanted.crime('hit_ped', a.pos);
-          if (!a.dead && a.hearThreat) a.hearThreat(v.driver || g.player, 2);
-          // itme
-          a.pos.x += (lat > 0 ? -f.z : f.z) * 0.6; a.pos.z += (lat > 0 ? f.x : -f.x) * 0.6;
-        }
+      if (v.kind !== 'car' || v.pos.y > 1.5 || v.sinking > 0) continue;
+      const R = v.def.len * 0.5 + 1 + Math.hypot(v.vx, v.vz) * dt;
+      const cand = this.neighborsBox(v.pos.x, v.pos.z, R);
+      for (let i = 0; i < cand.length; i++) {
+        const a = cand[i];
+        if (a.dead || a.vehicle || a.inInterior || a.vault) continue;
+        if (a.isPlayer && (p.vehicle || p.dead)) continue;
+        const sp = actorVsVehicle(g, v, a, dt);
+        if (sp <= 0) continue;
+        const f = v.fwd;
+        const dmg = sp * sp * 0.35 + sp * 2;
+        a.takeDamage(dmg, v.driver, 'car');
+        const dx = a.pos.x - v.pos.x, dz = a.pos.z - v.pos.z, lat = dx * -f.z + dz * f.x;
+        a.knock = { x: v.vx * 0.6 + (lat > 0 ? -f.z : f.z) * 3, z: v.vz * 0.6 + (lat > 0 ? f.x : -f.x) * 3, t: 0.4 };
+        audio.punch(a.pos.x, a.pos.z);
+        g.particles.blood({ x: a.pos.x, y: 1, z: a.pos.z }, 6);
+        const m = v.def.mass || v.def.len * v.def.wid * 150;
+        const k = m / (m + 80);
+        v.vx *= k; v.vz *= k;
+        if (a.isPlayer) g.ui.damageFlash();
+        if (v.driver && v.driver.isPlayer && !a.dead && a.faction === 'civilian') g.wanted.crime('hit_ped', a.pos);
+        if (!a.dead && a.hearThreat) a.hearThreat(v.driver || g.player, 2);
       }
     }
+  }
+  // kutu içindeki aktörler (ızgaradan)
+  neighborsBox(x, z, R) {
+    const out = this._nbb || (this._nbb = []);
+    out.length = 0;
+    const c0x = Math.floor((x - R) / 2), c1x = Math.floor((x + R) / 2), c0z = Math.floor((z - R) / 2), c1z = Math.floor((z + R) / 2);
+    for (let i = c0x; i <= c1x; i++) for (let j = c0z; j <= c1z; j++) {
+      const arr = this.hash.get((i + 2048) * 4096 + j + 2048);
+      if (arr) for (let k = 0; k < arr.length; k++) out.push(arr[k]);
+    }
+    return out;
   }
 }
 

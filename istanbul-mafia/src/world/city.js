@@ -466,4 +466,5 @@ export function buildBridgesAndIsland(group, cols, uniforms) {
   const cap = new THREE.Mesh(new THREE.ConeGeometry(3, 5, 12), new THREE.MeshStandardMaterial({ color: 0x7a8a96, metalness: 0.5 })); cap.position.set(ISLAND.x + 3, 19.5, ISLAND.z); group.add(cap);
   const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 })); spire.position.set(ISLAND.x + 3, 23, ISLAND.z); group.add(spire);
   cols.add(ISLAND.x - 7, ISLAND.z - 5, ISLAND.x + 7, ISLAND.z + 5, 0, 6, 'kizkulesi');
+  cols.addCircle(ISLAND.x + 3, ISLAND.z, 2.8, 6, 24, 'kizkulesi');
 }
