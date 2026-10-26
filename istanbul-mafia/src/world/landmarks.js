@@ -1,12 +1,48 @@
 // İstanbul'un simge yapıları: Galata Kulesi, Sultanahmet, Ayasofya, Süleymaniye, Kapalıçarşı,
 // Dolmabahçe, Haydarpaşa, Mihrimah Sultan, Taksim Anıtı, stadyum.
 import * as THREE from 'three';
-import { stoneTexture, marbleTexture, flagTexture } from '../core/textures.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { flagTexture, ashlarPBR, plasterPBR } from '../core/textures.js';
+import { pbrMaterial } from './shaders.js';
 
 const mats = {};
 function M(key, opts) {
   if (!mats[key]) mats[key] = new THREE.MeshStandardMaterial(opts);
   return mats[key];
+}
+
+// Kesme taş / mermer PBR malzemeleri (dünya koordinatlı UV)
+function SM(key, hex) {
+  if (!mats[key]) { const c = new THREE.Color(hex); c.multiplyScalar(1.12); mats[key] = pbrMaterial(ashlarPBR(), { color: c, scale: 0.55 }); }
+  return mats[key];
+}
+function MM(key) {
+  if (!mats[key]) mats[key] = pbrMaterial(plasterPBR(), { color: 0xf4f0e8, scale: 0.4, rough: 0.7 });
+  return mats[key];
+}
+
+// Simge yapı grubunu malzemeye göre birleştir (yüzlerce mesh yerine birkaç çizim çağrısı)
+function mergeByMaterial(g) {
+  g.updateMatrixWorld(true);
+  const buckets = new Map(), keep = [];
+  for (const o of g.children) {
+    if (!o.isMesh || o.isInstancedMesh || o.userData.flag) { keep.push(o); continue; }
+    let geo = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    if (geo.index) geo = geo.toNonIndexed();
+    for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.deleteAttribute(k);
+    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    const key = o.material.uuid + (o.castShadow ? 's' : '');
+    if (!buckets.has(key)) buckets.set(key, { mat: o.material, shadow: o.castShadow, list: [] });
+    buckets.get(key).list.push(geo);
+  }
+  g.clear();
+  for (const o of keep) g.add(o);
+  for (const b of buckets.values()) {
+    const m = new THREE.Mesh(mergeGeometries(b.list), b.mat);
+    m.castShadow = b.shadow; m.receiveShadow = true;
+    g.add(m);
+  }
+  return g;
 }
 
 export const landmarkDoors = [];
@@ -92,13 +128,13 @@ export function buildLandmark(type, b, cols) {
   const cx = b.cx, cz = b.cz;
   const W = b.x1 - b.x0, D = b.z1 - b.z0;
   const S = Math.min(W, D);
-  const stone = M('stoneLm', { map: stoneTexture('#c9bba0'), roughness: 0.85 });
-  const white = M('whiteLm', { map: marbleTexture(), roughness: 0.6 });
+  const stone = SM('stoneLm', '#c9bba0');
+  const white = MM('whiteLm');
   const lead = M('lead', { color: 0x7d8890, metalness: 0.55, roughness: 0.45 });
   switch (type) {
     case 'galata': {
       // meydan
-      add(g, new THREE.CylinderGeometry(S * 0.45, S * 0.45, 0.15, 32), M('cobble', { map: stoneTexture('#8a7f6e'), roughness: 0.9 }), cx, 0.07, cz, false);
+      add(g, new THREE.CylinderGeometry(S * 0.45, S * 0.45, 0.15, 32), SM('cobble', '#8a7f6e'), cx, 0.07, cz, false);
       const R = 6.5;
       add(g, new THREE.CylinderGeometry(R + 0.6, R + 0.8, 4, 24), stone, cx, 2, cz);
       add(g, new THREE.CylinderGeometry(R, R + 0.2, 44, 24), stone, cx, 24, cz);
@@ -124,7 +160,7 @@ export function buildLandmark(type, b, cols) {
       break;
     }
     case 'taksim': {
-      add(g, new THREE.BoxGeometry(W, 0.12, D), M('taksimFloor', { map: stoneTexture('#b0a796'), roughness: 0.9 }), cx, 0.06, cz, false);
+      add(g, new THREE.BoxGeometry(W, 0.12, D), SM('taksimFloor', '#b0a796'), cx, 0.06, cz, false);
       // Cumhuriyet Anıtı (soyut)
       add(g, new THREE.BoxGeometry(8, 1.2, 8), stone, cx, 0.6, cz);
       add(g, new THREE.BoxGeometry(5, 9, 5), white, cx, 5.7, cz);
@@ -146,24 +182,24 @@ export function buildLandmark(type, b, cols) {
     }
     case 'bluemosque':
       mosque(g, cols, cx, cz - D * 0.12, S * 0.62, {
-        wall: M('bmWall', { map: stoneTexture('#d8d2c4'), roughness: 0.8 }), dome: M('bmDome', { color: 0x6f8a9c, metalness: 0.5, roughness: 0.4 }),
+        wall: SM('bmWall', '#d8d2c4'), dome: M('bmDome', { color: 0x6f8a9c, metalness: 0.5, roughness: 0.4 }),
         minarets: [[0.62, 0.62], [-0.62, 0.62], [0.62, -0.62], [-0.62, -0.62], [0.62, 1.55], [-0.62, 1.55]], courtyard: 1, doorSide: -1, name: 'Sultanahmet Camii', minaretH: 64,
       });
       break;
     case 'suleymaniye':
       mosque(g, cols, cx, cz, S * 0.66, {
-        wall: M('sWall', { map: stoneTexture('#e0d8c8'), roughness: 0.8 }), dome: lead,
+        wall: SM('sWall', '#e0d8c8'), dome: lead,
         minarets: [[0.62, 0.62], [-0.62, 0.62], [0.62, -0.62], [-0.62, -0.62]], doorSide: 1, name: 'Süleymaniye Camii', minaretH: 62,
       });
       break;
     case 'mihrimah':
       mosque(g, cols, cx, cz, S * 0.5, {
-        wall: M('mWall', { map: stoneTexture('#d9d0bc'), roughness: 0.8 }), dome: lead,
+        wall: SM('mWall', '#d9d0bc'), dome: lead,
         minarets: [[0.6, -0.6], [-0.6, -0.6]], doorSide: -1, semi: [[0, 1]], name: 'Mihrimah Sultan Camii', minaretH: 40,
       });
       break;
     case 'ayasofya': {
-      const pink = M('aya', { map: stoneTexture('#c98f73'), roughness: 0.85 });
+      const pink = SM('aya', '#c98f73');
       mosque(g, cols, cx, cz, S * 0.64, {
         wall: pink, dome: lead, minarets: [[0.58, 0.58], [-0.58, 0.58], [0.58, -0.58], [-0.58, -0.58]], semi: [[1, 0], [-1, 0]], doorSide: 1, name: 'Ayasofya', minaretH: 52, minaretR: 1.2,
       });
@@ -176,7 +212,7 @@ export function buildLandmark(type, b, cols) {
     case 'bazaar': {
       // Kapalıçarşı: kubbeli uzun çarşı
       const bw = W * 0.9, bd = D * 0.75;
-      const wall = M('bzWall', { map: stoneTexture('#d2b48c'), roughness: 0.85 });
+      const wall = SM('bzWall', '#d2b48c');
       add(g, new THREE.BoxGeometry(bw, 8, bd), wall, cx, 4, cz);
       cols.add(cx - bw / 2, cz - bd / 2, cx + bw / 2, cz + bd / 2, 0, 8, b);
       const nx = Math.floor(bw / 8), nz = Math.floor(bd / 8);
@@ -189,7 +225,7 @@ export function buildLandmark(type, b, cols) {
       im.castShadow = true;
       g.add(im);
       // Nuruosmaniye kapısı
-      add(g, new THREE.BoxGeometry(8, 10, 2), M('bzGate', { map: marbleTexture() }), cx, 5, cz + bd / 2 + 0.5);
+      add(g, new THREE.BoxGeometry(8, 10, 2), MM('bzGate'), cx, 5, cz + bd / 2 + 0.5);
       add(g, new THREE.BoxGeometry(3.2, 5, 0.3), M('mdoor', { color: 0x3a2412 }), cx, 2.5, cz + bd / 2 + 1.6, false);
       landmarkDoors.push({ x: cx, z: cz + bd / 2 + 2.6, type: 'bazaar', name: 'Kapalıçarşı' });
       break;
@@ -215,7 +251,7 @@ export function buildLandmark(type, b, cols) {
     }
     case 'haydarpasa': {
       const hw = W * 0.8, hd = 22;
-      const brick = M('hay', { map: stoneTexture('#c8a888'), roughness: 0.85 });
+      const brick = SM('hay', '#c8a888');
       add(g, new THREE.BoxGeometry(hw, 18, hd), brick, cx, 9, cz);
       cols.add(cx - hw / 2, cz - hd / 2, cx + hw / 2, cz + hd / 2, 0, 18, 'station');
       for (const sx of [-1, 1]) {
@@ -249,5 +285,5 @@ export function buildLandmark(type, b, cols) {
     default:
       return null;
   }
-  return g;
+  return mergeByMaterial(g);
 }

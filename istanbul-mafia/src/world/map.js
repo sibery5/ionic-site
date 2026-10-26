@@ -18,6 +18,55 @@ export const BRIDGES = [
 ];
 export const ISLAND = { x: 312, z: 290, r: 16 }; // Kız Kulesi
 
+// ---- Özel bölgeler (oyun sistemleri için dışa aktarılır) ----
+// Askeri üs: Beşiktaş'ın kuzeybatı ucu (harita köşesi). Sınırlar yol çizgilerine hizalı, içi yolsuz.
+const ZB = 5.5 + 3.2; // yol yarı genişliği + kaldırım
+export const MILITARY_BASE = {
+  name: 'Askeri Üs', lines: { x0: -985, x1: -700, z0: -985, z1: -760 },
+  x0: -985 + ZB, x1: -700 - ZB, z0: -985 + ZB, z1: -760 - ZB,
+  gate: { x: -760, z: -760 - ZB, nx: 0, nz: 1 }, // güney kenarındaki nizamiye kapısı
+  helipad: { x: -930, z: -930 },
+  spawnPoints: [], towers: [], barracks: [], hangar: null, restricted: true,
+};
+// Havalimanı (Anadolu yakası doğu ucu): pist kuzey-güney.
+export const AIRPORT = {
+  name: 'Boğaziçi Havalimanı', lines: { x0: 800, x1: 985, z0: -985, z1: -380 },
+  x0: 800 + ZB, x1: 985 - ZB, z0: -985 + ZB, z1: -380 - ZB,
+  // x0/z/heading: ana oyunun uçak doğma noktası (x0 + 20, z) — pist güney ucunda, kuzeye bakar
+  runway: { x0: 930, x1: 962, z0: -965, z1: -415, z: -440, heading: Math.PI, start: { x: 946, z: -430 }, end: { x: 946, z: -955 }, width: 32 },
+  taxiway: { x0: 898, x1: 912, z0: -940, z1: -440 },
+  apron: { x0: 815, x1: 898, z0: -720, z1: -520 },
+  helipads: [{ x: 835, z: -440 }, { x: 870, z: -440 }],
+  hangars: [], shop: { x: 830, z: -505 }, planeSpawns: [], heliSpawns: [], terminal: null,
+};
+// Marina (Avrupa yakası, Boğaz kıyısı): iskeleler suyun üstünde, yürünebilir.
+export const MARINA = {
+  name: 'Bebek Marina', x0: 200, x1: 262, z0: -700, z1: -560,
+  piers: [], berths: [], shop: { x: 217, z: -566 }, entrances: [{ z0: -664, z1: -657 }, { z0: -612, z1: -605 }],
+};
+// Boğaz kıyısındaki satılık lüks villa/yalı parselleri (CityMap kurulurken doldurulur)
+export const VILLAS = [];
+// Satılık mülkler (villalar + satın alınabilir apartmanlar)
+export const PROPERTIES = [];
+// Emniyet müdürlükleri (bayrak, otopark yerleri)
+export const POLICE_STATIONS = [];
+
+function inRect(x, z, r) { return x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1; }
+const PIERS = [
+  { x0: 200, x1: 206, z0: -700, z1: -560 }, // kıyı iskelesi
+  { x0: 206, x1: 262, z0: -692, z1: -688.5 },
+  { x0: 206, x1: 262, z0: -657, z1: -653.5 },
+  { x0: 206, x1: 262, z0: -622, z1: -618.5 },
+  { x0: 206, x1: 262, z0: -587, z1: -583.5 },
+  { x0: 206, x1: 228, z0: -578, z1: -560 }, // kulüp binası platformu
+];
+MARINA.piers = PIERS;
+for (const pz of [-690.25, -655.25, -620.25, -585.25]) for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+  if (pz === -585.25 && side > 0 && i === 0) continue; // kulüp platformu
+  MARINA.berths.push({ x: 218 + i * 16, z: pz + side * 6.4, heading: Math.PI / 2, length: 14, width: 5, decor: (i + (side > 0 ? 1 : 0)) % 3 === 0 });
+}
+export function onPier(x, z) { for (const p of PIERS) if (x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1) return p; return null; }
+
 export const DISTRICTS = [
   { id: 'besiktas', name: 'BEŞİKTAŞ', x0: -850, x1: 200, z0: -1000, z1: -300, floors: [3, 9], gang: 'kartallar' },
   { id: 'beyoglu', name: 'BEYOĞLU', x0: -850, x1: 200, z0: -300, z1: 70, floors: [4, 7], gang: 'yilanlar' },
@@ -40,6 +89,7 @@ export function isWater(x, z) {
 }
 export function isLand(x, z) {
   if (inBridge(x, z)) return true;
+  if (x > 199 && x < 263 && z > -701 && z < -559 && onPier(x, z)) return true;
   const dx = x - ISLAND.x, dz = z - ISLAND.z;
   if (dx * dx + dz * dz < ISLAND.r * ISLAND.r) return true;
   return !isWater(x, z);
@@ -121,14 +171,15 @@ export class CityMap {
 
   build() {
     const r = this.rng;
+    VILLAS.length = 0; PROPERTIES.length = 0; POLICE_STATIONS.length = 0;
     // Avrupa yakası
-    const exs = genLines(r, -985, 190, [-860, -500, -150, 190]).filter((v) => v <= 190);
-    const ezN = genLines(r, -985, 60, [-450, 60]).filter((v) => v <= 60);
+    const exs = genLines(r, -985, 190, [-985, -860, -700, -500, -150, 190]).filter((v) => v <= 190);
+    const ezN = genLines(r, -985, 60, [-985, -760, -450, 60]).filter((v) => v <= 60);
     const ezS = genLines(r, 200, 810, [200, 810]).filter((v) => v >= 200 && v <= 810);
     const ez = [...ezN, ...ezS];
     // Anadolu yakası
-    const axs = genLines(r, 435, 985, [435]).filter((v) => v >= 435);
-    const az = genLines(r, -985, 810, [-450, 250, 810]).filter((v) => v <= 810);
+    const axs = genLines(r, 435, 985, [435, 800, 985]).filter((v) => v >= 435);
+    const az = genLines(r, -985, 810, [-985, -450, -380, 250, 810]).filter((v) => v <= 810);
     this.mainX = new Set([-860, -500, -150, 190, 435]);
     this.mainZ = new Set([-450, 60, 200, 810, 250]);
     this.side = [
@@ -150,6 +201,13 @@ export class CityMap {
     return axis === 'x' ? (this.mainX.has(v) ? 16 : 11) : (this.mainZ.has(v) ? 16 : 11);
   }
 
+  // Kenar özel bölgenin içinden mi geçiyor? (askeri üs / havalimanı içinde yol yok)
+  inZoneEdge(x0, z0, x1, z1) {
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    for (const zn of [MILITARY_BASE.lines, AIRPORT.lines]) if (inRect(mx, mz, { x0: zn.x0 + 1, x1: zn.x1 - 1, z0: zn.z0 + 1, z1: zn.z1 - 1 })) return true;
+    return false;
+  }
+
   buildGrid(xs, zs) {
     for (const x of xs) for (const z of zs) if (isLand(x, z)) this.node(x, z);
     // dikey (z boyunca)
@@ -158,6 +216,7 @@ export class CityMap {
       for (let i = 0; i < zs.length - 1; i++) {
         const z0 = zs[i], z1 = zs[i + 1];
         if (!isLand(x, z0) || !isLand(x, z1) || !isLand(x, (z0 + z1) / 2)) continue;
+        if (this.inZoneEdge(x, z0, x, z1)) continue;
         this.addEdge(this.node(x, z0), this.node(x, z1), w);
         this.roads.push({ x0: x, z0, x1: x, z1, w });
       }
@@ -167,6 +226,7 @@ export class CityMap {
       for (let i = 0; i < xs.length - 1; i++) {
         const x0 = xs[i], x1 = xs[i + 1];
         if (!isLand(x0, z) || !isLand(x1, z) || !isLand((x0 + x1) / 2, z)) continue;
+        if (this.inZoneEdge(x0, z, x1, z)) continue;
         this.addEdge(this.node(x0, z), this.node(x1, z), w);
         this.roads.push({ x0, z0: z, x1, z1: z, w });
       }
@@ -185,6 +245,9 @@ export class CityMap {
         const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         if (!isLand(cx, cz) || !isLand(x0, z0) || !isLand(x1, z1) || !isLand(x0, z1) || !isLand(x1, z0)) continue;
         const block = { id: bid++, x0, x1, z0, z1, cx, cz, district: districtAt(cx, cz), kind: 'city' };
+        if (inRect(cx, cz, MILITARY_BASE.lines)) { block.kind = 'zone'; block.zone = 'military'; }
+        else if (inRect(cx, cz, AIRPORT.lines)) { block.kind = 'zone'; block.zone = 'airport'; }
+        else if ((xb === 190 && cz < -480 && cz > -990) || (xa === 435 && cz < -500 && cz > -990)) { block.kind = 'villa'; block.side = xb === 190 ? 'europe' : 'asia'; }
         this.blocks.push(block);
       }
     }
@@ -209,13 +272,47 @@ export class CityMap {
     }
     // parseller ve binalar
     for (const b of this.blocks) if (b.kind === 'city') this.subdivide(b);
+    for (const b of this.blocks) if (b.kind === 'villa') this.villaPlots(b);
+  }
+
+  // Boğaz kıyısı villa parselleri: blok başına 1-2 yalı, kıyı yoluna (denize) bakar
+  villaPlots(b) {
+    const r = this.rng;
+    const n = (b.z1 - b.z0) > 70 ? 2 : 1;
+    const seaX = b.side === 'europe' ? b.x1 : b.x0;
+    const face = b.side === 'europe' ? 1 : -1; // kapı yönü (x ekseni)
+    for (let i = 0; i < n; i++) {
+      const pz0 = b.z0 + ((b.z1 - b.z0) / n) * i, pz1 = b.z0 + ((b.z1 - b.z0) / n) * (i + 1);
+      const pw = Math.min(24, (b.x1 - b.x0) * 0.45), pd = Math.min(18, (pz1 - pz0) * 0.45);
+      const cz = (pz0 + pz1) / 2;
+      const hx0 = face > 0 ? seaX - 9 - pw : seaX + 9, hx1 = hx0 + pw;
+      const floors = r.int(2, 3);
+      const h = floors * 3.2 + 0.6;
+      const doorX = face > 0 ? hx1 : hx0;
+      const bl = {
+        id: this.buildings.length, x0: hx0, x1: hx1, z0: cz - pd / 2, z1: cz + pd / 2, h, floors, tower: false, roof: 'pyramid',
+        colorIdx: r.int(0, 999), door: { x: doorX + face * 0.05, z: cz, nx: face, nz: 0 }, type: 'villa', villa: true,
+        district: b.district, block: b.id, sign: -1, style: r.chance(0.55) ? 'ottoman' : 'villa', name: b.side === 'europe' ? 'Boğaz Yalısı' : 'Kuzguncuk Köşkü',
+      };
+      this.buildings.push(bl);
+      const v = {
+        id: 'villa-' + VILLAS.length, buildingId: bl.id, name: bl.name + ' #' + (VILLAS.length + 1), side: b.side,
+        x: (hx0 + hx1) / 2, z: cz, plot: { x0: b.x0, x1: b.x1, z0: pz0 + 1, z1: pz1 - 1 },
+        door: { x: doorX + face * 1.0, z: cz }, gate: { x: seaX, z: cz },
+        garage: { x: face > 0 ? seaX - 4 : seaX + 4, z: pz0 + 6, heading: face > 0 ? -Math.PI / 2 : Math.PI / 2 },
+        pool: { x: face > 0 ? hx0 - 8 : hx1 + 8, z: cz, w: 6, d: 11 }, price: 2500000 + r.int(0, 30) * 100000, floors,
+      };
+      bl.villaInfo = v;
+      VILLAS.push(v);
+      PROPERTIES.push({ kind: 'villa', id: v.id, buildingId: bl.id, x: v.door.x, z: v.door.z, price: v.price, name: v.name });
+    }
   }
 
   subdivide(b) {
     const r = this.rng;
     const d = b.district;
     const rows = (b.z1 - b.z0) >= 34 ? [[b.z0, (b.z0 + b.z1) / 2, -1], [(b.z0 + b.z1) / 2, b.z1, 1]] : [[b.z0, b.z1, r.chance(0.5) ? -1 : 1]];
-    const towerZone = d.id === 'besiktas' && b.cz < -720 && b.cx > -600;
+    const towerZone = d.id === 'besiktas' && b.cz < -720 && b.cx > -600 && b.cx < 60; // Levent
     for (const [rz0, rz1, face] of rows) {
       let x = b.x0;
       while (x < b.x1 - 6) {
@@ -239,6 +336,7 @@ export class CityMap {
           door: { x: doorX, z: doorZ + face * 0.05, nx: 0, nz: face },
           type: 'apartment', district: d, block: b.id,
           sign: !towerZone && r.chance(0.5) ? r.int(0, 999) : -1,
+          style: towerZone ? 'glass' : ((d.id === 'uskudar' || d.id === 'fatih' || d.id === 'eyup') && floors <= 3 && r.chance(0.4)) ? 'ottoman' : r.chance(d.id === 'beyoglu' || d.id === 'fatih' ? 0.3 : 0.15) ? 'brick' : 'plaster',
         });
         x += lw;
       }
@@ -258,9 +356,34 @@ export class CityMap {
         used.add(best.id); best.type = type; best.sign = -1;
         if (type === 'konak' || type === 'rival' || type === 'safehouse') { best.floors = Math.min(best.floors, 3); best.h = best.floors * 3.2 + 0.6; best.roof = 'pyramid'; }
         if (type === 'mosque_small') { best.floors = 2; best.h = 7; best.roof = 'dome'; }
+        if (best.style === 'ottoman' || best.style === 'brick') best.style = 'plaster';
+        if (type === 'police' || type === 'bank' || type === 'hospital') best.style = 'official';
+        if (type === 'police') this.policeCompound(best);
       }
     }
     this.specials = this.buildings.filter((b) => b.type !== 'apartment');
+    // satın alınabilir apartmanlar
+    const r = this.rng;
+    for (const b of this.buildings) {
+      if (b.type !== 'apartment' || b.tower || !r.chance(0.02)) continue;
+      b.forSale = { price: 400000 + b.floors * 90000 + r.int(0, 20) * 10000 };
+      PROPERTIES.push({ kind: 'apartment', id: 'apt-' + b.id, buildingId: b.id, x: b.door.x, z: b.door.z + b.door.nz * 0.8, price: b.forSale.price, name: 'Apartman #' + b.id });
+    }
+  }
+
+  // Emniyet binası: cepheyi geri çekip ön avlu (çit, nizamiye kapısı, bayrak, otopark) açar
+  policeCompound(b) {
+    const nz = b.door.nz, setback = 9;
+    if (b.z1 - b.z0 < 22) return;
+    const frontZ = nz > 0 ? b.z1 : b.z0;
+    if (nz > 0) b.z1 -= setback; else b.z0 += setback;
+    b.floors = Math.max(3, Math.min(b.floors, 5)); b.h = b.floors * 3.2 + 0.6; b.roof = 'flat';
+    b.door = { x: b.door.x, z: (nz > 0 ? b.z1 : b.z0) + nz * 0.05, nx: 0, nz };
+    const parking = [];
+    const yz = frontZ - nz * (setback / 2 + 0.3);
+    for (let x = b.x0 + 2.5; x < b.x1 - 2; x += 3) if (Math.abs(x - b.door.x) > 3.4 && x > b.x0 + 2.4) parking.push({ x, z: yz, heading: nz > 0 ? Math.PI : 0 });
+    b.compound = { frontZ, nz, setback, gateX: b.door.x, gateW: 5, flag: { x: b.x0 + 1.2, z: frontZ - nz * 1.2 }, parking };
+    POLICE_STATIONS.push({ buildingId: b.id, x0: b.x0, x1: b.x1, z0: Math.min(frontZ, nz > 0 ? b.z1 : b.z0), z1: Math.max(frontZ, nz > 0 ? b.z1 : b.z0), door: b.door, gate: { x: b.door.x, z: frontZ }, parking, flag: b.compound.flag });
   }
 
   // ---- Yol grafiği yardımcıları ----
