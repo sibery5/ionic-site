@@ -18,6 +18,11 @@ import { Player } from './entities/player.js';
 import { CharacterModel, defaultLook } from './entities/character.js';
 import { NPCManager } from './entities/npc.js';
 import { VehicleManager } from './entities/vehicles.js';
+import { TrafficLights } from './world/traffic.js';
+import { ShipTraffic } from './world/ships.js';
+import { BoatManager, nearestWaterSpot } from './entities/boats.js';
+import { AircraftManager } from './entities/aircraft.js';
+import * as MAPDATA from './world/map.js';
 import { Combat } from './game/combat.js';
 import { Pickups } from './game/pickups.js';
 import { Wanted } from './game/wanted.js';
@@ -92,6 +97,10 @@ class Game {
     this.particles = new Particles(this.scene);
     this.combat = new Combat(this);
     this.vehicles = new VehicleManager(this);
+    this.traffic = new TrafficLights(this);
+    this.boats = new BoatManager(this);
+    this.aircraft = new AircraftManager(this);
+    this.ships = new ShipTraffic(this);
     this.npcs = new NPCManager(this);
     this.pickups = new Pickups(this);
     this.wanted = new Wanted(this);
@@ -259,6 +268,7 @@ class Game {
     // sahip olunan araçlar
     const cap = garageCapacity(state);
     state.ownedCars.forEach((c, i) => { if (i < cap) this.spawnOwnedCar(i, false); });
+    (state.luxury || []).forEach((e, i) => this.spawnLuxury(e, i, true));
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
     this.ui.showHUD(true);
@@ -458,6 +468,31 @@ class Game {
     h = Math.atan2(dx, dz);
     const v = this.vehicles.add(c.type, x, z, h, c.color);
     v.owned = true; c.vid = v.id;
+    return v;
+  }
+
+  // Lüks araç teslimatı: tekne/yat suya, helikopter yanına, uçak havalimanına
+  spawnLuxury(entry, i, atHome) {
+    const kind = { speedboat: 'surat', yacht: 'yat', helicopter: 'helikopter', plane: 'ucak' }[entry.type];
+    if (!kind) return null;
+    const p = this.player;
+    let ref = { x: p.pos.x, z: p.pos.z };
+    if (atHome) { const sh = this.map.nearestOfType('safehouse', -300, -60); if (sh) ref = { x: sh.door.x, z: sh.door.z }; }
+    let v = null;
+    if (kind === 'surat' || kind === 'yat') {
+      const marina = MAPDATA.MARINA;
+      const base = marina && atHome ? { x: (marina.x0 + marina.x1) / 2, z: (marina.z0 + marina.z1) / 2 } : ref;
+      const w = nearestWaterSpot(base.x + i * 12, base.z, 8);
+      if (w) v = this.boats.add(kind, w.x, w.z, w.heading || 0, entry.color);
+    } else if (kind === 'ucak') {
+      const ap = MAPDATA.AIRPORT;
+      if (ap && ap.runway) v = this.aircraft.add(kind, ap.runway.x0 + 20 + i * 4, ap.runway.z, ap.runway.heading || Math.PI / 2, entry.color);
+      else { const n = this.map.nearestNode(ref.x, ref.z); v = this.aircraft.add(kind, n.x, n.z, 0, entry.color); }
+    } else {
+      const n = this.map.nearestNode(ref.x + 8, ref.z + 8);
+      v = this.aircraft.add(kind, n.x + 4, n.z + 4, 0, entry.color);
+    }
+    if (v) { v.owned = true; if (!atHome) this.ui.notify(`${entry.name || 'Aracın'} teslim edildi — haritada mavi işaret`, 'good'); }
     return v;
   }
 
@@ -680,6 +715,10 @@ class Game {
     if (!inside) {
       this.city.update(dt, t);
       this.vehicles.update(dt);
+      this.traffic.update(dt);
+      this.boats.update(dt);
+      this.aircraft.update(dt);
+      this.ships.update(dt);
       this.animals.update(dt);
       if (this.flag) this.flag.rotation.y = Math.sin(t * 2) * 0.15;
       this.updateGps(false);
