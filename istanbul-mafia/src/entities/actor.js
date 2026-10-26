@@ -27,6 +27,7 @@ export class Actor {
     this.aiming = false;
     this.aimPitch = 0;
     this.recoil = 0;
+    this.bloom = 0; // [savaş entegrasyonu] atış başına artan sapma
     this.vehicle = null;
     this.radius = 0.35;
     this.faction = 'civilian';
@@ -62,13 +63,14 @@ export class Actor {
     const def = this.wdef, w = this.wstate;
     if (def.type === 'melee' || this.reloadT > 0 || w.mag >= def.mag || w.ammo <= 0) return false;
     this.reloadT = def.reload || 1.5;
-    if (this.isPlayer) this.game.audio.reload();
+    if (this.isPlayer) this.game.audio.reload(this.weapon, this.reloadT); // [savaş entegrasyonu] silaha özgü şarjör sesi
     return true;
   }
 
   updateWeapon(dt) {
     this.fireCd -= dt;
     this.recoil = Math.max(0, this.recoil - dt * 6);
+    if (this.bloom > 0) this.bloom = Math.max(0, this.bloom - dt * ((this.wdef && this.wdef.bloomRecover) || 0.12));
     if (this.reloadT > 0) {
       this.reloadT -= dt;
       if (this.reloadT <= 0) { this.reloadT = 0; this.reloadInstant(this.weapon); }
@@ -83,7 +85,7 @@ export class Actor {
     if (def.type === 'melee') {
       this.fireCd = 1 / def.rate;
       this.model.punch();
-      this.game.audio.swing();
+      this.game.audio.swing(this.weapon); // [savaş entegrasyonu] bıçak/sopa savuruş sesi
       this.game.combat.melee(this, def);
       return true;
     }
@@ -102,13 +104,21 @@ export class Actor {
       return true;
     }
     this.game.audio.gunshot(def.sound, this.pos.x, this.pos.z);
-    this.game.particles.muzzle(muzzle, dir);
-    this.game.combat.flash(muzzle);
+    // [savaş entegrasyonu] yıldız namlu alevi, ışık, duman ve kovan atma
+    this.game.combat.muzzleFlash(this, muzzle, dir, def);
+    // [savaş entegrasyonu] oyuncu için silaha özgü kamera geri tepmesi
+    if (this.isPlayer && def.recoil) { this.camPitch -= def.recoil * (this.aiming ? 0.7 : 1); this.camYaw += (Math.random() - 0.5) * 2 * (def.recoilH || 0); }
     if (def.type === 'launcher') {
       this.game.combat.rocket(this, muzzle, dir, def);
     } else {
       const n = def.pellets || 1;
-      const spread = def.spread * (this.isPlayer && this.aiming ? 0.6 : 1) * (this.isPlayer ? 1 : 2.2) * (this.accuracy ? 1 / this.accuracy : 1);
+      // [savaş entegrasyonu] sapma: taban + birikmiş bloom, nişan çarpanı (adsMul), hareket/çömelme
+      let spread;
+      if (this.isPlayer) {
+        const base = this.aiming ? def.spread * (def.adsMul || 0.6) : (def.hipSpread || def.spread);
+        spread = (base + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
+      } else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
+      this.bloom = Math.min(def.bloomMax || 0, this.bloom + (def.bloom || 0));
       for (let i = 0; i < n; i++) {
         const d = dir.clone();
         d.x += (Math.random() - 0.5) * 2 * spread; d.y += (Math.random() - 0.5) * 2 * spread; d.z += (Math.random() - 0.5) * 2 * spread;
