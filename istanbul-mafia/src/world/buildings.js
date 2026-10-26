@@ -179,7 +179,7 @@ export function buildBuildings(city) {
       } else {
         // güneş enerjili su ısıtıcısı / su deposu / çanak anten
         if (r.chance(0.45)) { const sx = b.x0 + r.float(2, Math.max(2.1, w - 3)), sz = b.z0 + r.float(2, Math.max(2.1, d - 3)); P.solar.addTRS(sx, b.h, sz, r.chance(0.5) ? 0 : Math.PI, 1, 1, 1); cols.add(sx - 1, sz - 0.75, sx + 1, sz + 0.75, b.h, b.h + 1.85, 'roofProp'); }
-        if (r.chance(0.3)) { P.tank.addTRS(b.x0 + 1.6, b.h, b.z1 - 1.6, 0); cols.addCircle(b.x0 + 1.6, b.z1 - 1.6, 0.7, b.h, b.h + 1.7, 'roofProp'); }
+        if (r.chance(0.3)) { P.watertank.addTRS(b.x0 + 1.6, b.h, b.z1 - 1.6, 0); cols.addCircle(b.x0 + 1.6, b.z1 - 1.6, 0.7, b.h, b.h + 1.7, 'roofProp'); }
       }
     } else if (b.roof === 'dome') {
       group.add(buildSmallMosqueTop(b));
@@ -339,7 +339,7 @@ export const FACADE_PROP_DEFS = {
     gb.box(0.05, 1.4, 0.05, { x: -0.9, z: -0.4, color: 0x888888, metal: 0.6 }).box(0.05, 1.4, 0.05, { x: 0.9, z: -0.4, color: 0x888888, metal: 0.6 });
     return gb.build();
   },
-  tank: () => new GeoBuilder().cyl(0.6, 0.6, 1.4, 10, { y: 0.3, color: 0xc9c9c9, metal: 0.5, rough: 0.4 }).box(1.3, 0.3, 1.3, { color: 0x777777 }).build(),
+  watertank: () => new GeoBuilder().cyl(0.6, 0.6, 1.4, 10, { y: 0.3, color: 0xc9c9c9, metal: 0.5, rough: 0.4 }).box(1.3, 0.3, 1.3, { color: 0x777777 }).build(),
   door: () => new GeoBuilder()
     .box(1.9, 2.75, 0.14, { z: -0.02, color: 0xd8d0c0, rough: 0.7 })
     .add(new THREE.PlaneGeometry(1.5, 2.4), { y: 1.2, z: 0.06, uv: 'door', rough: 0.5 })
@@ -369,7 +369,7 @@ export const FACADE_PROP_DEFS = {
 // LOD yarıçapı, gölge, çift yüz
 export const FACADE_PROP_OPTS = {
   balcony: { radius: 320, shadow: true }, railing: { radius: 220, double: true }, glassrail: { radius: 260, double: true },
-  sill: { radius: 160 }, ac: { radius: 140 }, dish: { radius: 260 }, solar: { radius: 300, shadow: true }, tank: { radius: 280 },
+  sill: { radius: 160 }, ac: { radius: 140 }, dish: { radius: 260 }, solar: { radius: 300, shadow: true }, watertank: { radius: 280 },
   door: { radius: 220 }, awning: { radius: 260, double: true, shadow: true }, atm: { radius: 120 }, forsale: { radius: 300, double: true },
   potted: { radius: 120 }, laundry: { radius: 200, double: true }, graf0: { radius: 110 }, graf1: { radius: 110 }, graf2: { radius: 110 }, graf3: { radius: 110 },
 };
