@@ -366,7 +366,7 @@ function crackMask(S, n, seed) {
   const r = new RNG(seed);
   for (let k = 0; k < n; k++) {
     let x = r.float(0, S), y = r.float(0, S), a = r.float(0, 6.28);
-    const len = r.int(80, 260), w = r.float(0.6, 1.6);
+    const len = r.int(40, 140), w = r.float(0.25, 0.6);
     for (let s = 0; s < len; s++) {
       a += r.float(-0.5, 0.5); x += Math.cos(a) * 1.4; y += Math.sin(a) * 1.4;
       for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) {
@@ -386,16 +386,16 @@ const SQ = (q) => (q === 'low' ? 256 : 512);
 // Asfalt: agrega taneleri, çatlaklar, aşınma
 export function asphaltPBR(q) {
   return cached('pbr:asphalt', () => {
-    const S = SQ(q), cr = crackMask(S, 7, 31);
+    const S = SQ(q), cr = crackMask(S, 3, 31);
     return makePBR(S, 2.2, (u, v, o, x, y) => {
       const n = fbm(u, v, 8, 4, 3), f = fbm(u, v, 64, 2, 9);
       const sp = hashI(x, y, 5);
       const stone = sp > 0.9 ? (sp - 0.9) * 2.2 : 0;
       let c = 0.16 + n * 0.07 + f * 0.04 + stone - (sp < 0.06 ? 0.04 : 0);
       const k = cr[y * S + x];
-      c *= 1 - k * 0.55;
+      c *= 1 - k * 0.18;
       o[0] = c; o[1] = c; o[2] = c * 1.03;
-      o[3] = 0.45 + f * 0.25 + stone * 1.2 - k * 0.6 + n * 0.1;
+      o[3] = 0.45 + f * 0.25 + stone * 1.2 - k * 0.18 + n * 0.1;
       o[4] = 0.82 + f * 0.1 + k * 0.1 - stone * 0.3;
     });
   });

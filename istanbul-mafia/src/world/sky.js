@@ -220,7 +220,9 @@ export class Environment {
     const t = (this.time - 6) / 12;
     const ang = t * Math.PI;
     const elev = Math.sin(ang);
-    this.sunDir.set(Math.cos(ang) * 0.8, Math.max(elev, -0.3), -0.45).normalize();
+    // İstanbul kuzey yarımkürede: öğlen güneş GÜNEYDE (+z; -z kuzey). Eskiden -0.45 idi -> güneş kuzeyden vuruyor,
+    // güney kaldırımları binaların gölgesinde kalıyordu.
+    this.sunDir.set(Math.cos(ang) * 0.8, Math.max(elev, -0.3), 0.45).normalize();
     const day = clamp((elev + 0.12) / 0.35, 0, 1);
     this.nightFactor = 1 - day;
     const u = this.sky.material.uniforms;
@@ -298,7 +300,9 @@ export class Environment {
 
     // çevre yansıması (araçlar, cam ve ıslak zemin için) - arada bir güncelle
     this.envTimer -= dt;
-    if (this.envTimer <= 0) { this.envTimer = 20; this.updateEnvMap(); }
+    // güneş yüksekliği belirgin değişince de yenile (saat atlatma / uyku / test zaman ayarı sonrası bayat yansıma kalmasın)
+    if (this._envElev === undefined || Math.abs(this.sunDir.y - this._envElev) > 0.05) this.envTimer = 0;
+    if (this.envTimer <= 0) { this.envTimer = 20; this._envElev = this.sunDir.y; this.updateEnvMap(); }
   }
 
   // Şimşek: rastgele uzak bir noktaya zikzak çizgi + flaş (ses için onLightning kancası)

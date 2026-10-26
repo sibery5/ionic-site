@@ -300,8 +300,12 @@ export function facadeMaterial(quality) {
             }
             wall *= 0.86 + mac.r * 0.28;
             // yaşlanma: sıva dökülmesi (tuğla görünür)
-            if (st < 0.5 && age > 0.55 && mac.b > 0.74 - (age - 0.55) * 0.3 && v > 0.8) {
-              vec4 ba = texture2D(tBA, nuv / 2.0); wall = ba.rgb * 0.9; fN = texture2D(tBN, nuv / 2.0).xyz * 2.0 - 1.0;
+            // (seyrek ve soluk: uzaktan kan lekesi gibi görünmesin)
+            if (st < 0.5 && age > 0.75 && mac.b > 0.86 - (age - 0.75) * 0.2 && v > 0.8) {
+              vec4 ba = texture2D(tBA, nuv / 2.0);
+              float bl = dot(ba.rgb, vec3(0.3, 0.59, 0.11));
+              vec3 brick = mix(vec3(bl), ba.rgb, 0.45) * 0.95;
+              wall = mix(wall, brick, 0.7); fN = texture2D(tBN, nuv / 2.0).xyz * 2.0 - 1.0;
             }
             // kat silmeleri ve gölge çizgisi
             if (!cumba && st < 2.5 && fi >= 1.0) {
