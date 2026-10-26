@@ -3,8 +3,12 @@ import * as THREE from 'three';
 import { ICONS, PIN_FOR, PIN_COLOR, svgImg, iconBitmap } from './icons.js';
 import { formatMoney, pad2, clamp } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
-import { CLOTHES, FOOD, GOODS, CARS, DEALER_CARS, BUSINESSES, GANGS, rankOf, RANKS } from '../game/economy.js';
+import { FOOD, GOODS, BUSINESSES, GANGS, rankOf, RANKS, LEGAL_RANKS, CRIME_RANKS, rankIn, garageCapacity, ensureLifeState } from '../game/economy.js';
 import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES, BEARDS, defaultLook } from '../entities/character.js';
+import { Life } from '../game/life.js';
+import { ShopMethods } from './shops.js';
+import { PhoneMethods } from './phone.js';
+import { SettingsMethods, applyExtendedSettings, withDefaults } from './settings.js';
 import { districtAt, DISTRICTS } from '../world/map.js';
 import { SLOTS, listSaves } from '../game/save.js';
 import { audio } from '../core/audio.js';
@@ -23,6 +27,9 @@ const TIPS = [
   'İpucu: Çete bölgesinde 15 çete üyesini indirirsen bölge senin olur.',
   'İpucu: El freni (Space) ile drift atabilirsin.',
   'İpucu: Galata Kulesi\'nin seyir terasından tüm İstanbul\'u izleyebilirsin.',
+  'İpucu: Telefonunu (P) açıp İşler uygulamasından taksicilikten kiralık katilliğe kadar iş bulabilirsin.',
+  'İpucu: Her konut bir güvenli evdir ve garaj kapasiteni artırır. Boğaz yalılarının özel iskelesi var.',
+  'İpucu: Borsa uygulamasında ucuzdan al, haberlerden sonra pahalıya sat.',
 ];
 
 export class UI {
@@ -38,6 +45,14 @@ export class UI {
     this.buildHUD();
     this.mapZoom = 1;
     this.mapPan = { x: 0, z: 0 };
+    this._obj = { mission: '', job: '' };
+  }
+
+  // yaşam sistemlerini (kariyer, mülk, borsa) ilk ihtiyaçta kur
+  ensureLife() {
+    const g = this.game;
+    if (!g.life && g.map) new Life(g);
+    return g.life;
   }
 
   // ======================= HUD =======================
@@ -61,6 +76,8 @@ export class UI {
       </div>
       <div class="objective" id="objective"></div>
       <div class="timer" id="timer"></div>
+      <div class="timer job" id="jobTimer"></div>
+      <div class="holdbar" id="holdbar"><span></span><div><i></i></div></div>
       <div class="racepos" id="racepos"></div>
       <div class="notes" id="notes"></div>
       <div class="prompt" id="prompt"></div>
@@ -102,7 +119,25 @@ export class UI {
     b.textContent = name;
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
   }
-  setObjective(t) { const o = $('#objective'); o.innerHTML = t ? `<span>GÖREV</span>${t}` : ''; o.classList.toggle('show', !!t); }
+  // iki kanal: hikâye görevi (missions) ve iş/test sürüşü (career). İkisi birlikte gösterilir.
+  setObjective(t, channel = 'mission', path = 'legal') {
+    this._obj[channel] = t || '';
+    if (channel === 'job') this._objPath = path;
+    const o = $('#objective');
+    const parts = [];
+    if (this._obj.mission) parts.push(`<div class="ob"><span>GÖREV</span>${this._obj.mission}</div>`);
+    if (this._obj.job) parts.push(`<div class="ob job ${this._objPath === 'crime' ? 'crime' : ''}"><span>${this._objPath === 'crime' ? 'KİRLİ İŞ' : 'İŞ'}</span>${this._obj.job}</div>`);
+    o.innerHTML = parts.join('');
+    o.classList.toggle('show', parts.length > 0);
+  }
+  setJobTimer(t) { const e = $('#jobTimer'); if (t > 0) { e.textContent = `${Math.floor(t / 60)}:${pad2(Math.floor(t % 60))}`; e.classList.add('show'); e.classList.toggle('urgent', t < 15); } else e.classList.remove('show'); }
+  setProgress(label, pct) {
+    const h = $('#holdbar');
+    if (label === null || label === undefined) { h.classList.remove('show'); return; }
+    h.classList.add('show');
+    h.firstElementChild.textContent = label;
+    h.querySelector('i').style.width = `${Math.min(100, pct * 100)}%`;
+  }
   setTimer(t) { const e = $('#timer'); if (t > 0) { e.textContent = `${Math.floor(t / 60)}:${pad2(Math.floor(t % 60))}`; e.classList.add('show'); e.classList.toggle('urgent', t < 30); } else e.classList.remove('show'); }
   setRacePos(p, n) { const e = $('#racepos'); if (p > 0) { e.innerHTML = `<b>${p}</b>/${n}<small>SIRA</small>`; e.classList.add('show'); } else e.classList.remove('show'); }
   flashWanted() { const s = $('#stars'); s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
@@ -132,6 +167,9 @@ export class UI {
   update(dt) {
     const g = this.game, p = g.player, s = g.state;
     if (!s) return;
+    const life = this.ensureLife();
+    if (life) life.tickFromUI(dt);
+    if (this._setStamp !== g.settings) { this._setStamp = g.settings; withDefaults(g.settings); applyExtendedSettings(g); }
     // saat & hava
     $('#clock').textContent = `${pad2(g.env.hour)}:${pad2(g.env.minute)}`;
     $('#day').textContent = `${g.env.day}. Gün`;
@@ -222,7 +260,7 @@ export class UI {
     const range = p.vehicle ? 260 : 160; // metre yarıçap
     const scale = (R / range); // px/m
     const yaw = p.camYaw;
-    const rot = -Math.PI / 2 - Math.atan2(Math.cos(yaw), Math.sin(yaw));
+    const rot = g.settings.minimapRotate === false ? 0 : -Math.PI / 2 - Math.atan2(Math.cos(yaw), Math.sin(yaw));
     c.fillStyle = '#0f2a3d'; c.fillRect(0, 0, W, W);
     c.translate(R, R);
     c.rotate(rot);
@@ -250,8 +288,17 @@ export class UI {
     for (const b of g.map.specials) {
       const [sx, sy] = toScreen(b.door.x, b.door.z);
       if (Math.hypot(sx - R, sy - R) > R - 14) continue;
-      const pin = PIN_FOR[b.type]; if (!pin) continue;
-      c.drawImage(iconBitmap(pin, PIN_COLOR[b.type]), sx - 13, sy - 13, 26, 26);
+      const pt = b.ownedProp ? 'property' : b.type;
+      const pin = PIN_FOR[pt]; if (!pin) continue;
+      c.drawImage(iconBitmap(pin, PIN_COLOR[pt]), sx - 13, sy - 13, 26, 26);
+    }
+    // iş tabelaları
+    const C = g.career;
+    if (C) for (const bd of C.boards) {
+      const [sx, sy] = toScreen(bd.x, bd.z);
+      if (Math.hypot(sx - R, sy - R) > R - 14) continue;
+      const pt = JOB_PATH(bd.id) === 'crime' ? 'crimejob' : 'job';
+      c.drawImage(iconBitmap(PIN_FOR[pt], PIN_COLOR[pt]), sx - 11, sy - 11, 22, 22);
     }
     // NPC noktaları
     for (const n of g.npcs.list) {
@@ -285,6 +332,16 @@ export class UI {
       const col = '#' + new THREE.Color(mk.color).getHexString();
       if (mk.giver) c.drawImage(iconBitmap('pin_reis', '#d4af37'), sx - 16, sy - 16, 32, 32);
       else { c.fillStyle = col; c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fill(); c.stroke(); }
+    }
+    // iş işaretçileri (kenara sabitlenir, elmas biçimli)
+    if (C) for (const mk of C.markers) {
+      const pos = C.markerPos(mk);
+      if (mk.actor && mk.actor.dead) continue;
+      let [sx, sy] = toScreen(pos.x, pos.z);
+      const d = Math.hypot(sx - R, sy - R);
+      if (d > R - 18) { sx = R + (sx - R) / d * (R - 18); sy = R + (sy - R) / d * (R - 18); }
+      c.fillStyle = '#' + new THREE.Color(mk.color).getHexString(); c.strokeStyle = '#000'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(sx, sy - 12); c.lineTo(sx + 10, sy); c.lineTo(sx, sy + 12); c.lineTo(sx - 10, sy); c.closePath(); c.fill(); c.stroke();
     }
     if (g.waypoint) {
       let [sx, sy] = toScreen(g.waypoint.x, g.waypoint.z);
@@ -482,6 +539,7 @@ export class UI {
       this.btn('DEVAM ET', () => this.closeModal(m), 'big gold'),
       this.btn('HARİTA', () => this.mapScreen(), 'big'),
       this.btn('İSTATİSTİKLER', () => this.statsScreen(), 'big'),
+      this.btn('ÇANTA', () => this.openInventory(), 'big'),
       this.btn('OYUNU KAYDET', () => (g.wanted.level > 0 ? this.notify('Aranırken kayıt alınamaz!', 'warn') : this.saveLoadMenu('save')), 'big'),
       this.btn('OYUN YÜKLE', () => this.saveLoadMenu('load'), 'big'),
       this.btn('AYARLAR', () => this.settingsMenu(), 'big'),
@@ -490,7 +548,8 @@ export class UI {
       this.btn('MASAÜSTÜNE ÇIK', () => this.confirm('Oyundan çık?', 'Kaydedilmemiş ilerleme kaybolur.', 'Çık', () => g.quit()), 'big dim'),
     );
     const s = g.state;
-    $('.pause-info', p).innerHTML = `<b>${s.name}</b> · ${rankOf(s.respect).name} · ${formatMoney(s.money)} · Görev ${Math.min(s.storyIndex, 8)}/8`;
+    ensureLifeState(s);
+    $('.pause-info', p).innerHTML = `<b>${s.name}</b> · ${rankOf(s.respect).name} · ${formatMoney(s.money)} · Görev ${Math.min(s.storyIndex, 8)}/8<br><small>İş: ${rankIn(LEGAL_RANKS, s.legalRep).name} · Yeraltı: ${rankIn(CRIME_RANKS, s.crimeRep).name}</small>`;
   }
 
   async saveLoadMenu(mode) {
@@ -518,59 +577,6 @@ export class UI {
     }
   }
 
-  settingsMenu() {
-    const g = this.game;
-    const s = g.settings;
-    const p = this.panel('AYARLAR');
-    const m = this.openModal(p, { onClose: () => g.applySettings() });
-    $('.x', p).onclick = () => this.closeModal(m);
-    const body = $('.panel-body', p);
-    const row = (label, ctrl) => { const r = el('div', 'srow'); r.innerHTML = `<label>${label}</label>`; r.appendChild(ctrl); body.appendChild(r); };
-    const select = (key, opts) => {
-      const d = el('div', 'seg');
-      for (const [v, l] of opts) {
-        const b = el('button', 'chip' + (s[key] === v ? ' on' : ''), l);
-        b.onclick = () => { s[key] = v; d.querySelectorAll('.chip').forEach((c) => c.classList.remove('on')); b.classList.add('on'); audio.click(); g.applySettings(true); };
-        d.appendChild(b);
-      }
-      return d;
-    };
-    const slider = (key, min, max, step) => {
-      const w = el('div', 'slider');
-      const i = el('input'); i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = s[key];
-      const v = el('span', '', String(s[key]));
-      i.oninput = () => { s[key] = parseFloat(i.value); v.textContent = i.value; g.applySettings(true); };
-      w.append(i, v);
-      return w;
-    };
-    row('Grafik kalitesi', select('quality', [['low', 'Düşük'], ['medium', 'Orta'], ['high', 'Yüksek']]));
-    row('Gölgeler', select('shadows', [[false, 'Kapalı'], [true, 'Açık']]));
-    row('Işıma (Bloom)', select('bloom', [[false, 'Kapalı'], [true, 'Açık']]));
-    row('Çizim mesafesi', slider('drawDistance', 400, 2000, 100));
-    row('Görüş açısı (FOV)', slider('fov', 55, 90, 1));
-    row('Fare hassasiyeti', slider('sensitivity', 0.2, 3, 0.1));
-    row('Y eksenini ters çevir', select('invertY', [[false, 'Hayır'], [true, 'Evet']]));
-    row('Ana ses', slider('volMaster', 0, 1, 0.05));
-    row('Efektler', slider('volSfx', 0, 1, 0.05));
-    row('Müzik', slider('volMusic', 0, 1, 0.05));
-    row('FPS göster', select('showFps', [[false, 'Hayır'], [true, 'Evet']]));
-    if (window.desktop) row('Tam ekran', select('fullscreen', [[true, 'Açık'], [false, 'Pencere']]));
-    body.appendChild(el('p', 'hint', 'Düşük kalite; gölgeleri, ışımayı ve NPC/araç sayısını azaltır. Grafik kalitesi değişikliği tam olarak yeni oyunda uygulanır.'));
-  }
-
-  controlsMenu() {
-    const p = this.panel('KONTROLLER');
-    const m = this.openModal(p);
-    $('.x', p).onclick = () => this.closeModal(m);
-    const rows = [
-      ['W A S D', 'Yürü / Araç sür'], ['Shift', 'Koş'], ['Space', 'Zıpla / El freni'], ['C', 'Çömel / Araç kamerası'], ['Fare', 'Etrafa bak'],
-      ['Sağ tık', 'Nişan al'], ['Sol tık', 'Ateş et / Yumruk'], ['R', 'Şarjör değiştir'], ['1-9 / Teker / Q', 'Silah değiştir'], ['F', 'Araca bin / in (araç çal)'],
-      ['E', 'Etkileşim: kapı, dükkân, kedi sev, görev'], ['H', 'Korna'], ['N', 'Siren (polis aracı)'], ['M', 'Harita (tıkla: rota çiz)'], ['Tab', 'İstatistikler'],
-      ['F5', 'Hızlı kayıt'], ['F9', 'Hızlı yükleme'], ['ESC', 'Duraklat menüsü'],
-    ];
-    $('.panel-body', p).innerHTML = `<div class="keys">${rows.map(([k, v]) => `<div><kbd>${k}</kbd><span>${v}</span></div>`).join('')}</div>`;
-  }
-
   credits(fromMenu) {
     const p = el('div', 'credits');
     p.innerHTML = `<div class="roll">
@@ -594,7 +600,7 @@ export class UI {
     const cv = $('#bigmap', p);
     const ctx = cv.getContext('2d');
     const leg = $('.legend', p);
-    const types = [['konak', 'Reis Konağı'], ['safehouse', 'Güvenli Ev'], ['gun', 'Silahçı'], ['clothes', 'Butik'], ['food', 'Bakkal'], ['trade', 'Karaborsa'], ['dealer', 'Oto Galeri'], ['bank', 'Banka'], ['hospital', 'Hastane'], ['police', 'Emniyet'], ['estate', 'Emlakçı'], ['cafe', 'Çay Ocağı'], ['club', 'Gece Kulübü'], ['garage', 'Oto Tamir']];
+    const types = [['konak', 'Reis Konağı'], ['safehouse', 'Güvenli Ev'], ['gun', 'Silahçı'], ['clothes', 'Butik'], ['food', 'Bakkal'], ['trade', 'Karaborsa'], ['dealer', 'Oto Galeri'], ['bank', 'Banka'], ['hospital', 'Hastane'], ['police', 'Emniyet'], ['estate', 'Emlakçı'], ['cafe', 'Çay Ocağı'], ['club', 'Gece Kulübü'], ['garage', 'Oto Tamir'], ['property', 'Mülkün'], ['job', 'Yasal iş'], ['crimejob', 'Kirli iş']];
     leg.innerHTML = '<h3>LEJANT</h3>' + types.map(([t, l]) => `<div>${svgImg(PIN_FOR[t], PIN_COLOR[t], 20)} ${l}</div>`).join('') +
       '<h3>BÖLGELER</h3>' + DISTRICTS.map((d) => `<div><i class="gdot" style="background:${g.state.territories[d.gang] ? '#d4af37' : GANGS[d.gang] ? GANGS[d.gang].color : '#888'}"></i>${d.name} — ${g.state.territories[d.gang] ? 'SENİN' : GANGS[d.gang] ? GANGS[d.gang].name : ''}</div>`).join('');
     let zoom = this.mapZoom, cx = g.player.pos.x, cz = g.player.pos.z, drag = null;
@@ -623,9 +629,18 @@ export class UI {
         ctx.stroke();
       }
       for (const b of g.map.specials) {
-        const pin = PIN_FOR[b.type]; if (!pin) continue;
+        const pt = b.ownedProp ? 'property' : b.type;
+        const pin = PIN_FOR[pt]; if (!pin) continue;
         const s = 30;
-        ctx.drawImage(iconBitmap(pin, PIN_COLOR[b.type], 48), tx(b.door.x) - s / 2, tz(b.door.z) - s / 2, s, s);
+        ctx.drawImage(iconBitmap(pin, PIN_COLOR[pt], 48), tx(b.door.x) - s / 2, tz(b.door.z) - s / 2, s, s);
+      }
+      if (g.career) {
+        for (const bd of g.career.boards) { const pt = JOB_PATH(bd.id) === 'crime' ? 'crimejob' : 'job'; ctx.drawImage(iconBitmap(PIN_FOR[pt], PIN_COLOR[pt], 48), tx(bd.x) - 13, tz(bd.z) - 13, 26, 26); }
+        for (const mk of g.career.markers) {
+          const pos = g.career.markerPos(mk);
+          ctx.fillStyle = '#' + new THREE.Color(mk.color).getHexString(); ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.moveTo(tx(pos.x), tz(pos.z) - 16); ctx.lineTo(tx(pos.x) + 13, tz(pos.z)); ctx.lineTo(tx(pos.x), tz(pos.z) + 16); ctx.lineTo(tx(pos.x) - 13, tz(pos.z)); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
       }
       for (const mk of g.missions.markers) {
         let x = mk.x, z = mk.z;
@@ -695,6 +710,8 @@ export class UI {
         <div><span>Soygun</span><b>${st.robberies}</b></div><div><span>Sürüş</span><b>${(st.driveDist / 1000).toFixed(1)} km</b></div>
         <div><span>İşletmeler</span><b>${s.businesses.length}/${BUSINESSES.length}</b></div><div><span>Oyun süresi</span><b>${Math.floor(pt / 3600)}s ${Math.floor((pt % 3600) / 60)}dk</b></div>
       </div>
+      <div class="grid2 ranks2"><div><span>İş hayatı</span><b>${rankIn(LEGAL_RANKS, s.legalRep || 0).name}</b><small>${s.legalRep || 0} itibar</small></div><div><span>Yeraltı</span><b>${rankIn(CRIME_RANKS, s.crimeRep || 0).name}</b><small>${s.crimeRep || 0} itibar</small></div>
+        <div><span>Mülkler</span><b>${(s.properties || []).length}</b></div><div><span>Garaj</span><b>${s.ownedCars.length}/${garageCapacity(ensureLifeState(s))}</b></div></div>
       <h3>Bölgeler</h3><div class="terr">${terr}</div>
       <h3>Çanta (${goodsCount(s)}/${s.capacity})</h3><p>${goods}</p>`;
   }
@@ -750,87 +767,6 @@ export class UI {
     s.money -= price; audio.cash(); fn(); return true;
   }
 
-  shop_clothes(free = false) {
-    const g = this.game, s = g.state, pl = g.player;
-    const original = { ...pl.model.look };
-    let preview = { ...original };
-    const p = this.panel(free ? 'GARDIROP' : 'BUTİK', free ? 'Sahip olduğun kıyafetler' : 'Kıyafet seni adam etmez, ama adam gibi gösterir.');
-    // oyuncuyu kameraya çevir
-    pl.heading = pl.camYaw + Math.PI;
-    pl.syncModel();
-    const m = this.openModal(p, { cls: 'right', onClose: () => { pl.model.setLook(s.look); } });
-    $('.x', p).onclick = () => this.closeModal(m);
-    const body = $('.panel-body', p);
-    const tabs = el('div', 'tabs');
-    const list = el('div', 'list');
-    body.append(tabs, list);
-    const slots = [['top', 'Üst'], ['pants', 'Alt'], ['shoes', 'Ayakkabı'], ['hat', 'Şapka'], ['acc', 'Aksesuar']];
-    let cur = 'top';
-    const isOwned = (it, color) => (s.owned[it.slot + ':' + it.id] || []).includes(color) || (it.slot === 'hat' && it.id === 'none');
-    const apply = (it, color) => {
-      if (it.slot === 'top') { preview.top = it.id; preview.topColor = color; }
-      if (it.slot === 'pants') { preview.pants = it.id; preview.pantsColor = color; }
-      if (it.slot === 'shoes') { preview.shoes = it.id; preview.shoesColor = color; }
-      if (it.slot === 'hat') { preview.hat = it.id; preview.hatColor = color; }
-      if (it.slot === 'glasses') preview.glasses = !preview.glasses;
-      if (it.slot === 'chain') preview.chain = !preview.chain;
-      if (it.slot === 'tespih') preview.tespih = !preview.tespih;
-      pl.model.setLook(preview);
-    };
-    const render = () => {
-      tabs.innerHTML = '';
-      for (const [k, l] of slots) { const b = this.btn(l, () => { cur = k; render(); }, 'tab' + (cur === k ? ' on' : '')); tabs.appendChild(b); }
-      list.innerHTML = '';
-      const items = CLOTHES.filter((c) => (cur === 'acc' ? ['glasses', 'chain', 'tespih', 'bag'].includes(c.slot) : c.slot === cur));
-      for (const it of items) {
-        if (free && !it.colors.some((c) => isOwned(it, c))) continue;
-        if (it.slot === 'bag' && free) continue;
-        const row = el('div', 'item');
-        row.innerHTML = `<div class="in"><b>${it.name}</b><div class="swatches"></div></div><div class="ia"></div>`;
-        const sw = $('.swatches', row);
-        let sel = it.colors[0];
-        it.colors.forEach((c) => {
-          if (free && !isOwned(it, c)) return;
-          const b = el('button', 'sw' + (c === sel ? ' on' : '')); b.style.background = c;
-          b.onclick = () => { sel = c; sw.querySelectorAll('.sw').forEach((x) => x.classList.remove('on')); b.classList.add('on'); apply(it, c); refreshAct(); };
-          if (it.colors.length > 1) sw.appendChild(b);
-        });
-        const act = $('.ia', row);
-        const refreshAct = () => {
-          act.innerHTML = '';
-          if (it.slot === 'bag') {
-            act.appendChild(s.capacity >= it.capacity ? el('small', '', 'Sahipsin') : this.btn(formatMoney(it.price), () => this.buy(it.price, () => { s.capacity = it.capacity; this.notify('Taşıma kapasitesi: ' + it.capacity, 'good'); refreshAct(); }), 'gold'));
-            return;
-          }
-          act.appendChild(this.btn('Dene', () => apply(it, sel)));
-          const owned = isOwned(it, sel);
-          act.appendChild(this.btn(owned || free ? 'Giy' : formatMoney(it.price), () => {
-            const wear = () => {
-              apply(it, sel);
-              const k = it.slot + ':' + it.id;
-              s.owned[k] = s.owned[k] || [];
-              if (!s.owned[k].includes(sel)) s.owned[k].push(sel);
-              s.look = { ...preview };
-              this.notify(it.name + ' giyildi', 'good'); refreshAct();
-            };
-            if (owned || free) wear(); else this.buy(it.price, wear);
-          }, owned || free ? '' : 'gold'));
-        };
-        refreshAct();
-        list.appendChild(row);
-      }
-      if (s.unlockedGoldJacket && cur === 'top') {
-        const row = el('div', 'item');
-        row.innerHTML = '<div class="in"><b>Altın Lale Ceketi</b><small>Koleksiyon ödülü</small></div><div class="ia"></div>';
-        $('.ia', row).appendChild(this.btn('Giy', () => { preview.top = 'leather'; preview.topColor = '#d4af37'; s.look = { ...preview }; pl.model.setLook(preview); }, 'gold'));
-        list.appendChild(row);
-      }
-    };
-    render();
-    void original;
-  }
-  shop_wardrobe() { this.shop_clothes(true); }
-
   shop_food() {
     const g = this.game, pl = g.player;
     const p = this.panel('YİYECEK & İÇECEK', 'Aç ayı oynamaz.');
@@ -883,7 +819,7 @@ export class UI {
           s.money += pr * n; s.goods[gd.id] -= n; s.goodsCost[gd.id] = avg * s.goods[gd.id]; audio.cash();
           const profit = (pr - avg) * n;
           this.notify(`${n} ${gd.name} satıldı · ${profit >= 0 ? 'Kâr' : 'Zarar'}: ${formatMoney(profit)}`, profit >= 0 ? 'money' : 'warn');
-          if (profit > 0) s.respect += Math.floor(profit / 5000);
+          if (profit > 0) { s.respect += Math.floor(profit / 5000); ensureLifeState(s).crimeRep += Math.floor(profit / 3000); }
           g.missions.onTrade(gd.id, n, 'sell', dist); render();
         };
         acts.append(this.btn('Al 1', buyN(1)), this.btn('Al 5', buyN(5)), this.btn('Sat 1', sellN(1)), this.btn('Hepsini sat', sellN(9999), 'gold'));
@@ -893,25 +829,6 @@ export class UI {
       body.appendChild(el('p', 'hint', 'Yeşil: en ucuz semt · Kırmızı: en pahalı semt. Fiyatlar her gün değişir. Aranırken yakalanırsan mallara el konur!'));
     };
     render();
-  }
-
-  shop_dealer() {
-    const g = this.game, s = g.state;
-    const p = this.panel('OTO GALERİ', 'Sıfır ayarında, kâğıtları temiz... çoğunlukla.');
-    const m = this.openModal(p, { cls: 'right' });
-    $('.x', p).onclick = () => this.closeModal(m);
-    const body = $('.panel-body', p);
-    for (const t of DEALER_CARS) {
-      const c = CARS[t];
-      const row = el('div', 'item');
-      row.innerHTML = `<div class="ii">${svgImg('car', c.colors[0], 54)}</div><div class="in"><b>${c.name}</b>
-        <div class="stat"><span>Hız</span><i style="width:${c.maxSpeed / 60 * 100}%"></i></div><div class="stat"><span>İvme</span><i style="width:${c.accel / 20 * 100}%"></i></div><div class="stat"><span>Dayanıklılık</span><i style="width:${c.hp / 1400 * 100}%"></i></div></div><div class="ia"></div>`;
-      $('.ia', row).appendChild(this.btn(formatMoney(c.price), () => {
-        if (s.ownedCars.length >= 6) return this.notify('Garajın dolu (en fazla 6 araç)', 'warn');
-        this.buy(c.price, () => { s.ownedCars.push({ type: t, color: c.colors[0] }); this.closeAll(); g.interiors.exit(); g.spawnOwnedCar(s.ownedCars.length - 1, true); this.notify(`${c.name} kapının önünde!`, 'good'); });
-      }, 'gold'));
-      body.appendChild(row);
-    }
   }
 
   shop_garage() {
@@ -938,53 +855,15 @@ export class UI {
           const oc = s.ownedCars.find((o) => o.vid === v.id); if (oc) oc.color = col;
         });
       }
-      if (!v.owned && s.ownedCars.length < 6 && v.type !== 'police' && v.type !== 'bus' && v.type !== 'swat') add('Garaja kaydet', 'Bu aracı kalıcı olarak sahiplen', 2500, () => { v.owned = true; s.ownedCars.push({ type: v.type, color: v.color, vid: v.id }); });
+      if (!v.owned && s.ownedCars.length < garageCapacity(ensureLifeState(s)) && !v.testDrive && v.type !== 'police' && v.type !== 'bus' && v.type !== 'swat') add('Garaja kaydet', 'Bu aracı kalıcı olarak sahiplen', 2500, () => { v.owned = true; s.ownedCars.push({ type: v.type, color: v.color, vid: v.id }); });
     } else body.appendChild(el('p', 'hint', 'Tamir ve boya için aracını kapının önüne park et.'));
     add('Motor Modifiyesi', 'Tüm araçlarında %15 daha yüksek azami hız', 25000, () => { s.carUpgrade = true; }, s.carUpgrade);
-  }
-
-  shop_bank() {
-    const g = this.game, s = g.state;
-    const p = this.panel('BANKA', 'Bankadaki paran ölünce de, tutuklanınca da güvende.');
-    const m = this.openModal(p, { cls: 'right' });
-    $('.x', p).onclick = () => this.closeModal(m);
-    const body = $('.panel-body', p);
-    const render = () => {
-      body.innerHTML = `<div class="grid2"><div><span>Nakit</span><b>${formatMoney(s.money)}</b></div><div><span>Hesap</span><b>${formatMoney(s.bank)}</b></div></div>`;
-      const r1 = el('div', 'row'), r2 = el('div', 'row');
-      for (const a of [1000, 10000, 100000]) r1.appendChild(this.btn(`Yatır ${formatMoney(a)}`, () => { const x = Math.min(a, s.money); s.money -= x; s.bank += x; audio.cash(); render(); }));
-      r1.appendChild(this.btn('Hepsini yatır', () => { s.bank += s.money; s.money = 0; audio.cash(); render(); }, 'gold'));
-      for (const a of [1000, 10000, 100000]) r2.appendChild(this.btn(`Çek ${formatMoney(a)}`, () => { const x = Math.min(a, s.bank); s.bank -= x; s.money += x; audio.cash(); render(); }));
-      r2.appendChild(this.btn('Hepsini çek', () => { s.money += s.bank; s.bank = 0; audio.cash(); render(); }));
-      body.append(r1, r2);
-      body.appendChild(el('p', 'hint', 'Hesabın günde %1 faiz kazanır.'));
-    };
-    render();
   }
 
   shop_hospital() {
     const g = this.game, pl = g.player;
     const cost = Math.ceil((pl.maxHp - pl.hp) * 6);
     this.confirm('TEDAVİ', pl.hp >= pl.maxHp ? 'Sağlığın yerinde.' : `Tam tedavi: ${formatMoney(cost)}`, 'Tedavi Ol', () => { if (pl.hp < pl.maxHp) this.buy(cost, () => { pl.hp = pl.maxHp; this.notify('Tam sağlık!', 'good'); }); });
-  }
-
-  shop_estate() {
-    const g = this.game, s = g.state;
-    const p = this.panel('EMLAKÇI NURİ', 'İşletme al, para senin için çalışsın. Gelir her gün başında hesabına geçer.');
-    const m = this.openModal(p, { cls: 'right' });
-    $('.x', p).onclick = () => this.closeModal(m);
-    const body = $('.panel-body', p);
-    const render = () => {
-      body.innerHTML = '';
-      for (const b of BUSINESSES) {
-        const own = s.businesses.includes(b.id);
-        const row = el('div', 'item');
-        row.innerHTML = `<div class="ii">${svgImg('pin_estate', '#e8b060', 44)}</div><div class="in"><b>${b.name}</b><small>${DISTRICTS.find((d) => d.id === b.district).name} · Günlük gelir: ${formatMoney(b.income)}</small></div><div class="ia"></div>`;
-        $('.ia', row).appendChild(own ? el('small', 'own', 'SENİN') : this.btn(formatMoney(b.price), () => this.buy(b.price, () => { s.businesses.push(b.id); s.respect += 40; this.notify(b.name + ' artık senin!', 'gold'); render(); }), 'gold'));
-        body.appendChild(row);
-      }
-    };
-    render();
   }
 
   shop_stash() {
@@ -1026,5 +905,9 @@ export class UI {
     setTimeout(() => { o.className = 'overlay hidden'; document.body.classList.remove('desat'); done && done(); }, 4500);
   }
 }
+
+Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods);
+
+const JOB_PATH = (id) => (['chop', 'robbery', 'protection', 'hit'].includes(id) ? 'crime' : 'legal');
 
 export function goodsCount(s) { return Object.values(s.goods).reduce((a, b) => a + b, 0); }

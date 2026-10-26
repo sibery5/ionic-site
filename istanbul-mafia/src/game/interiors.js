@@ -359,6 +359,19 @@ const BUILDERS = {
     this.light(ctx, -3, 2.9, 2, 0xffffff, 5);
     this.npc(ctx, 'shopkeeper', -3, -3.8, 0, { name: 'Butik Selin', look: { ...randomLook(ctx.rng, 'civilian'), gender: 'f', hair: 'uzun' } });
     ctx.interact.push({ x: -3, z: -2.2, r: 1.6, label: 'Kıyafet satın al', action: () => g.ui.openShop('clothes') });
+    // [ekonomi] deneme kabini (perde + ayna) ve tezgâhta yazar kasa
+    const cab = new THREE.MeshStandardMaterial({ color: 0x3a1a2a, roughness: 0.9 });
+    this.box(ctx, 1.6, 2.3, 0.06, 4.6, 0, -4.3, cab, false);
+    this.box(ctx, 0.06, 2.3, 1.5, 3.8, 0, -3.55, cab, false);
+    const curtain = this.box(ctx, 1.5, 2.0, 0.03, 4.6, 0.1, -2.82, new THREE.MeshStandardMaterial({ color: 0x8a1a2a, roughness: 1 }), false);
+    curtain.scale.x = 0.45; curtain.position.x = 5.15;
+    this.sign(ctx, 'KABİN', 4.6, 2.55, -2.8, 0, '#1a0a12', '#f0c0d0', 1.2);
+    const reg = this.box(ctx, 0.45, 0.3, 0.4, -2.2, 1.05, -3, new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5, roughness: 0.4 }), false);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.14), new THREE.MeshBasicMaterial({ color: 0x40ff90 }));
+    scr.position.set(-2.2, 1.45, -2.79); ctx.scene.add(scr);
+    void reg;
+    ctx.register = { x: -1.6, z: -2.2 };
+    ctx.interact.push({ x: 4.6, z: -2.2, r: 1.3, label: 'Kabin: gardırobunu dene', action: () => g.ui.openShop('wardrobe') });
   },
 
   food(ctx) {
@@ -447,7 +460,10 @@ const BUILDERS = {
     this.box(ctx, 2.5, 0.8, 1, 7, 0, 4, new THREE.MeshStandardMaterial({ color: 0x222222 }));
     for (let i = 0; i < 3; i++) this.light(ctx, -6 + i * 6, 4.6, -2, 0xffffff, 16, 14);
     this.npc(ctx, 'shopkeeper', 7, 3.2, 0, { name: 'Galerici Tayfun', look: { ...randomLook(ctx.rng, 'civilian'), top: 'suit', topColor: '#1d2440' } });
-    ctx.interact.push({ x: 7, z: 5, r: 1.8, label: 'Araç satın al', action: () => g.ui.openShop('dealer') });
+    ctx.interact.push({ x: 7, z: 5, r: 1.8, label: 'Showroom: araç incele / test sürüşü', action: () => g.ui.openShop('dealer') });
+    // [ekonomi] deniz & hava araçları kataloğu
+    this.sign(ctx, 'TEKNE · HELİKOPTER · JET', -7, 3.4, -7.98, 0, '#0d1a2a', '#bfe0ff', 4);
+    ctx.interact.push({ x: -7, z: -6.6, r: 1.8, label: 'Deniz & hava araçları kataloğu', action: () => g.ui.shop_dealer && g.ui.shop_dealer('sea') });
   },
 
   garage(ctx) {
@@ -478,6 +494,8 @@ const BUILDERS = {
     this.npc(ctx, 'cop', -6, 3, Math.PI / 2, { name: 'Güvenlik' });
     this.chandelier(ctx, 0, 1, 4, 1);
     ctx.interact.push({ x: 0, z: -1.6, r: 1.6, label: 'Banka işlemleri (yatır/çek)', action: () => g.ui.openShop('bank') });
+    // [ekonomi] kredi & vadeli masası
+    ctx.interact.push({ x: 4, z: -1.6, r: 1.4, label: 'Kredi ve vadeli hesap masası', action: () => g.ui.shop_bank && g.ui.shop_bank('loan') });
     const key = 'bank:' + ctx.building.id;
     if (g.state.robbed[key] !== g.env.day) {
       ctx.interact.push({
@@ -529,7 +547,7 @@ const BUILDERS = {
     this.sign(ctx, 'SATILIK - KİRALIK', 0, 2.3, -3.98, 0, '#5a3d0d', '#ffe9b0', 3);
     this.light(ctx, 0, 2.7, 0, 0xffeedd, 8);
     this.npc(ctx, 'shopkeeper', 0, -2.4, 0, { name: 'Emlakçı Nuri', look: { ...randomLook(ctx.rng, 'civilian'), top: 'suit' } });
-    ctx.interact.push({ x: 0, z: -0.6, r: 1.6, label: 'İşletme satın al', action: () => g.ui.openShop('estate') });
+    ctx.interact.push({ x: 0, z: -0.6, r: 1.6, label: 'Emlak: konut ve işletme ilanları', action: () => g.ui.openShop('estate') });
   },
 
   club(ctx) {
