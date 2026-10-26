@@ -156,15 +156,20 @@ export const DISTRICT_PRICE = {
 };
 
 export const CARS = {
-  kartal: { name: 'Kartal 131', price: 18000, maxSpeed: 32, accel: 9, len: 4.3, wid: 1.7, hei: 1.35, hp: 700, colors: ['#e8e0d0', '#8a1a1a', '#1d3d6e', '#5a6a4a', '#c9b48a'], style: 'sedan' },
+  kartal: { name: 'Kartal 131', price: 18000, maxSpeed: 32, accel: 9, len: 4.3, wid: 1.7, hei: 1.35, hp: 700, colors: ['#e8e0d0', '#8a1a1a', '#1d3d6e', '#5a6a4a', '#c9b48a'], style: 'sedan', body: 'wagon' },
   taksi: { name: 'Sarı Taksi', price: 26000, maxSpeed: 36, accel: 10, len: 4.5, wid: 1.8, hei: 1.4, hp: 800, colors: ['#f2c200'], style: 'taxi' },
   dolmus: { name: 'Dolmuş Minibüs', price: 34000, maxSpeed: 28, accel: 7, len: 5.2, wid: 2.0, hei: 2.2, hp: 1000, colors: ['#f2c200', '#e8e8e8'], style: 'van' },
   sedan: { name: 'Lüks Sedan', price: 85000, maxSpeed: 44, accel: 13, len: 4.9, wid: 1.9, hei: 1.4, hp: 900, colors: ['#111111', '#e8e8e8', '#6a6a6a', '#1d2440'], style: 'sedan' },
   suv: { name: 'Karabasan SUV', price: 140000, maxSpeed: 42, accel: 12, len: 4.9, wid: 2.0, hei: 1.8, hp: 1400, colors: ['#0a0a0a', '#2a2a2a', '#e8e8e8'], style: 'suv' },
   gt: { name: 'Rüzgar GT', price: 260000, maxSpeed: 60, accel: 20, len: 4.5, wid: 1.95, hei: 1.15, hp: 800, colors: ['#c81010', '#f2c200', '#1060c8', '#111111', '#e8e8e8'], style: 'sport' },
-  police: { name: 'Polis Ekip Aracı', price: 0, maxSpeed: 46, accel: 14, len: 4.7, wid: 1.85, hei: 1.45, hp: 1100, colors: ['#1d3d8e'], style: 'police' },
+  police: { name: 'Polis Ekip Aracı', price: 0, maxSpeed: 46, accel: 14, len: 4.7, wid: 1.85, hei: 1.45, hp: 1100, colors: ['#f2f2f2'], style: 'police' },
   bus: { name: 'Şehir Otobüsü', price: 0, maxSpeed: 22, accel: 5, len: 11, wid: 2.5, hei: 3.0, hp: 2500, colors: ['#d8d8d0'], style: 'bus' },
   swat: { name: 'Özel Harekat Zırhlısı', price: 0, maxSpeed: 40, accel: 11, len: 5.4, wid: 2.2, hei: 2.2, hp: 3000, colors: ['#1a1a1a'], style: 'swat' },
+  motor: { name: 'Motosiklet', price: 12000, maxSpeed: 46, accel: 15, len: 2.1, wid: 0.8, hei: 1.2, hp: 400, colors: ['#c81010', '#111111', '#1060c8', '#e8e8e8'], style: 'moto' },
+  kamyon: { name: 'Kamyon', price: 60000, maxSpeed: 24, accel: 5, len: 8, wid: 2.4, hei: 3.3, hp: 3000, mass: 4500, colors: ['#e8e8e8', '#1d5aa8', '#8a1a1a'], style: 'truck' },
+  ambulans: { name: 'Ambulans', price: 0, maxSpeed: 38, accel: 10, len: 5.8, wid: 2.1, hei: 2.6, hp: 1400, colors: ['#f4f4f4'], style: 'ambulance' },
+  cip: { name: 'Askerî Cip', price: 0, maxSpeed: 36, accel: 10, len: 4.4, wid: 1.9, hei: 1.95, hp: 1800, colors: ['#4b5432'], style: 'jeep' },
+  tank: { name: 'Leopard Tank', price: 0, maxSpeed: 14, accel: 4, len: 7.5, wid: 3.5, hei: 2.4, hp: 9000, mass: 20000, colors: ['#4b5432'], style: 'tank' },
 };
 export const DEALER_CARS = ['kartal', 'taksi', 'dolmus', 'sedan', 'suv', 'gt'];
 
