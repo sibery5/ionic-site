@@ -1,6 +1,8 @@
 // Perakende ve yaşam ekranları: Butik (kabin + sepet + kasa), Gardırop, Oto Galeri (showroom, test sürüşü,
 // taksit, deniz/hava araçları), Emlak (konut + işletme geliştirme), Banka (hesap, vadeli, kredi),
 // Çanta/Envanter, Garaj ve iş ilanları. UI sınıfına karıştırılan (mixin) metodlardır.
+import { STORY } from '../game/story_data.js';
+const STORY_N = STORY.length;
 import { svgImg } from './icons.js';
 import { $, el, esc, bar } from './dom.js';
 import { formatMoney } from '../core/util.js';
@@ -467,7 +469,7 @@ export const ShopMethods = {
         tile('pin_tulip', '#d4af37', 'Altın Lale', `${s.tulips.length}/25 bulundu`, [], s.tulips.length >= 25 ? 'on' : '');
         tile('trophy', s.stats.cats >= 10 ? '#d4af37' : '#8a7e68', 'Kedi Dostu', `${s.stats.cats || 0}/10 kedi sevildi`);
         tile('respect', '#d4af37', 'Bölgeler', `${Object.values(s.territories).filter(Boolean).length}/5 ele geçirildi`);
-        tile('trophy', s.storyIndex >= 8 ? '#d4af37' : '#8a7e68', 'Hikâye', `${Math.min(s.storyIndex, 8)}/8 görev`);
+        tile('trophy', s.storyIndex >= STORY_N ? '#d4af37' : '#8a7e68', 'Hikâye', `${Math.min(s.storyIndex, STORY_N)}/${STORY_N} görev`);
         for (const id of JOB_ORDER) { const js = s.jobStats[id]; if (js) tile(JOBS[id].icon, JOBS[id].path === 'legal' ? '#5ad1ff' : '#ff5a5a', JOBS[id].name, `${js.count} iş · ${formatMoney(js.earned)}`); }
       }
       if (grid.children.length) body.insertBefore(grid, body.children[1] || null);

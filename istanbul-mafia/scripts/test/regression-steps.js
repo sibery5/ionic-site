@@ -24,7 +24,7 @@ module.exports = async (p, out) => {
   });
   console.log('drive', JSON.stringify(d));
   await p.evaluate(() => { game.player.camYaw = game.player.vehicle.heading; game.player.camPitch = 0.22; sim(0.5); });
-  if (process.env.SHOTS) await H.shot(p, out + '-drive.png');
+  if (process.env.SHOTS === '1') await H.shot(p, out + '-drive.png');
   // kayıt / yükleme
   const sl = await p.evaluate(async () => { game.wanted.reset(); game.state.money = 12345; await game.saveGame('1'); game.state.money = 0; await game.loadGame('1'); return { money: game.state.money, mode: game.mode }; });
   console.log('saveload', JSON.stringify(sl));

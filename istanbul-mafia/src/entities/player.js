@@ -326,6 +326,9 @@ export class Player extends Actor {
   }
 
   updateCamera(dt) {
+    // görev ara sahnesi kamerası
+    const cc = this.game.cutsceneCam;
+    if (cc && cc.pos) { this.game.camera.position.copy(cc.pos); this.game.camera.lookAt(cc.look); return; }
     const g = this.game;
     const cam = g.camera;
     let fov = g.settings.fov;

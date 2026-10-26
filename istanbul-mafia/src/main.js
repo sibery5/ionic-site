@@ -268,8 +268,9 @@ class Game {
     // askerî üs: park hâlinde tank, cip ve kamyonlar
     const mb = MAPDATA.MILITARY_BASE;
     if (mb && mb.spawnPoints) for (const sp of mb.spawnPoints) {
+      // yer tutucu modeller dünya tarafından çizilir; yalnızca boş noktalara gerçek araç koy
       const t = { tank: 'tank', jeep: 'cip', truck: 'kamyon' }[sp.type];
-      if (t) this.vehicles.spawnProp(t, sp.x, sp.z, sp.heading || 0);
+      if (t && !sp.placeholder) this.vehicles.spawnProp(t, sp.x, sp.z, sp.heading || 0);
     }
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';

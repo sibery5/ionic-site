@@ -1,4 +1,6 @@
 // Arayüz: HUD, mini harita, büyük harita, menüler, dükkânlar, diyaloglar, bildirimler.
+import { STORY } from '../game/story_data.js';
+const STORY_N = STORY.length;
 import * as THREE from 'three';
 import { ICONS, PIN_FOR, PIN_COLOR, svgImg, iconBitmap } from './icons.js';
 import { formatMoney, pad2, clamp } from '../core/util.js';
@@ -549,7 +551,7 @@ export class UI {
     );
     const s = g.state;
     ensureLifeState(s);
-    $('.pause-info', p).innerHTML = `<b>${s.name}</b> · ${rankOf(s.respect).name} · ${formatMoney(s.money)} · Görev ${Math.min(s.storyIndex, 8)}/8<br><small>İş: ${rankIn(LEGAL_RANKS, s.legalRep).name} · Yeraltı: ${rankIn(CRIME_RANKS, s.crimeRep).name}</small>`;
+    $('.pause-info', p).innerHTML = `<b>${s.name}</b> · ${rankOf(s.respect).name} · ${formatMoney(s.money)} · Görev ${Math.min(s.storyIndex, STORY_N)}/${STORY_N}<br><small>İş: ${rankIn(LEGAL_RANKS, s.legalRep).name} · Yeraltı: ${rankIn(CRIME_RANKS, s.crimeRep).name}</small>`;
   }
 
   async saveLoadMenu(mode) {
@@ -564,7 +566,7 @@ export class UI {
       const info = saves[s];
       const b = el('div', 'slot' + (info ? '' : ' empty'));
       b.innerHTML = `<div class="slot-n">${s === 'auto' ? 'OTOMATİK' : 'YUVA ' + s}</div>` + (info
-        ? `<div class="slot-i"><b>${info.name || 'İsimsiz'}</b> · ${formatMoney(info.money)} · Saygınlık ${info.respect} · ${info.day}. Gün · Görev ${Math.min(info.mission, 8)}/8<small>${new Date(info.time).toLocaleString('tr-TR')}</small></div>`
+        ? `<div class="slot-i"><b>${info.name || 'İsimsiz'}</b> · ${formatMoney(info.money)} · Saygınlık ${info.respect} · ${info.day}. Gün · Görev ${Math.min(info.mission, STORY_N)}/${STORY_N}<small>${new Date(info.time).toLocaleString('tr-TR')}</small></div>`
         : '<div class="slot-i">Boş yuva</div>');
       b.addEventListener('click', async () => {
         audio.click();
@@ -704,7 +706,7 @@ export class UI {
       <div class="rank"><div>${svgImg('respect', '#d4af37', 40)}</div><div><b>${r.name}</b><div class="rbar"><i style="width:${pct}%"></i></div><small>Saygınlık ${s.respect}${next ? ' / ' + next.min + ' → ' + next.name : ''}</small></div></div>
       <div class="grid2">
         <div><span>Nakit</span><b>${formatMoney(s.money)}</b></div><div><span>Banka</span><b>${formatMoney(s.bank)}</b></div>
-        <div><span>Hikâye</span><b>${Math.min(s.storyIndex, 8)}/8 görev</b></div><div><span>Altın Lale</span><b>${s.tulips.length}/25</b></div>
+        <div><span>Hikâye</span><b>${Math.min(s.storyIndex, STORY_N)}/${STORY_N} görev</b></div><div><span>Altın Lale</span><b>${s.tulips.length}/25</b></div>
         <div><span>Leş</span><b>${st.kills}</b></div><div><span>Öldürülen polis</span><b>${st.copsKilled}</b></div>
         <div><span>Ölüm</span><b>${st.deaths}</b></div><div><span>Tutuklanma</span><b>${st.busted}</b></div>
         <div><span>Soygun</span><b>${st.robberies}</b></div><div><span>Sürüş</span><b>${(st.driveDist / 1000).toFixed(1)} km</b></div>
