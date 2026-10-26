@@ -237,8 +237,10 @@ export class Environment {
     this.sun.color.copy(sunCol);
     this.sun.intensity = lerp(0, 2.3, day) * (1 - cc * 0.6);
     this.hemi.color.copy(skyCol); this.hemi.groundColor.copy(gndCol);
-    this.hemi.intensity = lerp(0.2, 0.62, day) * (1 - cc * 0.15);
-    this.ambient.intensity = lerp(0.3, 0.08, day);
+    // gölgede kalan sokaklar (alçak güneş) ve gece için daha yüksek gök ışığı tabanı
+    const golden = clamp(1 - Math.abs(e - 0.12) / 0.25, 0, 1) * day;
+    this.hemi.intensity = (lerp(0.34, 0.66, day) + golden * 0.22) * (1 - cc * 0.15);
+    this.ambient.intensity = lerp(0.42, 0.1, day) + golden * 0.08;
     this.ambient.color.setRGB(0.22, 0.28, 0.5);
 
     // ay ve yıldızlar
@@ -262,7 +264,7 @@ export class Environment {
     this.scene.fog.near = lerp(lerp(180, 80, cc), 25, this.rainAmount);
     this.scene.fog.far = lerp(lerp(far * 1.25, far * 0.75, cc * (1 - clear * 0.5)), 420, this.rainAmount);
     // pozlama: gece hafif aç
-    this.renderer.toneMappingExposure = lerp(0.8, 1.2, this.nightFactor);
+    this.renderer.toneMappingExposure = lerp(0.85, 1.3, this.nightFactor) + golden * 0.12;
 
     // gölge kamerası oyuncuyu takip eder
     if (focus) {
