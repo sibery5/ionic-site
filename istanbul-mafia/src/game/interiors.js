@@ -13,6 +13,7 @@ const NAMES = {
   dealer: 'Oto Galeri', bank: 'Banka', hospital: 'Hastane', police: 'Emniyet Müdürlüğü', estate: 'Emlakçı', cafe: 'Çay Ocağı', club: 'Gece Kulübü',
   warehouse: 'Liman Deposu', rival: 'Köşk', garage: 'Oto Tamirci', mosque: 'Cami', mosque_small: 'Mahalle Camii', bazaar: 'Kapalıçarşı', tower: 'Galata Kulesi',
   palace: 'Dolmabahçe Sarayı', station: 'Haydarpaşa Garı',
+  armory: 'Cephanelik', // [hikâye] askeri kışla
 };
 export function placeName(type, b) { return (b && b.name) || NAMES[type] || 'Bina'; }
 
@@ -326,6 +327,9 @@ const BUILDERS = {
     this.npc(ctx, 'guard', 2.5, -4, -0.3, { name: 'Koruma', gang: 'family' });
     ctx.peaceful = true;
     ctx.interact.push({ x: 0, z: -3.4, r: 1.8, label: 'Reis Baba ile konuş', action: () => g.missions.talkToGiver('reis') });
+
+    // [hikâye kancası] konaktakiler hikâyeye göre değişir (Leyla, Cin Ali, Kenan, pusu...)
+    if (g.missions.populateKonak) g.missions.populateKonak(ctx, this, reis);
   },
 
   gun(ctx) {
@@ -597,9 +601,32 @@ const BUILDERS = {
     ctx.interact.push({ x: 0, z: -1, r: 1.8, label: 'Asansör: Seyir terasına çık (₺50)', action: () => g.goGalataTop() });
   },
 
+  // [hikâye] askeri kışla cephaneliği: silah rafları, sandıklar, nöbetçi askerler
+  armory(ctx) {
+    const g = this.game;
+    this.room(ctx, 16, 12, 4, new THREE.MeshStandardMaterial({ color: 0x4a4a44, roughness: 0.95 }), new THREE.MeshStandardMaterial({ color: 0x5a6248 }), 0x3a3a34);
+    const olive = new THREE.MeshStandardMaterial({ color: 0x4a5a30, roughness: 0.8 });
+    for (let i = 0; i < 3; i++) this.box(ctx, 1.4, 0.8, 0.9, -3 + i * 3, 0, -4.5 + (i === 1 ? -0.5 : 0), olive);
+    for (let i = 0; i < 6; i++) this.box(ctx, 1.2, 1.2, 1.2, -7 + (i % 2) * 1.3, (i > 3 ? 1.2 : 0), 1 + Math.floor(i / 2) * 1.4, olive, i < 4);
+    this.box(ctx, 0.3, 2.2, 6, 7.6, 0, -1, new THREE.MeshStandardMaterial({ color: 0x2a2a2a }));
+    ['m4', 'ak', 'sniper', 'rpg'].forEach((id, i) => { const m = buildWeaponModel(id); m.scale.setScalar(1.8); m.position.set(7.35, 1.9 - i * 0.45, -3 + i * 1.6); m.rotation.y = -Math.PI / 2; ctx.scene.add(m); });
+    this.sign(ctx, 'CEPHANELİK · YETKİSİZ GİRİLMEZ', 0, 3.1, -5.98, 0, '#3a4a28', '#ffffff', 4);
+    this.light(ctx, -3, 3.6, -2, 0xfff0d0, 10, 14);
+    this.light(ctx, 3, 3.6, 2, 0xfff0d0, 8, 12);
+    const alert = !!(g.military && g.military.alert);
+    for (const [x, z, h] of [[-5, -1, 0.8], [5, 2, -1.6], [0, 3.5, Math.PI]]) {
+      const n = this.npc(ctx, 'guard', x, z, h, { name: 'Er', look: soldierLookI(ctx.rng) });
+      n.kind = 'soldier'; n.faction = 'military'; n.static = false; n.skill = 0.3;
+      n.giveWeapon('m4', 300); n.setWeapon('m4');
+      if (alert) n.engage(g.player, 1.2);
+    }
+  },
+
   palace(ctx) { grandHall(this, ctx, 'Dolmabahçe Sarayı'); },
   station(ctx) { grandHall(this, ctx, 'Haydarpaşa Garı'); },
 };
+
+function soldierLookI(r) { return Object.assign(randomLook(r, 'gang'), { top: 'jacket', topColor: '#4a5a30', pants: 'slacks', pantsColor: '#3f4c2a', shoes: 'boots', hat: 'bere', hatColor: '#3a4a28', chain: false, glasses: false }); }
 
 function grandHall(I, ctx, name) {
   I.room(ctx, 24, 20, 8, new THREE.MeshStandardMaterial({ map: marbleTexture(), roughness: 0.15 }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#efe8d8', '#d8c8a0') }), 0xf0e8d0);

@@ -7,3 +7,7 @@
 - Use `harness.js`: `H.start(p)` begins a new game, `H.install(p)` adds page helpers
   `sim(seconds, fn)` (steps game logic at 30 Hz without rendering), `press(code)`, `hold(code,on)`, `info()`.
 - `H.shot(p, path)` renders one frame and screenshots (takes ~10 s).
+
+Hikâye/YZ testi (ilk 3 görev, 1→5 yıldız, barikat, SWAT, 3★ hayatta kalma, kışla, sokak olayı):
+
+    node scripts/test/play.js file://$PWD/app/index.html /tmp/out $PWD/scripts/test/story-steps.js
