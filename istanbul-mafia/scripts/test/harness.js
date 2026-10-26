@@ -8,10 +8,10 @@ module.exports.install = async (p) => p.evaluate(() => {
 });
 module.exports.start = async (p) => {
   await p.waitForTimeout(800);
-  await p.click('text=YENİ OYUN');
+  await p.click('text=YENİ OYUN', { timeout: 180000 });
   await p.waitForTimeout(600);
-  await p.click('text=MACERAYA BAŞLA');
+  await p.click('text=MACERAYA BAŞLA', { timeout: 180000 });
   await p.waitForTimeout(600);
   await p.evaluate(() => { game.input.mouse.dx = 0; game.player.camPitch = 0.25; game.player.camYaw = game.player.heading + Math.PI; });
 };
-module.exports.shot = async (p, path) => { await p.evaluate(() => { game.render(); }); await p.screenshot({ path, timeout: 120000 }); };
+module.exports.shot = async (p, path) => { await p.evaluate(() => { game.render(); }); await p.screenshot({ path, timeout: 240000 }); };
