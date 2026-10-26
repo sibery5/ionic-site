@@ -14,11 +14,13 @@ const slotFile = (slot) => path.join(saveDir(), `slot-${String(slot).replace(/[^
 function create() {
   Menu.setApplicationMenu(null);
   win = new BrowserWindow({
-    width: 1600, height: 900, minWidth: 1024, minHeight: 600,
+    width: 1600, height: 900, minWidth: 1024, minHeight: 600, show: false,
     fullscreen: true, backgroundColor: '#000000', title: 'İstanbul Mafya',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
+  // yükleme ekranı çizilince göster (siyah pencerede beklenip oyun tekrar açılmasın)
+  win.once('ready-to-show', () => { win.show(); win.focus(); });
   win.loadFile(path.join(__dirname, '..', 'app', 'index.html'));
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
@@ -34,5 +36,15 @@ ipcMain.on('app:fullscreen', (e, v) => { if (win) win.setFullScreen(!!v); });
 
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.whenReady().then(create);
+// Tek kopya: oyun zaten açıksa ikinci açılış mevcut pencereyi öne getirir
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
+  });
+  app.whenReady().then(create);
+}
 app.on('window-all-closed', () => app.quit());
