@@ -24,7 +24,9 @@ import { Wanted } from './game/wanted.js';
 import { Missions } from './game/missions.js';
 import { Interiors, placeName } from './game/interiors.js';
 import { WEAPONS } from './game/weapons.js';
-import { BUSINESSES, GANGS, rollPrices } from './game/economy.js';
+import { BUSINESSES, GANGS, rollPrices, lifeStateDefaults, ensureLifeState, garageCapacity } from './game/economy.js';
+import { Life } from './game/life.js';
+import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
 import { formatMoney, clamp } from './core/util.js';
@@ -32,6 +34,7 @@ import { formatMoney, clamp } from './core/util.js';
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
   volMaster: 0.8, volSfx: 0.9, volMusic: 0.5, showFps: false, fullscreen: true,
+  ...SETTINGS_DEFAULTS,
 };
 
 class Game {
@@ -94,6 +97,7 @@ class Game {
     this.wanted = new Wanted(this);
     this.interiors = new Interiors(this);
     this.missions = new Missions(this);
+    this.life = new Life(this);
     await step(0.9, 'Martılar ve sokak kedileri salınıyor...');
     this.animals = new Animals(this);
     this.audio = audio;
@@ -209,6 +213,7 @@ class Game {
       owned: { [`top:${look.top}`]: [look.topColor], [`pants:${look.pants}`]: [look.pantsColor], [`shoes:${look.shoes}`]: [look.shoesColor] },
       goods: {}, goodsCost: {}, capacity: 20, businesses: [], territories: {}, gangRel: {}, gangKills: {}, ownedCars: [], carUpgrade: false,
       tulips: [], looted: {}, robbed: {}, unlockedGoldJacket: false, prices: rollPrices(1),
+      ...lifeStateDefaults(),
       stats: { kills: 0, deaths: 0, busted: 0, copsKilled: 0, robberies: 0, driveDist: 0, runTime: 0, playTime: 0, strength: 0, stamina: 0 },
     };
   }
@@ -252,7 +257,8 @@ class Game {
     this.env.time = state.time; this.env.day = state.day;
     this.pickups.placeTulips(state.tulips);
     // sahip olunan araçlar
-    state.ownedCars.forEach((c, i) => { if (i < 6) this.spawnOwnedCar(i, false); });
+    const cap = garageCapacity(state);
+    state.ownedCars.forEach((c, i) => { if (i < cap) this.spawnOwnedCar(i, false); });
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
     this.ui.showHUD(true);
@@ -283,6 +289,7 @@ class Game {
     const s = { ...this.freshState(r.data.name, r.data.look), ...r.data };
     s.stats = { ...this.freshState('', r.data.look).stats, ...(r.data.stats || {}) };
     if (!s.prices) s.prices = rollPrices(s.day);
+    ensureLifeState(s);
     this.startWorld(s);
     const p = this.player;
     if (s.pos) { p.pos.set(s.pos.x, s.pos.y || 0, s.pos.z); p.heading = s.heading || 0; p.camYaw = p.heading; }
@@ -341,6 +348,7 @@ class Game {
     if (this.env) this.env.farBase = s.drawDistance;
     if (this.bloom) this.bloom.enabled = s.bloom && s.quality !== 'low';
     if (window.desktop && live !== undefined) window.desktop.setFullscreen(!!s.fullscreen);
+    if (this.player) applyExtendedSettings(this);
   }
 
   onResize() {
@@ -688,7 +696,7 @@ class Game {
     // yakalanırsa kaçak mallar
     if (this.wanted.level > 0 && goodsCount(s) > 0 && !this._goodsWarn) { this._goodsWarn = true; this.ui.notify('Dikkat: Üzerinde kaçak mal var. Yakalanırsan el konur!', 'warn'); }
     if (this.wanted.level === 0) this._goodsWarn = false;
-    // yüksek saygınlık: rütbe atlama bildirimi
+    this.life.update(dt);
     this.ui.update(dt);
     // iç mekânda ses
     if (!p.vehicle) audio.setEngine(false);

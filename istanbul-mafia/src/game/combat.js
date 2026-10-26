@@ -302,7 +302,9 @@ export class Combat {
     } else if (ah) {
       const target = ah.actor;
       let dmg = def.dmg;
-      if (target.isPlayer && !attacker.isPlayer) dmg *= NPC_TO_PLAYER_DMG;
+      // zorluk ayarı: alınan / verilen hasar çarpanı
+      if (target.isPlayer && !attacker.isPlayer) dmg *= NPC_TO_PLAYER_DMG * (g.settings.damageTaken || 1);
+      else if (attacker.isPlayer) dmg *= g.settings.damageDealt || 1;
       target.takeDamage(dmg, attacker, 'bullet', ah.head);
       this.fleshFx(target, hp, dir, ah.head ? 1.6 : 1, loud);
       if (attacker.isPlayer) this.playerHit();
