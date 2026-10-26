@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { addPostFX } from './world/postfx.js';
 import { Input } from './core/input.js';
 import { audio } from './core/audio.js';
 import { Particles } from './core/particles.js';
@@ -116,17 +116,13 @@ class Game {
     this.composer.addPass(this.renderPass);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.6, 0.88);
     this.composer.addPass(this.bloom);
-    // renk düzenleme: doygunluk (ölüm ekranı), vinyet, hafif sıcak ton
-    this.grade = new ShaderPass({
-      uniforms: { tDiffuse: { value: null }, uSat: { value: 1 }, uVig: { value: 0.35 } },
-      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform sampler2D tDiffuse; uniform float uSat; uniform float uVig; varying vec2 vUv;
-        void main(){ vec4 c = texture2D(tDiffuse, vUv); float l = dot(c.rgb, vec3(0.299,0.587,0.114));
-        c.rgb = mix(vec3(l), c.rgb, uSat); float d = distance(vUv, vec2(0.5)); c.rgb *= 1.0 - uVig * smoothstep(0.35, 0.85, d);
-        c.rgb *= vec3(1.03, 1.0, 0.96); gl_FragColor = c; }`,
-    });
-    this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
+    // renk düzenleme + (yüksek kalitede) GTAO ortam kapatma
+    this.postfx = addPostFX(this.composer, this.renderer, this.scene, this.camera, { quality: q });
+    this.grade = this.postfx.grade;
+    this.deathSat = 1;
+    if (this.city.updateCamera) this.city.updateCamera(this.camera);
+    this.env.onLightning = (x, z, dist) => { setTimeout(() => audio.explosion && audio.explosion(x, z, 0.6), Math.min(4000, (dist || 300) * 3)); };
     this.applySettings();
     window.addEventListener('resize', () => this.onResize());
     // ilk derleme
@@ -269,6 +265,12 @@ class Game {
     const cap = garageCapacity(state);
     state.ownedCars.forEach((c, i) => { if (i < cap) this.spawnOwnedCar(i, false); });
     (state.luxury || []).forEach((e, i) => this.spawnLuxury(e, i, true));
+    // askerî üs: park hâlinde tank, cip ve kamyonlar
+    const mb = MAPDATA.MILITARY_BASE;
+    if (mb && mb.spawnPoints) for (const sp of mb.spawnPoints) {
+      const t = { tank: 'tank', jeep: 'cip', truck: 'kamyon' }[sp.type];
+      if (t) this.vehicles.spawnProp(t, sp.x, sp.z, sp.heading || 0);
+    }
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
     this.ui.showHUD(true);
@@ -364,6 +366,7 @@ class Game {
   onResize() {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
+    this.postfx.setSize(innerWidth, innerHeight);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
     this.creatorCam.aspect = innerWidth / innerHeight; this.creatorCam.updateProjectionMatrix();
   }
@@ -393,6 +396,7 @@ class Game {
   setActiveScene(s) {
     this.active = s;
     this.renderPass.scene = s;
+    if (this.postfx.ao) this.postfx.ao.scene = s;
     this.particles.setScene(s);
     this.combat.attach(s);
   }
@@ -660,7 +664,9 @@ class Game {
   render() {
     if (this.mode === 'creator') return;
     const target = document.body.classList.contains('desat') ? 0.08 : 1;
-    this.grade.uniforms.uSat.value += (target - this.grade.uniforms.uSat.value) * Math.min(1, this.dt * 3 || 0.1);
+    this.deathSat += (target - this.deathSat) * Math.min(1, this.dt * 3 || 0.1);
+    this.postfx.update(this.env, this.dt);
+    this.grade.uniforms.uSat.value *= this.deathSat;
     this.composer.render();
   }
 
