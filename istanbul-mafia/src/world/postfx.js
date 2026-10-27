@@ -43,6 +43,19 @@ export function addPostFX(composer, renderer, scene, camera, { quality = 'medium
   // Parlama (bloom) geçişi main.js'te eklenir; eşiğini pozlamaya bağla: yalnız gerçekten parlak ışıklar
   // (güneş diski, lambalar, neon, şimşek) parlasın, gün ışığındaki beyaz duvar/gökyüzü değil.
   const bloom = composer.passes.find((p) => p && 'threshold' in p && 'strength' in p && 'radius' in p) || null;
+  // HDR temizleme: parlama bulanıklığı tek bir NaN/Inf pikseli (yarı-float taşması) tüm ekrana yayıp
+  // görüntüyü karartabilir; parlamadan önce NaN/Inf'i sıfırla ve aşırı değerleri kırp.
+  const clean = new ShaderPass({
+    uniforms: { tDiffuse: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+      void main(){ vec4 c = texture2D(tDiffuse, vUv);
+        if (any(isnan(c.rgb)) || any(isinf(c.rgb))) c.rgb = vec3(0.0);
+        gl_FragColor = vec4(min(c.rgb, vec3(60.0)), c.a); }`,
+  });
+  const bi = bloom ? composer.passes.indexOf(bloom) : 1;
+  composer.insertPass(clean, Math.max(1, bi));
+  passes.push(clean);
   const grade = new ShaderPass(GradeShader);
   // OutputPass'tan önce (son geçiş olarak değil) ekle
   composer.insertPass(grade, Math.max(1, composer.passes.length - 1));
