@@ -32,7 +32,7 @@ import { WEAPONS } from './game/weapons.js';
 import { BUSINESSES, GANGS, rollPrices, lifeStateDefaults, ensureLifeState, garageCapacity } from './game/economy.js';
 import { Life } from './game/life.js';
 import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
-import { writeSave, readSave, loadSettings, storeSettings } from './game/save.js';
+import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
 import { formatMoney, clamp } from './core/util.js';
 
@@ -41,6 +41,63 @@ const DEFAULT_SETTINGS = {
   volMaster: 0.8, volSfx: 0.9, volMusic: 0.5, showFps: false, fullscreen: true,
   ...SETTINGS_DEFAULTS,
 };
+
+// Performans kademeleri: hazır ayar (yoksa grafik kalitesi) -> gerçek maliyet düğmeleri.
+// pr: en yüksek piksel oranı · minScale: dinamik çözünürlüğün inebileceği alt sınır
+// shadowEvery: gölge haritası kaç karede bir yenilenir · bloomRes: ışıma çözünürlük çarpanı · ao: GTAO
+const TIERS = {
+  low: { pr: 0.85, minScale: 0.6, shadowEvery: 3, bloomRes: 0.5, ao: false },
+  medium: { pr: 1, minScale: 0.6, shadowEvery: 2, bloomRes: 0.5, ao: false },
+  high: { pr: 1.25, minScale: 0.65, shadowEvery: 1, bloomRes: 0.75, ao: true },
+  ultra: { pr: 2, minScale: 0.7, shadowEvery: 1, bloomRes: 1, ao: true },
+};
+const MENU_SCALE = 0.7; // ana menü arka plan uçuşu: düşük çözünürlük
+const MENU_FPS = 30; // ana menü arka planı FPS sınırı
+
+// Uyarlamalı performans: kare süresine bakarak çözünürlüğü 0.6–1.0 arasında ayarlar (hedef 60 FPS).
+// Diğer sistemler okuyabilir: game.perf.scale, game.perf.densityScale (yoğunluk düşürme önerisi 0.6–1)
+class PerfGovernor {
+  constructor(game) {
+    this.g = game;
+    this.scale = 1; this.densityScale = 1;
+    this.interval = 16.7; this.work = 8; // ms, üstel ortalama
+    this.cool = 2; this.slowT = 0; this.fastT = 0; this.aoCut = false; this.hold = 0;
+  }
+  tier() { return this.g.tier(); }
+  sample(intervalMs, workMs) {
+    if (intervalMs > 250) return; // sekme değişimi / yükleme takılması: yok say
+    this.interval += (intervalMs - this.interval) * 0.08;
+    this.work += (workMs - this.work) * 0.08;
+  }
+  update(dt) {
+    const g = this.g, s = g.settings;
+    if (g.mode !== 'playing') return;
+    const maxS = clamp(s.renderScale || 1, 0.5, 1);
+    if (!s.dynamicRes) { if (this.scale !== maxS) { this.scale = maxS; g.applyPixelRatio(); } this.densityScale = 1; return; }
+    const target = 1000 / (s.fpsCap > 0 ? Math.min(60, s.fpsCap) : 60);
+    const minS = Math.min(maxS, this.tier().minScale);
+    const slow = this.interval > target * 1.12;
+    const fast = this.interval < target * 1.05 && this.work < target * 0.55;
+    this.slowT = slow ? this.slowT + dt : 0;
+    this.fastT = fast ? this.fastT + dt : 0;
+    this.cool -= dt;
+    if (this.cool > 0) return;
+    if (slow && this.slowT > 0.5) {
+      if (this.scale > minS + 0.001) { this.scale = Math.max(minS, this.scale - 0.1); this.cool = 1.2; this.hold = 8; g.applyPixelRatio(); }
+      else if (this.slowT > 3) {
+        // en düşük çözünürlükte hâlâ yavaş: AO kapat, kalabalık yoğunluğunu azalt
+        if (g.postfx && g.postfx.ao && g.postfx.ao.enabled) { g.postfx.ao.enabled = false; this.aoCut = true; }
+        this.densityScale = Math.max(0.6, this.densityScale - 0.2);
+        this.cool = 4; this.slowT = 0;
+      }
+    } else if (this.fastT > 2 + this.hold) { // düşürmeden sonra daha uzun süre hızlı kalmalı (salınım önleme)
+      this.hold = Math.max(0, this.hold - 2);
+      if (this.densityScale < 1) this.densityScale = Math.min(1, this.densityScale + 0.2);
+      else if (this.scale < maxS - 0.001) { this.scale = Math.min(maxS, this.scale + 0.05); g.applyPixelRatio(); }
+      this.cool = 2.5; this.fastT = 0;
+    }
+  }
+}
 
 class Game {
   constructor() {
@@ -52,18 +109,52 @@ class Game {
     this.waypoint = null;
     this.worldInteract = [];
     this.state = null;
+    this.perf = new PerfGovernor(this);
+    this.needsFrame = true; // duraklatmada tek kare çizim isteği
+    this.toggleT = 0; this._lockPending = 0; this._desat = false;
+    this.autoT = 0; this.pendingAutosave = null; this.lastSaveAt = 0;
+    this._loop = () => this.loop();
+    this._spin = (o) => { if (o.userData.spin) o.rotation.y += this.dt * 2; };
+  }
+
+  // etkin performans kademesi
+  tier() {
+    const s = this.settings;
+    return TIERS[s.preset] || TIERS[s.quality] || TIERS.medium;
+  }
+  // NPC / trafik yöneticileri için: ayar yoğunluğu × uyarlamalı çarpan
+  density(kind) {
+    const s = this.settings;
+    return (kind === 'traffic' ? s.trafficDensity : s.npcDensity) * this.perf.densityScale;
+  }
+  // piksel oranı = cihaz (kademe sınırlı) × dinamik ölçek × (menüde) düşük ölçek
+  applyPixelRatio() {
+    if (!this.renderer) return;
+    const base = Math.min(window.devicePixelRatio || 1, this.tier().pr);
+    const k = this.mode === 'menu' ? MENU_SCALE : this.perf.scale;
+    const pr = Math.max(0.35, Math.round(base * k * 100) / 100);
+    if (Math.abs(this.renderer.getPixelRatio() - pr) < 0.005) return;
+    this.renderer.setPixelRatio(pr);
+    if (this.composer) this.composer.setPixelRatio(pr);
+    this.needsFrame = true;
   }
 
   async init() {
     const canvas = document.getElementById('game');
+    this.setupQuitSave(); // yükleme sırasında kapatılırsa da çıkış akışı yanıt versin
     const q = this.settings.quality;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, q === 'high' ? 2 : 1));
+    const gpu = this.settings.gpu === 'low' ? 'low-power' : this.settings.gpu === 'default' ? 'default' : 'high-performance';
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low' && this.settings.antialias !== false, powerPreference: gpu, stencil: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.tier().pr));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = this.settings.shadows && q !== 'low';
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // gölge haritası elle yenilenir (render() içinde kademe aralığıyla)
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.shadowFrame = 0;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(this.settings.fov, innerWidth / innerHeight, 0.15, 5000);
     this.active = this.scene;
@@ -115,6 +206,9 @@ class Game {
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.6, 0.88);
+    // ışıma kademeye göre düşük çözünürlükte (orta/düşük: yarım) — sonuç tam çözünürlüğe karıştırılır
+    const bloomSetSize = this.bloom.setSize.bind(this.bloom);
+    this.bloom.setSize = (w, h) => { const k = this.tier().bloomRes; bloomSetSize(Math.max(64, Math.round(w * k)), Math.max(64, Math.round(h * k))); };
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     // renk düzenleme + (yüksek kalitede) GTAO ortam kapatma
@@ -123,6 +217,7 @@ class Game {
     this.deathSat = 1;
     if (this.city.updateCamera) this.city.updateCamera(this.camera);
     this.env.onLightning = (x, z, dist) => { setTimeout(() => audio.explosion && audio.explosion(x, z, 0.6), Math.min(4000, (dist || 300) * 3)); };
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.applySettings();
     window.addEventListener('resize', () => this.onResize());
     // ilk derleme
@@ -132,6 +227,7 @@ class Game {
     this.renderer.compile(this.scene, this.camera);
     this.ui.hideLoading();
     this.mode = 'menu';
+    this.applyPixelRatio();
     this.player = new Player(this, defaultLook());
     this.player.model.root.visible = false;
     this.setupCreatorScene();
@@ -141,13 +237,44 @@ class Game {
     window.addEventListener('keydown', startAudio, { once: true });
     window.addEventListener('keydown', (e) => this.onKey(e));
     document.addEventListener('pointerlockchange', () => {
-      if (!document.pointerLockElement && this.mode === 'playing' && !this.ui.blocking() && !this.suppressPause) this.pause();
+      if (document.pointerLockElement === canvas) { this.ui.showClickToResume(false); return; }
+      // kilit kalktı (ESC / Alt+Tab): oyundaysa duraklat — devam ettikten hemen sonraki geçişleri yok say
+      if (this.mode === 'playing' && !this.ui.blocking() && !this.suppressPause && performance.now() - this.toggleT > 400) this.pause();
     });
-    canvas.addEventListener('click', () => { if (this.mode === 'playing' && !this.ui.blocking()) this.input.lock(); });
+    document.addEventListener('pointerlockerror', () => { this._lockPending = false; if (this.mode === 'playing' && !this.ui.blocking()) this.ui.showClickToResume(true); });
+    canvas.addEventListener('click', () => { if (this.mode === 'playing' && !this.ui.blocking()) this.requestLock(); });
     this.last = performance.now();
+    this.lastFrameT = this.last; this.lastMenuRender = 0;
     this.fpsAcc = 0; this.fpsN = 0;
     window.__ready = true;
-    requestAnimationFrame(() => this.loop());
+    requestAnimationFrame(this._loop);
+  }
+
+  // ---------------- akıllı kayıt: çıkışta / sekme gizlenince ----------------
+  setupQuitSave() {
+    const d = window.desktop;
+    if (d && d.onQuitRequest) {
+      // Electron: pencere kapatma / Alt+F4 / before-quit -> önce kaydet, sonra izin ver
+      d.onQuitRequest(async () => {
+        try { await this.saveOnQuit(); } catch (e) { console.error(e); }
+        d.quitReady();
+      });
+    } else {
+      window.addEventListener('beforeunload', () => { this.saveOnQuit(true); });
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && this.inSession() && performance.now() - this.lastSaveAt > 30000) this.saveGame('auto', { silent: true });
+    });
+  }
+  inSession() { return !!this.state && !!this.player && (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'dead'); }
+  // çıkışta her durumda otomatik yuvaya kaydet (sync: tarayıcı beforeunload için localStorage yolu senkron çalışır)
+  saveOnQuit(sync) {
+    if (!this.inSession()) return Promise.resolve(false);
+    const data = this.serialize();
+    this.lastSaveAt = performance.now();
+    const pr = writeSave('auto', data);
+    if (!sync) this.ui.saveIndicator();
+    return pr;
   }
 
   setupGalataTop() {
@@ -189,26 +316,94 @@ class Game {
     s.add(new THREE.HemisphereLight(0xfff0d8, 0x201810, 0.8));
     const key = new THREE.SpotLight(0xffe0b0, 40, 20, 0.6, 0.5); key.position.set(2, 4, 3); s.add(key); key.target.position.set(0, 1, 0); s.add(key.target);
     const rim = new THREE.PointLight(0xb3131b, 20, 10); rim.position.set(-2, 2, -2); s.add(rim);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(1.6, 40), new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.4, metalness: 0.3 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(1.0, 48), new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.4, metalness: 0.3 }));
     floor.rotation.x = -Math.PI / 2; s.add(floor);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.62, 60), new THREE.MeshBasicMaterial({ color: 0xd4af37 }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.97, 1.0, 64), new THREE.MeshBasicMaterial({ color: 0xd4af37 }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.01; s.add(ring);
+    const fill = new THREE.DirectionalLight(0x9fb4ff, 0.5); fill.position.set(-3, 2, 4); s.add(fill);
+    s.fog = new THREE.Fog(0x0c0a08, 6, 14);
     this.creatorScene = s;
-    this.creatorCam = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 50);
-    this.creatorCam.position.set(0.35, 1.25, 5.4); this.creatorCam.lookAt(0.35, 0.95, 0);
-    let drag = null;
-    window.addEventListener('pointerdown', (e) => { if (this.mode === 'creator' && e.target.tagName === 'CANVAS') drag = e.clientX; });
-    window.addEventListener('pointermove', (e) => { if (drag !== null && this.creatorModel) { this.creatorModel.root.rotation.y += (e.clientX - drag) * 0.01; drag = e.clientX; } });
-    window.addEventListener('pointerup', () => { drag = null; });
+    this.creatorCam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 50);
+    this.creatorCamTarget = new THREE.Vector3();
+    // döndürme / yakınlaştırma durumu (sönümlü). yaw: model dönüşü; dist: kamera uzaklığı; focus: 0 gövde .. 1 yüz
+    this.cc = { yaw: 0.35, yawT: 0.35, vel: 0, dist: 5.2, distT: 5.2, focus: 0, focusT: 0, drag: false, lastX: 0, lastT: 0, idle: 0 };
+    this.frameCreatorCam();
+    const cc = this.cc;
+    const onStage = (e) => this.mode === 'creator' && e.target && (e.target.tagName === 'CANVAS' || (e.target.closest && e.target.closest('.creator-ui') && !e.target.closest('.cr-panel, .cr-view')));
+    window.addEventListener('pointerdown', (e) => {
+      if (!onStage(e) || e.button !== 0) return;
+      cc.drag = true; cc.lastX = e.clientX; cc.lastT = performance.now(); cc.vel = 0; cc.idle = 0;
+      document.body.classList.add('grabbing');
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!cc.drag) return;
+      const now = performance.now();
+      const d = (e.clientX - cc.lastX) * 0.0085;
+      cc.yawT += d;
+      const ddt = Math.max(1, now - cc.lastT) / 1000;
+      cc.vel = cc.vel * 0.5 + (d / ddt) * 0.5;
+      cc.lastX = e.clientX; cc.lastT = now; cc.idle = 0;
+    });
+    const up = () => {
+      if (!cc.drag) return;
+      cc.drag = false; document.body.classList.remove('grabbing');
+      if (performance.now() - cc.lastT > 80) cc.vel = 0; // durup bırakıldıysa savrulma yok
+    };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('wheel', (e) => {
+      if (!onStage(e)) return;
+      cc.distT = clamp(cc.distT * (e.deltaY > 0 ? 1.12 : 0.89), 2.0, 6.5); cc.idle = 0;
+    }, { passive: true });
+  }
+  // kamera çerçevesi: karakter ekranın sol-orta bölgesinde (sağdaki panel için yer bırakılır)
+  frameCreatorCam() {
+    const c = this.creatorCam, cc = this.cc;
+    const zoomK = clamp((5.2 - cc.dist) / 3.2, 0, 1); // yaklaştıkça yüze odaklan
+    const f = Math.max(cc.focus, zoomK);
+    const fy = 0.95 + f * 0.62;
+    c.position.set(0, 1.2 + f * 0.42, cc.dist);
+    this.creatorCamTarget.set(0, fy, 0);
+    c.lookAt(this.creatorCamTarget);
+    const W = innerWidth, H = innerHeight;
+    if (W > 900) c.setViewOffset(W, H, W * 0.14, 0, W, H); else c.clearViewOffset();
+    c.updateProjectionMatrix();
+  }
+  updateCreator(dt) {
+    const cc = this.cc, m = this.creatorModel;
+    if (!cc.drag) {
+      if (Math.abs(cc.vel) > 0.01) { cc.yawT += cc.vel * dt; cc.vel *= Math.exp(-dt * 4); } else cc.vel = 0;
+      cc.idle += dt;
+      if (cc.idle > 4) cc.yawT += dt * 0.25 * Math.min(1, (cc.idle - 4) / 2); // boşta yavaş tur
+    }
+    const k = 1 - Math.exp(-dt * 12);
+    cc.yaw += (cc.yawT - cc.yaw) * k;
+    cc.dist += (cc.distT - cc.dist) * (1 - Math.exp(-dt * 8));
+    cc.focus += (cc.focusT - cc.focus) * (1 - Math.exp(-dt * 6));
+    if (m) { m.root.rotation.y = cc.yaw; m.animate(dt, { speed: 0 }); }
+    this.frameCreatorCam();
+  }
+  // UI'dan: görünümü sıfırla / kategoriye göre odak (body|face)
+  creatorView(cmd) {
+    const cc = this.cc;
+    if (cmd === 'reset') { cc.yawT = cc.yaw + ((0.35 - cc.yaw) % (Math.PI * 2)); cc.distT = 5.2; cc.focusT = 0; cc.vel = 0; cc.idle = 0; }
+    else if (cmd === 'face') { cc.focusT = 1; cc.distT = Math.min(cc.distT, 3.0); cc.idle = 0; cc.yawT = Math.round(cc.yawT / (Math.PI * 2)) * Math.PI * 2 + 0.2; }
+    else if (cmd === 'body') { cc.focusT = 0; cc.distT = Math.max(cc.distT, 5.2); }
+    else if (cmd === 'left') { cc.yawT -= 0.6; cc.idle = 0; }
+    else if (cmd === 'right') { cc.yawT += 0.6; cc.idle = 0; }
+    else if (cmd === 'in') { cc.distT = clamp(cc.distT * 0.85, 2.0, 6.5); cc.idle = 0; }
+    else if (cmd === 'out') { cc.distT = clamp(cc.distT * 1.15, 2.0, 6.5); cc.idle = 0; }
   }
   enterCreator(look) {
     this.mode = 'creator';
     if (this.creatorModel) this.creatorScene.remove(this.creatorModel.root);
     this.creatorModel = new CharacterModel(look);
-    this.creatorModel.root.position.set(-0.9, 0, 0);
+    this.creatorModel.root.position.set(0, 0, 0);
     this.creatorScene.add(this.creatorModel.root);
+    Object.assign(this.cc, { yaw: 0.35, yawT: 0.35, vel: 0, dist: 5.2, distT: 5.2, focus: 0, focusT: 0, idle: 0 });
+    this.applyPixelRatio();
   }
-  exitCreator() { this.mode = 'menu'; }
+  exitCreator() { this.mode = 'menu'; this.applyPixelRatio(); }
 
   // ---------------- oyun durumu ----------------
   freshState(name, look) {
@@ -274,11 +469,13 @@ class Game {
     }
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
+    this.applyPixelRatio();
     this.ui.showHUD(true);
-    this.input.lock();
+    this.requestLock();
     audio.stopMusic();
     this.setGps(null);
     this.waypoint = null;
+    this.autoT = 0; this.pendingAutosave = null; this._wasSafe = true; // doğuşta güvenli ev girişi sayılmasın
   }
 
   serialize() {
@@ -294,9 +491,42 @@ class Game {
     s.heading = p.heading;
     return JSON.parse(JSON.stringify(s));
   }
-  async saveGame(slot) { await writeSave(slot, this.serialize()); }
-  autosave() { if (this.wanted.level === 0) this.saveGame('auto'); }
+  async saveGame(slot, opts = {}) {
+    const ok = await writeSave(slot, this.serialize());
+    this.lastSaveAt = performance.now();
+    if (slot === 'auto') this.autoT = 0;
+    if (!opts.silentUi) this.ui.saveIndicator(ok === false);
+    return ok;
+  }
+  // Otomatik kayıt isteği (görev bitişi, güvenli ev, zamanlayıcı). Uygun değilse (aranıyor, görevde,
+  // ölü) bekletilir ve ilk uygun anda alınır.
+  autosave(reason = 'mission') { this.pendingAutosave = reason; this.tryAutosave(); }
+  canAutosave() {
+    const p = this.player;
+    if (this.mode !== 'playing' || !this.state || !p || p.dead) return false;
+    if (this.wanted && this.wanted.level > 0) return false;
+    if (this.pendingAutosave === 'timer' && ((this.missions && this.missions.active) || (this.career && this.career.job))) return false;
+    if (this.ui.blocking() && this.pendingAutosave === 'timer') return false;
+    return true;
+  }
+  tryAutosave() {
+    if (!this.pendingAutosave || !this.canAutosave()) return false;
+    this.pendingAutosave = null;
+    this.saveGame('auto');
+    return true;
+  }
+  autosaveTick(dt) {
+    const p = this.player;
+    this.autoT += dt;
+    const ii = p.inInterior;
+    const safe = !!(ii && (ii.type === 'safehouse' || ii.type === 'konak' || (ii.building && ii.building.ownedProp)));
+    if (safe && !this._wasSafe) this.pendingAutosave = 'safehouse';
+    this._wasSafe = safe;
+    if (this.autoT >= 120 && !this.pendingAutosave) this.pendingAutosave = 'timer';
+    if (this.pendingAutosave) { this._autoTry = (this._autoTry || 0) - dt; if (this._autoTry <= 0) { this._autoTry = 1; this.tryAutosave(); } }
+  }
   async loadGame(slot) {
+    if (slot === 'latest') { const l = await latestSave(); if (!l) { this.ui.notify('Kayıt bulunamadı', 'warn'); return; } slot = l.slot; }
     const r = await readSave(slot);
     if (!r) { this.ui.notify('Kayıt bulunamadı', 'warn'); return; }
     const s = { ...this.freshState(r.data.name, r.data.look), ...r.data };
@@ -316,7 +546,7 @@ class Game {
     if (this.env.time >= 24) { this.env.time -= 24; this.env.day++; }
     if (this.env.day !== before) this.onNewDay(this.env.day);
     this.player.hp = this.player.maxHp;
-    this.saveGame('auto');
+    this.saveGame('auto', { silentUi: true });
     this.saveGame('1');
     setTimeout(() => { this.ui.overlayEl.className = 'overlay hidden'; }, 2200);
   }
@@ -325,20 +555,48 @@ class Game {
   pause() {
     if (this.mode !== 'playing') return;
     this.mode = 'paused';
+    this.toggleT = performance.now();
+    this.ui.showClickToResume(false);
     this.input.unlock();
     audio.setEngine(false); audio.setSiren(0);
+    // simülasyon donar; sahne bir kez çizilip önbelleğe alınır (döngü 'paused' modunda yalnızca needsFrame ile çizer)
+    this.needsFrame = true;
+    this.render();
+    this.needsFrame = false;
     this.ui.pauseMenu();
   }
+  // Devam: fare kilidi reddedilse bile simülasyon sürer; kilit için "tıkla" ipucu gösterilir
   resume() {
     if (this.mode !== 'paused') return;
     this.mode = 'playing';
-    this.input.lock();
+    this.toggleT = performance.now();
     this.last = performance.now();
+    this.input.enabled = true;
+    this.input.keys.clear();
+    this.requestLock();
+  }
+  // İşaretçi kilidi iste (tekrarlanan istekleri birleştir; ret -> "Devam etmek için tıkla")
+  requestLock() {
+    const c = this.renderer && this.renderer.domElement;
+    if (!c) return;
+    if (document.pointerLockElement === c) { this.ui.showClickToResume(false); return; }
+    if (this._lockPending && performance.now() - this._lockPending < 1500) return;
+    this._lockPending = performance.now();
+    const done = (ok) => {
+      this._lockPending = 0;
+      const locked = ok && document.pointerLockElement === c;
+      this.ui.showClickToResume(!locked && this.mode === 'playing' && !this.ui.blocking());
+    };
+    let pr = null;
+    try { pr = c.requestPointerLock(); } catch (e) { pr = null; }
+    if (pr && pr.then) pr.then(() => done(true), () => done(false));
+    else setTimeout(() => done(document.pointerLockElement === c), 350);
   }
   toMainMenu() {
     this.ui.closeAll();
     if (this.player.inInterior) this.interiors.exit();
     this.mode = 'menu';
+    this.applyPixelRatio();
     this.ui.showHUD(false);
     this.vehicles.clear(); this.npcs.clear();
     this.missions.cleanup();
@@ -347,9 +605,11 @@ class Game {
     audio.startMusic('menu');
     this.ui.mainMenu();
   }
-  quit() {
-    if (window.desktop) window.desktop.quit();
-    else { this.ui.notify('Tarayıcı sürümünde sekmeyi kapatarak çıkabilirsin.', 'info'); }
+  async quit() {
+    // "Masaüstüne çık": önce otomatik kayıt, sonra çık
+    try { await this.saveOnQuit(); } catch (e) { console.error(e); }
+    if (window.desktop) (window.desktop.quitReady || window.desktop.quit)();
+    else { this.ui.notify('İlerlemen kaydedildi. Tarayıcı sürümünde sekmeyi kapatarak çıkabilirsin.', 'info'); }
   }
 
   applySettings(live) {
@@ -360,25 +620,34 @@ class Game {
     if (this.camera) { this.camera.far = s.drawDistance + 3000; this.camera.updateProjectionMatrix(); }
     if (this.env) this.env.farBase = s.drawDistance;
     if (this.bloom) this.bloom.enabled = s.bloom && s.quality !== 'low';
+    if (this.postfx && this.postfx.ao) this.postfx.ao.enabled = this.tier().ao && s.ao !== false && !this.perf.aoCut;
+    if (this.composer && this._bloomTier !== this.tier().bloomRes) { this._bloomTier = this.tier().bloomRes; this.composer.setSize(innerWidth, innerHeight); }
+    if (!s.dynamicRes) this.perf.scale = clamp(s.renderScale || 1, 0.5, 1);
+    else this.perf.scale = Math.min(this.perf.scale, clamp(s.renderScale || 1, 0.5, 1));
+    this.applyPixelRatio();
     if (window.desktop && live !== undefined) window.desktop.setFullscreen(!!s.fullscreen);
+    if (window.desktop && window.desktop.setPrefs) window.desktop.setPrefs({ vsync: s.vsync !== false, gpu: s.gpu || 'high' });
     if (this.player) applyExtendedSettings(this);
+    this.needsFrame = true;
   }
 
   onResize() {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
-    this.postfx.setSize(innerWidth, innerHeight);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
-    this.creatorCam.aspect = innerWidth / innerHeight; this.creatorCam.updateProjectionMatrix();
+    this.creatorCam.aspect = innerWidth / innerHeight; this.frameCreatorCam();
+    this.needsFrame = true;
   }
 
   onKey(e) {
     if (e.code === 'Escape') {
       if (this.mode === 'playing') {
         if (this.ui.blocking()) { if (this.ui.topClosable()) this.ui.closeModal(); }
-        else this.pause();
+        else if (performance.now() - this.toggleT > 300) this.pause();
       } else if (this.mode === 'paused') {
-        if (this.ui.modalStack.length > 1) this.ui.closeModal(); else this.ui.closeModal();
+        // ESC hem kilidi bırakıp (pointerlockchange -> pause) hem de buraya ulaşabilir: çift geçişi engelle
+        if (performance.now() - this.toggleT < 300) return;
+        this.ui.closeModal();
       } else if (this.mode === 'menu' && this.ui.modalStack.length > 1) this.ui.closeModal();
       return;
     }
@@ -596,7 +865,7 @@ class Game {
     p.camInit = false;
     this.env.time += 4;
     this.mode = 'playing';
-    this.input.lock();
+    this.requestLock();
     this.ui.notify(type === 'hospital' ? 'Hastaneden taburcu oldun' : 'Karakoldan serbest bırakıldın', 'info');
   }
 
@@ -636,8 +905,15 @@ class Game {
 
   // ---------------- döngü ----------------
   loop() {
-    requestAnimationFrame(() => this.loop());
+    requestAnimationFrame(this._loop);
     const now = performance.now();
+    // FPS sınırlayıcı (0 = kapalı / VSync)
+    const cap = this.settings.fpsCap | 0;
+    if (cap > 0) {
+      const iv = 1000 / cap;
+      if (now - this.lastFrameT < iv - 1.5) return;
+      this.lastFrameT = now - this.lastFrameT > iv * 2 ? now : this.lastFrameT + iv;
+    }
     const raw = (now - this.last) / 1000;
     this.last = now;
     const dt = Math.min(raw, 0.05);
@@ -645,29 +921,46 @@ class Game {
     this.fpsAcc += raw; this.fpsN++;
     if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
     const t = now / 1000;
+    let drew = false;
     try {
-      if (this.mode === 'menu') this.updateMenu(dt, t);
-      else if (this.mode === 'creator') {
-        this.creatorModel.animate(dt, { speed: 0 });
-        this.creatorModel.root.rotation.y += dt * 0.25;
+      const mode = this.mode;
+      if (mode === 'menu') {
+        this.updateMenu(dt, t);
+        // arka plan uçuşu: düşük çözünürlük + 30 FPS sınırı; opak bir ekran (jenerik) varken hiç çizme
+        if (now - this.lastMenuRender >= 1000 / MENU_FPS - 2 && !this.ui.coversScene()) { this.lastMenuRender = now; this.render(); drew = true; }
+      } else if (mode === 'creator') {
+        this.updateCreator(dt);
         this.renderer.render(this.creatorScene, this.creatorCam);
-        this.input.endFrame();
-        return;
-      } else if (this.mode === 'playing' || this.mode === 'dead') this.updateGame(dt, t);
-      else if (this.mode === 'paused') { /* donmuş kare */ }
+      } else if (mode === 'playing' || mode === 'dead') {
+        this.updateGame(dt, t);
+        // tam ekran opak arayüz (harita) varken 3B sahneyi çizmeye gerek yok
+        if (!this.ui.coversScene() || this.needsFrame) { this.render(); drew = true; }
+      } else if (mode === 'paused') {
+        // donmuş kare: yalnızca ayar değişince / yeniden boyutlanınca tek kare çiz
+        if (this.needsFrame) { this.render(); drew = true; this.ui.capturePauseBackdrop(); }
+      }
+      this.ui.menuTick(dt);
     } catch (err) {
       console.error(err);
     }
-    this.render();
+    if (drew) this.needsFrame = false;
     this.input.endFrame();
+    // uyarlamalı çözünürlük: kare aralığı + bu karenin CPU iş süresi
+    if (this.mode === 'playing') { this.perf.sample(raw * 1000, performance.now() - now); this.perf.update(dt); }
   }
 
   render() {
     if (this.mode === 'creator') return;
-    const target = document.body.classList.contains('desat') ? 0.08 : 1;
+    const target = this._desat ? 0.08 : 1;
     this.deathSat += (target - this.deathSat) * Math.min(1, this.dt * 3 || 0.1);
     this.postfx.update(this.env, this.dt);
     this.grade.uniforms.uSat.value *= this.deathSat;
+    // gölge haritası her N karede bir (statik geometri için fark edilmez, dinamikler 1-2 kare gecikir)
+    const sm = this.renderer.shadowMap;
+    if (sm.enabled) {
+      const every = this.mode === 'playing' || this.mode === 'dead' ? this.tier().shadowEvery : 1;
+      if (++this.shadowFrame >= every || this.needsFrame) { this.shadowFrame = 0; sm.needsUpdate = true; }
+    }
     this.composer.render();
   }
 
@@ -677,7 +970,7 @@ class Game {
     const cx = 60, cz = -120;
     this.camera.position.set(cx + Math.cos(a) * 420, 110 + Math.sin(t * 0.07) * 25, cz + Math.sin(a) * 420);
     this.camera.lookAt(cx, 10, cz + 80);
-    this.camera.fov = 55; this.camera.updateProjectionMatrix();
+    if (this.camera.fov !== 55) { this.camera.fov = 55; this.camera.updateProjectionMatrix(); }
     if (this.env.time < 17.8 || this.env.time > 19.5) this.env.time = 17.8;
     this.env.update(dt * 3, this.camera.position);
     this.uniforms.uNight.value = this.env.nightFactor;
@@ -696,11 +989,12 @@ class Game {
     s.stats.playTime += dt;
     // etkileşim
     const it = !blocked ? this.findInteraction() : null;
-    this.ui.prompt(it ? it.label : null);
+    let promptKey = 'E', promptText = it ? it.label : null;
     if (!it && !p.vehicle && !p.inInterior && !blocked) {
       const v = this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 2.5);
-      if (v) { const pr = document.getElementById('prompt'); pr.innerHTML = `<kbd>F</kbd> ${v.ai && !v.ai.empty && !v.parked ? 'Aracı gasp et' : 'Araca bin'}: ${v.def.name}`; pr.classList.add('show'); }
+      if (v) { promptKey = 'F'; promptText = (v.ai && !v.ai.empty && !v.parked ? 'Aracı gasp et: ' : 'Araca bin: ') + v.def.name; }
     }
+    this.ui.prompt(promptText, promptKey); // yalnızca metin değişince DOM'a yazar
     if (it && input.hit('KeyE')) { audio.click(); it.action(); }
     if (input.hit('KeyF') && !p.dead) {
       if (p.vehicle) {
@@ -731,7 +1025,7 @@ class Game {
       this.updateGps(false);
     } else {
       if (p.inInterior.update) p.inInterior.update(dt, t);
-      p.inInterior.scene.traverse((o) => { if (o.userData.spin) o.rotation.y += dt * 2; });
+      p.inInterior.scene.traverse(this._spin);
     }
     this.npcs.update(dt);
     this.combat.update(dt);
@@ -744,6 +1038,7 @@ class Game {
     if (this.wanted.level === 0) this._goodsWarn = false;
     this.life.update(dt);
     this.ui.update(dt);
+    this.autosaveTick(dt);
     // iç mekânda ses
     if (!p.vehicle) audio.setEngine(false);
     s.money = Math.max(0, Math.floor(s.money));

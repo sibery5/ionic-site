@@ -58,7 +58,6 @@ export const PhoneMethods = {
         for (const [id, name, icon, col] of APPS) {
           const a = el('button', 'ph-app', `<i style="background:linear-gradient(160deg, ${col}, #111)">${svgImg(icon, '#fff', 30)}</i><span>${name}</span>`);
           a.onclick = () => { audio.click(); if (id === 'map') { this.closeModal(m); this.mapScreen(); } else if (id === 'settings') this.settingsMenu(); else if (id === 'bag') { this.closeModal(m); this.openInventory(); } else go(id); };
-          a.addEventListener('mouseenter', () => audio.hover());
           grid.appendChild(a);
         }
         return;
