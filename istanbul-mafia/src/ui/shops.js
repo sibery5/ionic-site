@@ -38,7 +38,6 @@ export const ShopMethods = {
       const b = el('button', 'paycard' + (ok ? '' : ' short'));
       b.innerHTML = `${svgImg(icon, ok ? '#d4af37' : '#8a7e68', 26)}<div><b>${label}</b><small>Bakiye ${formatMoney(bal)}</small></div>`;
       b.addEventListener('click', (e) => { e.stopPropagation(); audio.click(); onPay(method); });
-      b.addEventListener('mouseenter', () => audio.hover());
       return b;
     };
     w.append(mk('cash', 'cash', opts.cashLabel || 'Nakit öde', s.money), mk('bank', 'card', opts.bankLabel || 'Banka kartı', s.bank));
