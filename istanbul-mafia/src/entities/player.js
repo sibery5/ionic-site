@@ -166,14 +166,31 @@ export class Player extends Actor {
       if (this.rollT >= 1) this.rollT = 0;
     } else {
       // ivmelenme / yavaşlama eğrisi; havada az kontrol; ters yöne dönüşte daha hızlı fren
-      const tx = ml > 0 ? mx * speed : 0, tz = ml > 0 ? mz * speed : 0;
+      // momentum: hızlıyken karakter baktığı yöne koşar, girdi yönüne yay çizerek döner (yana kayma yok)
+      let dmx = mx, dmz = mz;
+      if (ml > 0 && !this.aiming && this.grounded && !this.swimming && this.speed > 2) {
+        const hd = angleDiff(this.heading, Math.atan2(mx, mz));
+        const k = clamp((Math.abs(hd) - 0.25) / 1.1, 0, 1) * clamp((this.speed - 2) / 3, 0, 1);
+        dmx = mx * (1 - k) + Math.sin(this.heading) * k; dmz = mz * (1 - k) + Math.cos(this.heading) * k;
+        const l = Math.hypot(dmx, dmz) || 1; dmx /= l; dmz /= l;
+        speed *= 1 - k * (Math.abs(hd) > 1.6 ? 0.45 : 0.15);
+      }
+      const tx = ml > 0 ? dmx * speed : 0, tz = ml > 0 ? dmz * speed : 0;
       const accel = !this.grounded && !this.swimming ? 3 : ml > 0 ? (sprint ? 9 : 16) : 18;
       let ex = tx - this.vx, ez = tz - this.vz;
       const el = Math.hypot(ex, ez), maxd = accel * dt * (this.vx * tx + this.vz * tz < 0 ? 2 : 1);
       if (el > maxd) { ex *= maxd / el; ez *= maxd / el; }
       this.vx += ex; this.vz += ez;
     }
-    if (ml > 0.01 && !busy && !this.aiming) this.heading = dampAngle(this.heading, Math.atan2(mx, mz), sprint ? 8 : 11, dt);
+    // yumuşak dönüş: açısal hız sınırlı (ani dönme yok); yavaşken geri dönüşte hızlı pivot
+    if (ml > 0.01 && !busy && !this.aiming) {
+      const d = angleDiff(this.heading, Math.atan2(mx, mz));
+      const sp = this.speed, maxW = sp < 1 ? 11 : sp < 4.5 ? 8.5 : 5.5;
+      const want = clamp(d * 9, -maxW, maxW) * (Math.abs(d) > 2.4 && sp < 2.5 ? 1.4 : 1);
+      this.turnVel = damp(this.turnVel || 0, want, 16, dt);
+      const step = this.turnVel * dt;
+      this.heading += Math.abs(step) > Math.abs(d) ? d : step;
+    } else this.turnVel = damp(this.turnVel || 0, 0, 12, dt);
     // nişanda: bacaklar kameraya döner, üst gövde anında takip eder (aimYaw)
     if (this.aiming) {
       this.heading = dampAngle(this.heading, this.camYaw, this.speed > 0.5 ? 16 : 7, dt);
@@ -380,12 +397,16 @@ export class Player extends Actor {
       // takip noktası: koşarken hafif gecikme
       const T = TGT.set(this.pos.x, this.pos.y + this.cH, this.pos.z);
       if (!this.camTgt) this.camTgt = new THREE.Vector3().copy(T);
-      const lagK = 1 - Math.exp(-(sprinting ? 9 : this.vault ? 12 : 40) * dt);
+      // takip gecikmesi yumuşak geçer (koşu başlarken/biterken sıçrama yok)
+      this.camLagRate = damp(this.camLagRate || 30, sprinting ? 10 : this.vault ? 12 : 28, 3, dt);
+      const lagK = 1 - Math.exp(-this.camLagRate * dt);
       this.camTgt.x += (T.x - this.camTgt.x) * lagK; this.camTgt.z += (T.z - this.camTgt.z) * lagK;
       this.camTgt.y += (T.y - this.camTgt.y) * (1 - Math.exp(-(this.grounded ? 14 : 8) * dt));
       const target = tmp.copy(this.camTgt);
       // çok hafif kafa sallanması ve iniş çökmesi
-      if (this.grounded && !this.swimming && this.speed > 0.5) target.y += Math.sin(this.model.phase * 2) * 0.022 * Math.min(1, this.speed / 7) * (this.aiming ? 0.3 : 1);
+      // kafa sallanması: pelvis sekmesiyle aynı fazda, sönümlü
+      this.camBob = damp(this.camBob || 0, this.grounded && !this.swimming ? (this.model.bobY || 0) : 0, 12, dt);
+      target.y += this.camBob * 0.4 * (this.aiming ? 0.3 : 1);
       if (this.camDip > 0) { target.y -= this.camDip; this.camDip = Math.max(0, this.camDip - dt * 1.2); }
       const side = this.cSide * this.cSh;
       target.x += rx * side; target.z += rz * side;

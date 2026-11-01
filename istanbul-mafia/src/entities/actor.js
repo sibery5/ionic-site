@@ -174,7 +174,9 @@ export class Actor {
     st.dead = this.dead; st.swim = this.swimming; st.recoil = this.recoil;
     st.reload = this.reloadT > 0 ? 1 - this.reloadT / (def.reload || 1.5) : 0;
     st.weapon = this.weapon; st.crouch = !!this.crouch; st.hands_up = !!this.handsUp; st.sit = !!this.sitting; st.talk = !!this.talking;
-    st.air = this.isPlayer ? !this.grounded && !this.swimming : false; st.vy = this.vy;
+    st.air = this.isPlayer ? !this.grounded && !this.swimming : !!(this.jumping && !this.vault && !this.vaultT); st.vy = this.vy;
+    // NPC davranış bayrakları (YZ bunları ayarlayabilir; yoksa model kişiliğe göre kendi seçer)
+    st.cower = this.state === 'cower'; st.phone = !!this.onPhone; st.smoke = !!this.smoking; st.isPlayer = !!this.isPlayer;
     st.vault = this.vaultT || 0; st.roll = this.rollT || 0;
     // kulüp dansçıları (interiors.js ctx.dancers)
     const ii = this.inInterior;

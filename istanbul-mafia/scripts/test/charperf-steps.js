@@ -31,10 +31,11 @@ module.exports = async (p, out) => {
     const R = g.renderer;
     R.info.autoReset = false;
     const draw = () => { R.info.reset(); const t = performance.now(); g.render(); const ms = performance.now() - t; return { calls: R.info.render.calls, tris: R.info.render.triangles, ms: +ms.toFixed(1) }; };
-    draw();
-    const withN = draw();
+    const avg = () => { const r = [draw(), draw(), draw()]; return { calls: r[2].calls, tris: r[2].tris, ms: +((r[0].ms + r[1].ms + r[2].ms) / 3).toFixed(1) }; };
+    for (let i = 0; i < 4; i++) { sim(1 / 30); draw(); }
+    const withN = avg();
     for (const n of list) n.model.root.visible = false;
-    const without = draw();
+    const without = avg();
     for (const n of list) n.model.root.visible = true;
     R.info.autoReset = true;
     let geoms = 0; const seen = new Set();
