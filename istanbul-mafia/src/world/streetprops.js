@@ -232,7 +232,7 @@ export function buildStreetProps(city) {
     // köşe babaları
     for (const tt of [hw + 3.5, len - hw - 3.5]) for (const side of [-1, 1]) for (let k = 0; k < 3; k++) {
       const [x, z] = at(tt + (tt < len / 2 ? k * 1.4 : -k * 1.4), side * (hw + 0.35));
-      if (!isLand(x, z)) continue;
+      if (!isLand(x, z) || inBridge(x, z)) continue; // köprü rampasında tabliyeye gömülmesin
       P.bollard.addTRS(x, 0.15, z, 0); cols.breakable(cols.addCircle(x, z, 0.09, 0, 1.05, 'bollard'), 'bollard', 40, P.bollard, x, 0.15, z, 0);
     }
     // eski semtlerde ahşap elektrik/telefon direkleri ve telleri

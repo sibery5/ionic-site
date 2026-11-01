@@ -98,7 +98,7 @@ function resolveStatic(v, phys, isPlayer, fx, fz) {
     let bestB = null, bd = 0;
     for (let i = 0; i < boxes.length; i++) {
       const b = boxes[i];
-      if (b.y1 <= y0 + 0.35 || b.y0 >= yTop || b.tag === 'curb') continue;
+      if (b.y1 <= y0 + 0.35 || b.y0 >= yTop || b.tag === 'curb' || b.tag === 'bridgeDeck') continue;
       if (!contactShape(v.pos.x, v.pos.z, fx, fz, hx, hz, b, C2)) continue;
       if (C2.depth > bd) { bd = C2.depth; bestB = b; C.nx = C2.nx; C.nz = C2.nz; C.depth = C2.depth; C.px = C2.px; C.pz = C2.pz; }
     }
@@ -155,7 +155,8 @@ function resolveStatic(v, phys, isPlayer, fx, fz) {
 export function integrateVehicle(v, dt, phys, isPlayer) {
   v.prevX = v.pos.x; v.prevZ = v.pos.z;
   const sp = Math.hypot(v.vx, v.vz);
-  const solve = v.kind === 'car' && v.pos.y < 1.5 && !v.noCollide;
+  // köprü tabliyesinde zemin yüksekliği groundY (bridge_profile); statik çözüm zemine göre
+  const solve = v.kind === 'car' && v.pos.y - (v.groundY || 0) < 1.5 && !v.noCollide;
   const n = solve ? Math.max(1, Math.min(12, Math.ceil((sp * dt) / SUB_STEP))) : 1;
   const h = dt / n;
   const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
