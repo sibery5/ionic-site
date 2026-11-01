@@ -77,12 +77,12 @@ module.exports = async (p) => {
   ok('ESC debounce keeps pause menu', dbl === 'paused', dbl);
   if (shots) { await p.evaluate(() => { game.needsFrame = true; }); await p.waitForTimeout(2500); await p.screenshot({ path: shots + '/pause-menu.png', timeout: 240000 }).catch((e) => console.log('pause screenshot failed', e.message.slice(0, 80))); }
   m0 = await metrics();
-  const pb = await p.$$('.pausemenu .nav-item');
+  await p.waitForTimeout(600); const pb = await p.$$('.modal:not(.leaving) .pausemenu .nav-item');
   for (let i = 0; i < 10; i++) { const bb = await pb[i % pb.length].boundingBox(); await p.mouse.move(bb.x + 40, bb.y + bb.height / 2); }
   m1 = await metrics();
   console.log('pause-hover-10', JSON.stringify(diff(m0, m1)), 'renders', await p.evaluate(() => window.__rc));
   await p.waitForTimeout(400);
-  await p.click('.pausemenu .nav-item >> text=DEVAM ET', { timeout: 180000 });
+  await p.click('.modal:not(.leaving) .pausemenu .nav-item >> text=DEVAM ET', { timeout: 180000 });
   await p.waitForTimeout(300);
   await p.evaluate(() => sim(0.2));
   const res = await p.evaluate(() => ({ mode: game.mode, enabled: game.input.enabled, blocking: game.ui.blocking() }));
@@ -92,13 +92,13 @@ module.exports = async (p) => {
   const auto = await p.evaluate(() => {
     const g = game; const key = 'istanbul-mafia-save-auto';
     localStorage.removeItem(key);
-    g.wanted.level = 2; g.autoT = 119.5; sim(2);
+    g.wanted.level = 2; g.autosave('mission'); sim(2);
     const whileWanted = !!localStorage.getItem(key);
     g.wanted.reset(); sim(1.5);
     const after = !!localStorage.getItem(key);
     return { whileWanted, after, ind: g.ui.saveEl.classList.contains('show') };
   });
-  ok('timer autosave deferred while wanted, saved after', !auto.whileWanted && auto.after, auto);
+  ok('autosave deferred while wanted, saved after', !auto.whileWanted && auto.after, auto);
   ok('save indicator shown', auto.ind);
   // 6) çıkışta kayıt (tarayıcı: beforeunload; masaüstü: quit())
   const q = await p.evaluate(async () => {

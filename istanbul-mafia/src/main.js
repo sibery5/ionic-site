@@ -237,7 +237,12 @@ class Game {
     window.addEventListener('keydown', startAudio, { once: true });
     window.addEventListener('keydown', (e) => this.onKey(e));
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement === canvas) { this.ui.showClickToResume(false); return; }
+      if (document.pointerLockElement === canvas) {
+        this.ui.showClickToResume(false);
+        // geç gelen kilit (istek sonrası duraklatıldıysa / menü açıldıysa) menüyü kilitlemesin: hemen bırak
+        if (this.mode !== 'playing' || this.ui.blocking()) document.exitPointerLock();
+        return;
+      }
       // kilit kalktı (ESC / Alt+Tab): oyundaysa duraklat — devam ettikten hemen sonraki geçişleri yok say
       if (this.mode === 'playing' && !this.ui.blocking() && !this.suppressPause && performance.now() - this.toggleT > 400) this.pause();
     });
