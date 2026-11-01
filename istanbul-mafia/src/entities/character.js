@@ -196,6 +196,8 @@ const IK = { S: v3(), E: v3(), W: v3(), d: v3(), b: v3(), u: v3(), e: v3(), f: v
 const LG = { S: v3(), T: v3(), d: v3(), pole: v3(), bv: v3(), u: v3(), K: v3(), w: v3(), X: v3(), Y: v3(), Z: v3(), m: new THREE.Matrix4(), qT: q4(), qL: q4(), qK: q4(), qF: q4(), qi: q4(), e: new THREE.Euler() };
 const WV = { aim: v3(), fwd: v3(), right: v3(), dir: v3(), R: v3(), U: v3(), eye: v3(), shR: v3(), shL: v3(), G: v3(), F: v3(), t: v3(), x: v3(), y: v3(), z: v3(), wT: v3(), pole: v3(), mag: v3(), belt: v3(), qR: q4(), qL: q4() };
 const DTMP = v3();
+// [savaş kancası] paylaşılan yara geometrisi/malzemesi (tembel), yüzüstü yatış yönü
+const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
@@ -366,6 +368,59 @@ export class CharacterModel {
     this.deathDir = { x: lx / l, z: lz / l };
     this.hitT = 0.35; this.hitSide = Math.random() < 0.5 ? 1 : -1;
   }
+  // ---- [savaş kancası: yara / topallama / yere yığılma] (API: addWound, clearWounds, setLimp, setDowned) ----
+  // boneName: BONES adı; local: kemik uzayında konum (THREE.Vector3); out: dışa normal (kemik uzayı, isteğe bağlı)
+  addWound(boneName, local, size = 1, out = null) {
+    const b = this.bones[BI[boneName]];
+    if (!b) return null;
+    if (!WOUND.geo) {
+      WOUND.geo = new THREE.SphereGeometry(0.028, 7, 5);
+      WOUND.mat = new THREE.MeshStandardMaterial({ color: 0x3d0405, roughness: 0.28, metalness: 0.05, emissive: 0x120000 });
+      WOUND.mat2 = new THREE.MeshStandardMaterial({ color: 0x6a0a0a, roughness: 0.4, transparent: true, opacity: 0.85 });
+    }
+    const m = new THREE.Mesh(WOUND.geo, WOUND.mat);
+    m.position.copy(local);
+    const n = WOUND.n.copy(out || local); n.lengthSq() < 1e-6 ? n.set(0, 0, 1) : n.normalize();
+    m.quaternion.setFromUnitVectors(WOUND.z, n);
+    m.scale.set(size, size, size * 0.3);
+    // kan lekesi halkası (daha açık renk, daha geniş)
+    const r = new THREE.Mesh(WOUND.geo, WOUND.mat2);
+    r.scale.set(1.9, 2.4, 0.15); r.position.set(0, -0.012, -0.004);
+    m.add(r);
+    m.castShadow = false;
+    b.add(m);
+    const W = this.wounds || (this.wounds = []);
+    W.push(m);
+    if (W.length > 8) { const o = W.shift(); o.parent && o.parent.remove(o); }
+    return m;
+  }
+  clearWounds() { if (this.wounds) { for (const m of this.wounds) m.parent && m.parent.remove(m); this.wounds.length = 0; } }
+  // k: 0..1 topallama şiddeti, side: 0 = sol bacak, 1 = sağ bacak
+  setLimp(k, side = 0) { this.limp = clamp(k, 0, 1); this.limpSide = side; }
+  setDowned(on) { if (!on) { this.downK = 0; } this.downed = !!on; }
+  poseDowned(dt, st) {
+    const P = this.P;
+    if (!this.downK) { this.downK = 0; this.D0.set(P); this.crawlPh = 0; }
+    this.downK = Math.min(1, this.downK + dt * 1.8);
+    const save = this.deathDir;
+    this.deathDir = WOUND.prone;
+    this.poseDeath(P, 0.3 + 1.1 * this.downK);
+    this.deathDir = save;
+    // sürünme: kollar sırayla öne uzanır, bacaklar iter, baş kalkık
+    const sp = st.speed || 0;
+    this.crawlPh += dt * (1.2 + sp * 7);
+    const ph = this.crawlPh, k = sm(this.downK), mv = Math.min(1, 0.25 + sp * 3);
+    const a = Math.sin(ph), b = Math.sin(ph + Math.PI);
+    setJ(P, J.shL, (-2.0 + 0.7 * a * mv) * k + P[J.shL * 3] * (1 - k), 0, 0.35);
+    setJ(P, J.shR, (-1.6 + 0.7 * b * mv) * k + P[J.shR * 3] * (1 - k), 0, 0.35);
+    setJ(P, J.elL, -0.5 - 0.6 * Math.max(0, -a) * mv, 0, 0); setJ(P, J.elR, -0.5 - 0.6 * Math.max(0, -b) * mv, 0, 0);
+    addJ(P, J.knL, 0.5 * Math.max(0, b) * mv * k, 0, 0); addJ(P, J.knR, 0.5 * Math.max(0, a) * mv * k, 0, 0);
+    setJ(P, J.neck, -0.35 * k, 0.1 * a, 0); setJ(P, J.head, -0.45 * k, 0.15 * a, 0);
+    addJ(P, J.chest, 0, 0.12 * a * mv, 0.06 * a);
+    this.apply(P, 0);
+    const cr = this._cr || (this._cr = [0, 0]); cr[0] = 0.5; cr[1] = this.weaponMesh ? 0.8 : 0.5;
+    this.applyHands(dt, cr);
+  }
   die(dirX, dirZ) {
     if (dirX === undefined) { const a = Math.random() * Math.PI * 2; this.deathDir = { x: Math.sin(a), z: Math.cos(a) }; return; }
     const h = this.root.rotation.y, c = Math.cos(h), s = Math.sin(h);
@@ -414,6 +469,8 @@ export class CharacterModel {
       return;
     }
     if (this.deadT > 0) { this.deadT = 0; this.deathDir = null; this.settled = false; }
+    if (st.downed) { this.poseDowned(dt, st); return; } // [savaş kancası] yaralı, yerde sürünüyor
+    if (this.downK) this.downK = 0;
     // ---- ağırlıklar ----
     const sp = st.speed || 0;
     const sc = this.rig.height;
@@ -518,6 +575,17 @@ export class CharacterModel {
     setJ(P, J.hips, leanT * 0.22 + 0.1 * wc, -yawP * nrm, rollV + this.bank);
     setJ(P, J.spine, leanT * 0.42 + 0.06 * wc, yawP * nrm * 0.4, -rollV * 0.5);
     setJ(P, J.chest, leanT * 0.36, yawC * nrm, -rollV * 0.3 - this.bank * 0.3);
+    // [savaş kancası] topallama: yaralı bacak az kalkar, üstüne basınca pelvis çöker ve gövde yana kayar
+    if (this.limp > 0.01 && moving > 0.05) {
+      const li = this.limpSide || 0, ls = li === 0 ? 1 : -1, lk = this.limp * moving;
+      const lp = fract(cyc + li * 0.5);
+      F[li].y *= 1 - 0.55 * lk; F[li].p *= 1 - 0.6 * lk;
+      const stance = lp < beta ? Math.sin(Math.PI * lp / beta) : 0;
+      pel.y -= 0.05 * lk * stance; pel.x += 0.03 * ls * lk * stance;
+      addJ(P, J.hips, 0.05 * lk * stance, 0, -0.1 * ls * lk * stance);
+      addJ(P, J.spine, 0.08 * lk, 0, 0.12 * ls * lk * stance);
+      addJ(P, J.chest, 0, 0, 0.05 * ls * lk);
+    }
     // kollar: karşı bacakla, öne daha geniş
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;

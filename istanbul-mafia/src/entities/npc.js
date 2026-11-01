@@ -44,8 +44,9 @@ export const BARKS = {
   bump: ['Önüne baksana!', 'Hoop, dikkat!', 'Kör müsün kardeşim?'],
   flee: ['İmdat!', 'Kaçın!', 'Vuruyorlar!', 'Polis! Polis!', 'Anneciğim!'],
   cower: ['Ne olur vurma!', 'Benim çoluk çocuğum var!', 'Bir şey görmedim, yemin ederim!'],
-  arrest: ['Polis! Kıpırdama!', 'Eller yukarı!', 'Yere yat, hemen!', 'Ellerini göreyim!'],
-  cop: ['Ateş serbest!', 'Şüpheli silahlı!', 'Siper alın!', 'Teslim ol, etrafın sarıldı!'],
+  arrest: ['Dur! Polis!', 'Polis! Kıpırdama!', 'Eller yukarı!', 'Yere yat!', 'Ellerini göreyim!', 'Silahını bırak!'],
+  cop: ['Ateş serbest!', 'Şüpheli silahlı!', 'Siper alın!', 'Teslim ol, etrafın sarıldı!', 'Teslim ol! Türk Polisinden kaçamazsın!', 'Silahını bırak!'],
+  swat: ['Özel Harekat! Kıpırdama!', 'Yere yat! Yere yat!', 'Silahını bırak!', 'Hedef görüldü, ateş!'],
   backup: ['Merkez, destek istiyorum!', 'Ekip yaralandı, destek gönderin!', 'Ateş altındayız, takviye!'],
   flank: ['Sağdan çeviriyorum!', 'Arkasına dolaşın!', 'Ben soldan giriyorum!'],
   gang: ['Bu bizim mahallemiz!', 'Vurun şunu!', 'Hesabı ödeyeceksin!', 'Kaçamazsın!', 'Arkadan dolaşın!'],
@@ -56,8 +57,51 @@ export const BARKS = {
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 export function copLook(r = lookRng) { return randomLook(r, 'police'); }
-export function swatLook(r = lookRng) { return Object.assign(randomLook(r, 'police'), { top: 'jacket', topColor: '#1a1a1a', pantsColor: '#1a1a1a', hat: 'bere', hatColor: '#111111', glasses: true, shoes: 'boots' }); }
+export function swatLook(r = lookRng) { return Object.assign(randomLook(r, 'police'), { top: 'jacket', topColor: '#1a1a1a', pantsColor: '#1a1a1a', hat: 'bere', hatColor: '#111111', glasses: true, shoes: 'boots', gender: 'm' }); }
 export function soldierLook(r = lookRng) { return Object.assign(randomLook(r, 'gang'), { top: 'jacket', topColor: '#4a5a30', shirtColor: '#3a4626', pants: 'slacks', pantsColor: '#3f4c2a', shoes: 'boots', shoesColor: '#2a2018', hat: 'bere', hatColor: '#3a4a28', chain: false, glasses: false, beard: 'stubble', hair: 'kisa', gender: 'm' }); }
+// [savaş] jandarma: daha koyu yeşil üniforma
+export function jandarmaLook(r = lookRng) { return Object.assign(soldierLook(r), { topColor: '#3c4a2c', pantsColor: '#36422a', hatColor: '#2e3a22', beard: 'mustache' }); }
+
+// [savaş] teçhizat: kask + çelik yelek (kemiklere takılan basit ağlar; geometri/malzeme paylaşılır)
+const GEAR = {};
+function gearParts() {
+  if (GEAR.helmet) return GEAR;
+  const hg = new THREE.SphereGeometry(0.132, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  hg.scale(1, 0.9, 1.1);
+  GEAR.helmet = hg;
+  GEAR.visor = new THREE.BoxGeometry(0.2, 0.05, 0.04);
+  GEAR.vest = new THREE.BoxGeometry(0.36, 0.34, 0.27);
+  GEAR.pouch = new THREE.BoxGeometry(0.07, 0.08, 0.05);
+  GEAR.patch = new THREE.PlaneGeometry(0.2, 0.06);
+  const std = (c, r = 0.75, m = 0.1) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+  GEAR.mat = { swat: std(0x141618, 0.6, 0.2), army: std(0x46522e, 0.8), jandarma: std(0x3a4628, 0.8), vestS: std(0x1c1e20, 0.85), vestA: std(0x55603a, 0.9), visor: std(0x0a0d12, 0.08, 0.6) };
+  const patchTex = (txt, bg, fg) => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, 256, 64); x.fillStyle = fg; x.font = 'bold 40px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, 128, 34);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  GEAR.patchMat = {
+    swat: new THREE.MeshBasicMaterial({ map: patchTex('ÖZEL HAREKAT', '#111', '#e8e8e8') }),
+    army: new THREE.MeshBasicMaterial({ map: patchTex('ASKER', '#3a4426', '#e0d8b0') }),
+    jandarma: new THREE.MeshBasicMaterial({ map: patchTex('JANDARMA', '#2e3a22', '#f0e8c0') }),
+  };
+  return GEAR;
+}
+export function equipGear(n, type) {
+  const G = gearParts(), M = n.model;
+  if (!M || M.gear) return;
+  const hm = new THREE.Mesh(G.helmet, G.mat[type] || G.mat.army);
+  hm.position.set(0, 0.105, 0.005); hm.castShadow = true;
+  M.head.add(hm);
+  const parts = [hm];
+  if (type === 'swat') { const v = new THREE.Mesh(G.visor, G.mat.visor); v.position.set(0, 0.11, 0.125); M.head.add(v); parts.push(v); }
+  const vest = new THREE.Mesh(G.vest, type === 'swat' ? G.mat.vestS : G.mat.vestA);
+  vest.position.set(0, 0.04, 0.0); vest.castShadow = true;
+  M.chest.add(vest); parts.push(vest);
+  for (const s of [-1, 1]) { const p = new THREE.Mesh(G.pouch, type === 'swat' ? G.mat.vestS : G.mat.vestA); p.position.set(s * 0.08, -0.06, 0.155); M.chest.add(p); parts.push(p); }
+  const pb = new THREE.Mesh(G.patch, G.patchMat[type] || G.patchMat.army); pb.position.set(0, 0.06, -0.137); pb.rotation.y = Math.PI; M.chest.add(pb); parts.push(pb);
+  M.gear = parts;
+}
 
 export class NPC extends Actor {
   constructor(game, kind, look, opts = {}) {
@@ -106,10 +150,17 @@ export class NPC extends Actor {
     this.crouch = false;
     this.persistent = !!opts.persistent;
     if (kind === 'police') { this.maxHp = this.hp = 120; const w = opts.weapon || (Math.random() < 0.85 ? 'pistol' : 'shotgun'); this.giveWeapon(w, 200); this.setWeapon(w); }
-    if (kind === 'swat') { this.maxHp = this.hp = 180; this.armor = 100; this.giveWeapon('m4', 400); this.setWeapon('m4'); }
-    if (kind === 'soldier') { this.maxHp = this.hp = 160; this.armor = 60; const w = opts.weapon || (Math.random() < 0.7 ? 'm4' : 'ak'); this.giveWeapon(w, 500); this.setWeapon(w); }
+    if (kind === 'swat') { this.maxHp = this.hp = 180; this.armor = 100; const w = opts.weapon || (Math.random() < 0.7 ? 'm4' : 'akrep'); this.giveWeapon(w, 400); this.setWeapon(w); this.giveWeapon('kilic', 60); equipGear(this, 'swat'); }
+    if (kind === 'soldier') {
+      this.maxHp = this.hp = 160; this.armor = 60;
+      const r = Math.random();
+      const w = opts.weapon || (r < 0.55 ? 'm4' : r < 0.78 ? 'ak' : r < 0.9 ? 'tufan' : 'bozkurt');
+      this.giveWeapon(w, 500); this.setWeapon(w);
+      equipGear(this, opts.jandarma ? 'jandarma' : 'army');
+    }
     if (kind === 'gang') {
-      const w = opts.weapon || (Math.random() < 0.5 ? 'pistol' : Math.random() < 0.5 ? 'uzi' : Math.random() < 0.5 ? 'bat' : 'ak');
+      const r = Math.random();
+      const w = opts.weapon || (r < 0.3 ? 'pistol' : r < 0.42 ? 'kilic' : r < 0.58 ? 'uzi' : r < 0.66 ? 'akrep' : r < 0.74 ? 'cifte' : r < 0.86 ? 'bat' : 'ak');
       this.giveWeapon(w, 300); this.setWeapon(w);
     }
     if (kind === 'boss') { this.maxHp = this.hp = 450; this.armor = 100; this.giveWeapon(opts.weapon || 'revolver', 500); this.setWeapon(opts.weapon || 'revolver'); }
@@ -128,7 +179,43 @@ export class NPC extends Actor {
   say(list, chance = 1) {
     if (this.barkT > 0 || Math.random() > chance) return;
     this.barkT = 5 + Math.random() * 6;
-    this.game.ui.bark(this, typeof list === 'string' ? list : pick(list));
+    const text = typeof list === 'string' ? list : pick(list);
+    this.game.ui.bark(this, text);
+    // [savaş] kolluk/asker: sentezlenmiş megafon/telsiz sesi
+    if (this.faction === 'police' || this.faction === 'military') this.game.npcs.speak(this, text);
+  }
+
+  // [savaş] ağır yaralı: yere yığılır, saldırgandan uzağa sürünür, kan kaybından ölür (bitirilebilir)
+  goDown(attacker) {
+    if (this.dead || this.downed || this.vehicle) return;
+    this.downed = true;
+    this.model.setDowned && this.model.setDowned(true);
+    this.state = 'downed';
+    this.aiming = false; this.crouch = false; this.sitting = false; this.talking = false; this.handsUp = false;
+    this.downFrom = attacker && attacker.pos ? attacker.pos.clone() : this.pos.clone();
+    this.target = null; this.path = []; this.cur = null; this.coverPt = null;
+    this.game.combat.applyBleed(this, attacker, Math.max(0.6, this.hp / 22), 60);
+    this.barkT = 0;
+    this.say(this.faction === 'police' ? ['Memur yaralandı!', 'Ambulans... çağırın...'] : this.faction === 'military' ? ['Yaralandım!', 'Sıhhiye!'] : ['Yardım edin...', 'Ambulans çağırın!', 'Anne...'], 1);
+    if (Math.random() < 0.4) audio.scream && audio.scream(this.pos.x, this.pos.z);
+  }
+  updateDowned(dt, full) {
+    const g = this.game;
+    this.barkT -= dt;
+    if (this.knock && this.knock.t > 0) { this.knock.t -= dt; this.pos.x += this.knock.x * dt; this.pos.z += this.knock.z * dt; }
+    // saldırgandan uzağa yavaşça sürün
+    const F = this.downFrom || g.player.pos;
+    const dx = this.pos.x - F.x, dz = this.pos.z - F.z, d = Math.hypot(dx, dz) || 1;
+    this.crawlT = (this.crawlT || 0) + dt;
+    let speed = 0;
+    if (d < 25 && Math.sin(this.crawlT * 1.3 + this.id) > -0.4) { this.steerMove(this.pos.x + dx / d * 2, this.pos.z + dz / d * 2, 0.32, dt, false); speed = this.speed; }
+    else this.speed = 0;
+    this.speed = speed;
+    if (Math.random() < dt * 0.12) this.say(['Yardım edin...', 'Ah...', 'Nefes alamıyorum...'], 0.6);
+    const res = g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
+    this.pos.y = Math.max(res.support, this.pos.y - 9 * dt);
+    if (full) this.model.animate(dt, this.animState());
+    this.sync();
   }
 
   // Düşmanca davranacak mı?
@@ -363,7 +450,7 @@ export class NPC extends Actor {
     want = Math.atan2(sx, sz);
     if (this.detourT > 0) { this.detourT -= dt; want += this.side * 1.25; }
     this.heading = dampAngle(this.heading, want, 10, dt);
-    const s = Math.min(speed, d / Math.max(dt, 1e-3));
+    const s = Math.min(speed * (this.limpMul || 1), d / Math.max(dt, 1e-3)); // [savaş] bacağından vurulan yavaşlar
     const hx = Math.sin(this.heading), hz = Math.cos(this.heading);
     // alçak engel tam önde: üstünden atla
     if (vaultOK && s > 0.9 && !this.vault) {
@@ -568,6 +655,7 @@ export class NPC extends Actor {
       return;
     }
     if (this.vehicle) return;
+    if (this.downed) { this.updateDowned(dt, full); return; } // [savaş]
     const player = g.player;
     this.thinkT -= dt;
     this.barkT -= dt;
@@ -848,6 +936,8 @@ export class NPC extends Actor {
     }
     if (los && d < def.range && Math.abs(angleDiff(moving ? this.heading : this.heading, want)) < (moving ? 1.2 : 0.35)) {
       this.aiming = true;
+      // [savaş] kolluk uyarıları (megafon/telsiz sesiyle)
+      if (t.isPlayer && this.barkT <= 0) this.say(this.kind === 'swat' ? BARKS.swat : this.faction === 'police' ? BARKS.cop : this.faction === 'military' ? BARKS.soldier : BARKS.gang, this.faction === 'gang' ? 0.04 : 0.08);
       if (moving) this.heading = dampAngle(this.heading, want, 3, dt);
       this.fireAt(t, d);
     }
@@ -1176,6 +1266,15 @@ export class NPCManager {
     return out;
   }
 
+  // [savaş] sentezlenmiş ses (aynı anda tek konuşma; megafon/telsiz süzgeçli)
+  speak(n, text) {
+    if ((this.voiceT || 0) > 0 || !n || n.inInterior !== this.game.player.inInterior) return;
+    const d = Math.hypot(n.pos.x - this.game.player.pos.x, n.pos.z - this.game.player.pos.z);
+    if (d > 120) return;
+    const dur = audio.voice ? audio.voice(text, n.pos.x, n.pos.z, { mega: true, pitch: 100 + (n.id % 6) * 8, rate: n.kind === 'swat' ? 1.15 : 1 }) : 0;
+    this.voiceT = Math.max(1.5, dur + 0.8);
+  }
+
   dispatchPoliceCar(type = 'police') {
     const g = this.game;
     const p = g.player;
@@ -1266,6 +1365,7 @@ export class NPCManager {
     if (g.physics.nav) g.physics.nav.tick();
     this.buildHash();
     this.barkT -= dt;
+    if (this.voiceT > 0) this.voiceT -= dt;
     this.slotT -= dt;
     if (this.slotT <= 0) { this.slotT = 0.5; this.assignSlots(); }
     let civCount = 0;

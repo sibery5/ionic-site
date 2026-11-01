@@ -192,6 +192,26 @@ export class UI {
   flashWanted() { const s = this.h.stars; s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
   damageFlash() { this.dmgT = 0.35; }
   onPlayerDamaged(d) { if (d > 0) this.dmgT = Math.min(0.8, 0.25 + d / 60); }
+  // [savaş] yönlü vuruş göstergesi: ang = merminin geldiği yön (radyan, 0 = ekranın üstü/ileri, + = sağ), k = şiddet 0..1
+  hitIndicator(ang, k = 1) {
+    if (!this.hitInd) {
+      const box = el('div', 'hitind');
+      box.style.cssText = 'position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:6';
+      this.hitInd = { box, els: [], i: 0 };
+      for (let i = 0; i < 4; i++) {
+        const e = el('div');
+        e.style.cssText = 'position:absolute;left:-90px;top:-170px;width:180px;height:60px;opacity:0;transform-origin:90px 170px;' +
+          'background:radial-gradient(ellipse 50% 60% at 50% 100%, rgba(255,30,20,0.95), rgba(200,0,0,0.55) 45%, rgba(160,0,0,0) 75%);' +
+          'clip-path:polygon(0% 100%, 12% 30%, 50% 0%, 88% 30%, 100% 100%, 50% 72%);filter:drop-shadow(0 0 6px rgba(255,0,0,0.6))';
+        box.appendChild(e); this.hitInd.els.push(e);
+      }
+      (this.h.dmg && this.h.dmg.parentNode ? this.h.dmg.parentNode : document.body).appendChild(box);
+    }
+    const H = this.hitInd, e = H.els[H.i]; H.i = (H.i + 1) % H.els.length;
+    e.style.transform = `rotate(${ang}rad) scale(${0.85 + 0.3 * k})`;
+    if (e.animate) e.animate([{ opacity: Math.min(1, 0.55 + k * 0.5) }, { opacity: Math.min(1, 0.55 + k * 0.5), offset: 0.25 }, { opacity: 0 }], { duration: 1300, easing: 'ease-out', fill: 'forwards' });
+    else e.style.opacity = 0.8;
+  }
   hitMarker() { const h = this.h.hitmark; h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); }
   bark(actor, text) {
     if (this.barks.length > 5) return;
@@ -1111,6 +1131,16 @@ export class UI {
       }, 'gold'));
       body.appendChild(row);
     }
+    // [savaş] İlk Yardım Çantası (B tuşu: kanamayı durdurur, +40 can)
+    const fa = el('div', 'item');
+    const faInfo = () => `<div class="in"><b>İlk Yardım Çantası</b><small>Kanamayı durdurur, +40 can · [B] · Elinde: ${g.state.firstAid || 0}</small></div><div class="ia"></div>`;
+    fa.innerHTML = faInfo();
+    const faBtn = () => this.btn(formatMoney(450), () => {
+      if ((g.state.firstAid || 0) >= 5) return this.notify('En fazla 5 çanta taşıyabilirsin.', 'info');
+      this.buy(450, () => { g.state.firstAid = (g.state.firstAid || 0) + 1; this.notify('İlk Yardım Çantası alındı ([B] ile kullan)', 'good'); fa.innerHTML = faInfo(); $('.ia', fa).appendChild(faBtn()); });
+    }, 'gold');
+    $('.ia', fa).appendChild(faBtn());
+    body.appendChild(fa);
   }
 
   shop_trade() {

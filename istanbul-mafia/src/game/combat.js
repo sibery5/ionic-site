@@ -4,9 +4,14 @@ import * as THREE from 'three';
 import { audio } from '../core/audio.js';
 import { buildWeaponModel, buildRocketModel, WEAPONS } from './weapons.js';
 import { inBridge } from '../world/map.js';
+import { BI } from '../entities/charParts.js';
 
 // NPC mermilerinin oyuncuya verdiği hasar çarpanı (denge: 3 yıldızda birkaç saniyede ölmemek için)
 const NPC_TO_PLAYER_DMG = 0.45;
+// [savaş] oyuncu kanaması: seviye başına saniyede can kaybı, alt sınır; kısmi kendiliğinden iyileşme üst sınırı (maxHp oranı)
+const PLAYER_BLEED_DPS = 0.45, PLAYER_BLEED_FLOOR = 8, PLAYER_REGEN_CAP = 0.4;
+const HEAL_TIME = 1.6, FIRST_AID_HEAL = 40;
+const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3();
 
 const tmp = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -136,6 +141,9 @@ export class Combat {
     this.sndBudget = 0;
     this.hitMarkFrame = false;
     this.bulletHit = new THREE.Vector3();
+    // [savaş] ek hedefler, oyuncu sağlık zamanlayıcıları
+    this.targets = [];
+    this.healT = 0; this.hbT = 0; this.pDrip = 0;
     // ayak sesi yüzeyi kancası (audio.step bunu kullanır)
     audio.surfaceAt = (x, z) => this.surfaceAt(x, z);
     this.attach(game.scene);
@@ -224,15 +232,17 @@ export class Combat {
 
   // ---------------- ışın testleri ----------------
   rayActors(origin, dir, maxD, ignore) {
-    let best = null, bt = maxD, head = false;
+    let best = null, bt = maxD, head = false, bk = 1;
     const list = this.actors();
     for (let n = 0; n < list.length; n++) {
       const a = list[n];
       if (a === ignore || a.dead || a.vehicle || a.inInteriorOther) continue;
       const cr = a.crouch ? 0.3 : 0;
-      for (let k = 0; k < 3; k++) {
-        const h = k === 0 ? 1.65 - cr : k === 1 ? 1.15 - cr : 0.55;
-        const r = k === 0 ? 0.16 : k === 1 ? 0.38 : 0.3;
+      // [savaş] yerde sürünen: tek alçak küre (gövde)
+      const K = a.downed ? 1 : 3;
+      for (let k = 0; k < K; k++) {
+        const h = a.downed ? 0.28 : k === 0 ? 1.65 - cr : k === 1 ? 1.15 - cr : 0.55;
+        const r = a.downed ? 0.5 : k === 0 ? 0.16 : k === 1 ? 0.38 : 0.3;
         const cx = a.pos.x, cy = a.pos.y + h, cz = a.pos.z;
         const ox = origin.x - cx, oy = origin.y - cy, oz = origin.z - cz;
         const b = ox * dir.x + oy * dir.y + oz * dir.z;
@@ -240,10 +250,19 @@ export class Combat {
         const disc = b * b - c;
         if (disc < 0) continue;
         const t = -b - Math.sqrt(disc);
-        if (t > 0 && t < bt) { bt = t; best = a; head = k === 0; }
+        if (t > 0 && t < bt) { bt = t; best = a; head = !a.downed && k === 0; bk = a.downed ? 1 : k; }
       }
     }
-    return best ? { actor: best, t: bt, head } : null;
+    if (!best) return null;
+    // [savaş] isabet bölgesi: baş / gövde / kol / bacak (yan: +1 sağ, -1 sol)
+    const hx = origin.x + dir.x * bt - best.pos.x, hy = origin.y + dir.y * bt - best.pos.y, hz = origin.z + dir.z * bt - best.pos.z;
+    const fx = Math.sin(best.heading), fz = Math.cos(best.heading);
+    const lat = hx * -fz + hz * fx;
+    const side = lat >= 0 ? 1 : -1;
+    let zone = bk === 0 ? 'head' : bk === 2 ? 'leg' : 'torso';
+    if (zone === 'torso' && !best.downed && Math.abs(lat) > 0.2 && hy > 0.85) zone = 'arm';
+    if (zone === 'torso' && !best.downed && hy < 0.86) zone = 'leg';
+    return { actor: best, t: bt, head, zone, side };
   }
 
   rayVehicles(origin, dir, maxD, ignoreV) {
@@ -289,6 +308,19 @@ export class Combat {
     if (ah) t = ah.t;
     const vh = this.rayVehicles(origin, dir, t, attacker.vehicle);
     if (vh) t = vh.t;
+    // [savaş] ek hedefler (polis helikopteri vb.)
+    const xh = this.rayTargets(origin, dir, t, attacker);
+    if (xh) {
+      t = xh.t;
+      const hp2 = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
+      this.addTracer(muzzle || origin, hp2, 0.02);
+      _n.copy(dir).negate();
+      g.particles.impact(hp2, _n, 'metal', dir);
+      if (this.sndBudget-- > 0) audio.impactMetal(hp2.x, hp2.z);
+      xh.target.onHit(def.dmg * (attacker.isPlayer ? (g.settings.damageDealt || 1) : 1), attacker, hp2);
+      if (attacker.isPlayer) this.playerHit();
+      return;
+    }
     const hp = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
     this.addTracer(muzzle || origin, hp, def.pellets ? 0.012 : def.sound === 'sniper' ? 0.03 : 0.02);
     if (!attacker.isPlayer) this.whizCheck(origin, dir, t, def, ah && ah.actor.isPlayer);
@@ -305,10 +337,13 @@ export class Combat {
       // zorluk ayarı: alınan / verilen hasar çarpanı
       if (target.isPlayer && !attacker.isPlayer) dmg *= NPC_TO_PLAYER_DMG * (g.settings.damageTaken || 1);
       else if (attacker.isPlayer) dmg *= g.settings.damageDealt || 1;
-      target.takeDamage(dmg, attacker, 'bullet', ah.head);
+      // [savaş] bölge çarpanı: kol/bacak daha az
+      dmg *= ah.zone === 'arm' ? 0.6 : ah.zone === 'leg' ? 0.7 : 1;
+      const dealt = target.takeDamage(dmg, attacker, 'bullet', ah.head);
       this.fleshFx(target, hp, dir, ah.head ? 1.6 : 1, loud);
+      this.woundFx(target, ah.zone, ah.side, hp, dir, attacker, def, dealt);
       if (attacker.isPlayer) this.playerHit();
-      if (target.isPlayer) g.ui.damageFlash(attacker);
+      if (target.isPlayer) { g.ui.damageFlash(attacker); this.playerHitFx(attacker, dir, dealt, ah.zone); }
     } else if (st) {
       _n.set(st.nx, st.ny, st.nz);
       const surf = st.box === 'water' ? 'water' : st.box === 'ground' ? (this.surfaceAt(hp.x, hp.z) === 'grass' ? 'dirt' : 'concrete') : st.box === 'ceiling' ? 'concrete' : 'concrete';
@@ -351,6 +386,168 @@ export class Combat {
     }
     if (loud) audio.bulletFlesh(hp.x, hp.z);
     if (target.dead) this.startPool(target);
+  }
+
+  // ---------------- [savaş: yaralar, bölgesel tepkiler, oyuncu vuruş hissi] ----------------
+  // Ek isabet hedefleri (küre): { pos: Vector3, r, dead, owner, onHit(dmg, attacker, point) }
+  rayTargets(origin, dir, maxD, attacker) {
+    let best = null, bt = maxD;
+    for (const T of this.targets) {
+      if (T.dead || (attacker && T.owner === attacker)) continue;
+      const ox = origin.x - T.pos.x, oy = origin.y - T.pos.y, oz = origin.z - T.pos.z;
+      const b = ox * dir.x + oy * dir.y + oz * dir.z, c = ox * ox + oy * oy + oz * oz - T.r * T.r, disc = b * b - c;
+      if (disc < 0) continue;
+      const t = -b - Math.sqrt(disc);
+      if (t > 0 && t < bt) { bt = t; best = T; }
+    }
+    return best ? { target: best, t: bt } : null;
+  }
+
+  // Kemiğe yara izi + bölgeye göre tepki (topallama, silah düşürme, sendeleme, kanama, yere yığılma)
+  woundFx(target, zone, side, hp, dir, attacker, def, dealt = 0) {
+    const g = this.game;
+    if (!zone || !target.model) return;
+    const S = side > 0 ? 'R' : 'L';
+    const yy = hp.y - target.pos.y;
+    let bone, child = null, rad;
+    if (target.downed) { bone = 'spine'; child = 'chest'; rad = 0.14; }
+    else if (zone === 'head') { bone = 'head'; rad = 0.095; }
+    else if (zone === 'arm') { if (yy > 1.22) { bone = 'sh' + S; child = 'el' + S; } else { bone = 'el' + S; child = 'wr' + S; } rad = 0.05; }
+    else if (zone === 'leg') { if (yy > 0.5) { bone = 'hip' + S; child = 'kn' + S; rad = 0.075; } else { bone = 'kn' + S; child = 'an' + S; rad = 0.055; } }
+    else { if (yy > 1.22) { bone = 'chest'; child = 'neck'; } else { bone = 'spine'; child = 'chest'; } rad = 0.14; }
+    const M = target.model;
+    if (M.addWound && (target.isPlayer || this.nearCamera(target.pos, 45))) {
+      M.root.updateMatrixWorld(true);
+      const Bn = M.bones[BI[bone]];
+      Bn.getWorldPosition(_w1);
+      if (child) {
+        M.bones[BI[child]].getWorldPosition(_w2);
+        _s.subVectors(_w2, _w1);
+        const L2 = _s.lengthSq() || 1;
+        const u = Math.max(0.15, Math.min(0.85, ((hp.x - _w1.x) * _s.x + (hp.y - _w1.y) * _s.y + (hp.z - _w1.z) * _s.z) / L2));
+        _w1.addScaledVector(_s, u);
+      } else _w1.y += 0.09 * (M.body.scale.x || 1);
+      _w3.set(hp.x - _w1.x, (hp.y - _w1.y) * 0.4, hp.z - _w1.z);
+      if (_w3.lengthSq() < 1e-6) _w3.set(-dir.x, 0, -dir.z);
+      _w3.normalize();
+      _w2.copy(_w1).addScaledVector(_w3, rad);
+      const loc = Bn.worldToLocal(_w2.clone());
+      _w3.add(_w2); Bn.worldToLocal(_w3); _w3.sub(loc);
+      M.addWound(bone, loc, 0.8 + Math.random() * 0.5, _w3);
+    }
+    // giriş deliğinden geriye küçük kan pufu
+    _w2.copy(dir).negate();
+    g.particles.blood(hp, 3, _w2, target.pos.y + 0.005);
+    if (target.dead) return;
+    if (zone === 'leg') {
+      target.limp = Math.min(1, (target.limp || 0) + 0.55); target.limpSide = side > 0 ? 1 : 0;
+      M.setLimp && M.setLimp(target.limp, target.limpSide);
+      if (!target.isPlayer) target.limpMul = 1 - 0.5 * target.limp;
+    }
+    if (target.isPlayer) return;
+    const strong = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
+    if (zone === 'arm' && !target.downed && target.wdef && target.wdef.type === 'gun' && Math.random() < 0.45) this.dropWeapon(target);
+    if (zone === 'torso' || zone === 'head') target.knock = { x: dir.x * 1.1 * strong, z: dir.z * 1.1 * strong, t: 0.22 };
+    if (zone === 'leg' && strong > 1.1) target.knock = { x: dir.x * 0.6, z: dir.z * 0.6, t: 0.2 };
+    const pb = zone === 'head' ? 1 : zone === 'torso' ? 0.65 : 0.45;
+    if (Math.random() < pb) this.applyBleed(target, attacker, 0.8 + Math.random() * 1.6, 8 + Math.random() * 8);
+    // ağır yaralı: yere yığılıp sürünür (görev hedefleri, patronlar ve sabit NPC'ler hariç)
+    if (!target.downed && target.goDown && zone !== 'head' && target.hp < target.maxHp * 0.3 && !target.mission && target.kind !== 'boss' && !target.static && target.downable !== false && Math.random() < 0.5) target.goDown(attacker);
+  }
+
+  // NPC kolundan vurulunca silahını düşürür (yerden alınabilir)
+  dropWeapon(n) {
+    const g = this.game, id = n.weapon, w = n.weapons[id];
+    if (!id || id === 'fists' || !w) return;
+    const fx = Math.sin(n.heading), fz = Math.cos(n.heading);
+    if (g.pickups) g.pickups.spawn('weapon', n.pos.x + fx * 0.7, n.pos.z + fz * 0.7, Math.max(6, Math.min(40, (w.ammo || 0) + (w.mag || 0))), id);
+    delete n.weapons[id];
+    const alt = Object.keys(n.weapons).find((k) => k !== 'fists' && WEAPONS[k] && WEAPONS[k].type === 'gun');
+    n.setWeapon(alt || 'fists');
+    n.disarmed = !alt;
+    if (n.say) n.say(['Ah, kolum!', 'Silahım!', 'Vurdu beni!'], 1);
+    if (!alt && n.faction !== 'police' && n.faction !== 'military' && n.state === 'attack') { n.state = 'flee'; n.fleeFrom = (n.target || g.player).pos.clone(); n.fleeT = 6; n.path = []; }
+  }
+
+  // Oyuncu vuruldu: yönlü gösterge, kamera irkilmesi, sendeleme, inleme, kanama
+  playerHitFx(attacker, dir, dealt, zone) {
+    const g = this.game, p = g.player;
+    if (!p || p.dead) return;
+    const ax = attacker && attacker.pos ? attacker.pos.x - p.pos.x : -dir.x, az = attacker && attacker.pos ? attacker.pos.z - p.pos.z : -dir.z;
+    const yaw = p.camYaw || 0;
+    const fwd = ax * Math.sin(yaw) + az * Math.cos(yaw), rgt = ax * -Math.cos(yaw) + az * Math.sin(yaw);
+    const ang = Math.atan2(rgt, fwd);
+    const k = Math.min(1, 0.3 + dealt / 22);
+    if (g.ui.hitIndicator) g.ui.hitIndicator(ang, k);
+    g.cameraShake(0.25 + k * 0.5);
+    if (!p.vehicle) {
+      p.camYaw -= Math.sin(ang) * 0.04 * k;
+      p.camPitch -= 0.02 * k;
+      p.staggerT = 0.16 + 0.14 * k; p.staggerX = dir.x * 1.5 * k; p.staggerZ = dir.z * 1.5 * k;
+    }
+    audio.playerHurt(k);
+    if (Math.random() < (zone === 'torso' ? 0.35 : zone === 'leg' ? 0.3 : zone === 'head' ? 0.5 : 0.25)) this.playerBleed(1);
+  }
+  playerBleed(n = 1) {
+    const g = this.game, p = g.player;
+    const first = !p.bleed;
+    p.bleed = Math.min(3, (p.bleed || 0) + n);
+    if (first) g.ui.notify(`Kanıyorsun! [B] ile İlk Yardım Çantası kullan${g.state && g.state.firstAid ? ` (${g.state.firstAid} adet)` : ' — bakkal/eczaneden al'}.`, 'warn');
+  }
+  useFirstAid() {
+    const g = this.game, p = g.player, s = g.state;
+    if (this.healT > 0 || p.dead) return false;
+    if (!(s.firstAid > 0)) { g.ui.notify('İlk Yardım Çantan yok! Bakkaldan alabilirsin.', 'warn'); audio.error && audio.error(); return false; }
+    if (p.hp >= p.maxHp - 0.5 && !p.bleed) { g.ui.notify('Yaran yok.', 'info'); return false; }
+    this.healT = HEAL_TIME;
+    audio.noiseBurst({ dur: 0.5, freq: 2400, q: 0.8, type: 'bandpass', gain: 0.25 });
+    return true;
+  }
+  updatePlayerHealth(dt) {
+    const g = this.game, p = g.player, s = g.state;
+    if (!p || p.dead) { this.healT = 0; return; }
+    p.lastHurtT = (p.lastHurtT || 0) + dt;
+    if (p.staggerT > 0) { p.staggerT -= dt; if (!p.vehicle) { p.pos.x += p.staggerX * dt; p.pos.z += p.staggerZ * dt; } }
+    if (p.bleed > 0) {
+      if (p.hp > PLAYER_BLEED_FLOOR) p.hp = Math.max(PLAYER_BLEED_FLOOR, p.hp - PLAYER_BLEED_DPS * p.bleed * dt);
+      this.pDrip -= dt;
+      if (this.pDrip <= 0 && !p.vehicle && !p.swimming) {
+        this.pDrip = 0.55 / p.bleed + Math.random() * 0.3;
+        tmp.set(p.pos.x + (Math.random() - 0.5) * 0.25, p.pos.y + 0.85, p.pos.z + (Math.random() - 0.5) * 0.25);
+        g.particles.blood(tmp, 2, null, p.pos.y + 0.005);
+      }
+    } else if (p.lastHurtT > 8 && p.hp < p.maxHp * PLAYER_REGEN_CAP) p.hp = Math.min(p.maxHp * PLAYER_REGEN_CAP, p.hp + 1.6 * dt); // kısmi kendiliğinden iyileşme
+    // tam iyileşince (hastane, yemek...) kanama ve yaralar temizlenir
+    if (p.hp >= p.maxHp - 0.5 && (p.bleed || p.limp || (p.model.wounds && p.model.wounds.length))) this.healPlayerWounds();
+    if (p.hp < 30) { this.hbT -= dt; if (this.hbT <= 0) { this.hbT = 0.7 + p.hp / 50; audio.heartbeat(1 - p.hp / 60); } }
+    if (this.healT > 0) {
+      this.healT -= dt;
+      g.ui.setProgress('İLK YARDIM UYGULANIYOR', 1 - this.healT / HEAL_TIME);
+      if (p.vehicle || p.swimming) { this.healT = 0; g.ui.setProgress(null); }
+      else if (this.healT <= 0) {
+        this.healT = 0; g.ui.setProgress(null);
+        s.firstAid = Math.max(0, (s.firstAid || 0) - 1);
+        p.hp = Math.min(p.maxHp, p.hp + FIRST_AID_HEAL);
+        this.healPlayerWounds();
+        g.ui.notify(`Yaralarını sardın (+${FIRST_AID_HEAL} can). Kalan çanta: ${s.firstAid}`, 'good');
+      }
+    } else if (g.input && g.input.hit && g.input.hit('KeyB') && !p.vehicle) this.useFirstAid();
+  }
+  healPlayerWounds() {
+    const p = this.game.player;
+    p.bleed = 0; p.limp = 0;
+    if (p.model.setLimp) p.model.setLimp(0);
+    if (p.model.clearWounds) p.model.clearWounds();
+  }
+
+  // 40 mm bomba: yay çizerek uçar, çarpınca patlar
+  lobGrenade(attacker, from, dir, def) {
+    const mesh = buildWeaponModel('gl40');
+    mesh.scale.setScalar(1.6);
+    mesh.position.copy(from);
+    this.game.activeScene().add(mesh);
+    const v = dir.clone().multiplyScalar(42); v.y += 2.2;
+    this.projectiles.push({ kind: 'gl', mesh, pos: from.clone(), prev: from.clone(), vel: v, life: 6, attacker, def, bounceSnd: 0 });
   }
 
   startPool(a) {
@@ -472,7 +669,7 @@ export class Combat {
           g.particles.bloodSpray(tmp, _a, 14, a.pos.y + 0.005, 1.5);
           this.startPool(a);
         }
-        if (a.isPlayer) g.ui.damageFlash(attacker);
+        if (a.isPlayer) { g.ui.damageFlash(attacker); _w1.set(a.pos.x - x, 0, a.pos.z - z).normalize(); this.playerHitFx({ pos: { x, z } }, _w1, dmg * k * 0.5, 'torso'); }
         else if (attacker && attacker.isPlayer) this.playerHit();
       }
     }
@@ -484,6 +681,12 @@ export class Combat {
         v.damage(dmg * 8 * k, attacker);
         v.vx += (v.pos.x - x) / (d || 1) * 10 * k; v.vz += (v.pos.z - z) / (d || 1) * 10 * k;
       }
+    }
+    // [savaş] ek hedefler (helikopter vb.)
+    for (const T of this.targets) {
+      if (T.dead || T.owner === attacker) continue;
+      const d = Math.hypot(T.pos.x - x, T.pos.y - y, T.pos.z - z);
+      if (d < radius * 1.6) T.onHit(dmg * 3 * (1 - d / (radius * 1.6)), attacker, T.pos);
     }
     this.noise(x, z, 150, attacker);
     if (attacker && attacker.isPlayer) g.wanted.crime('explosion', { x, z });
@@ -571,6 +774,7 @@ export class Combat {
     this.updateShells(dt);
     this.updateProjectiles(dt);
     this.updateArc();
+    this.updatePlayerHealth(dt); // [savaş] kanama, kısmi iyileşme, ilk yardım (B)
     // kanamalar
     for (let i = this.bleeding.length - 1; i >= 0; i--) {
       const b = this.bleeding[i];
@@ -579,7 +783,7 @@ export class Combat {
       b.a.takeDamage(b.dps * dt, b.attacker, 'bleed');
       if (b.a.dead) this.startPool(b.a);
       b.drip -= dt;
-      if (b.drip <= 0) { b.drip = 0.18 + Math.random() * 0.2; tmp.set(b.a.pos.x + (Math.random() - 0.5) * 0.2, b.a.pos.y + 0.9, b.a.pos.z + (Math.random() - 0.5) * 0.2); g.particles.blood(tmp, 2, null, b.a.pos.y + 0.005); }
+      if (b.drip <= 0) { b.drip = 0.18 + Math.random() * 0.2; tmp.set(b.a.pos.x + (Math.random() - 0.5) * 0.2, b.a.pos.y + (b.a.downed ? 0.3 : 0.9), b.a.pos.z + (Math.random() - 0.5) * 0.2); g.particles.blood(tmp, 2, null, b.a.pos.y + 0.005); }
     }
     // kan gölleri: ceset kaldırılınca sönsün; ateşli silahla ölmeyen cesetlere de göl
     this.poolCheckT -= dt;
@@ -638,6 +842,7 @@ export class Combat {
       p.life -= dt;
       p.prev.copy(p.pos);
       if (p.kind === 'grenade') p.vel.y -= 18 * dt;
+      else if (p.kind === 'gl') p.vel.y -= 9.8 * dt;
       p.pos.addScaledVector(p.vel, dt);
       let boom = p.life <= 0;
       tmp.copy(p.pos).sub(p.prev);
@@ -646,7 +851,7 @@ export class Combat {
         tmp.divideScalar(len);
         const h = g.physics.raycast(p.prev.x, p.prev.y, p.prev.z, tmp.x, tmp.y, tmp.z, len + 0.1);
         if (h) {
-          if (p.kind === 'rocket') boom = true;
+          if (p.kind === 'rocket' || p.kind === 'gl') boom = true;
           else {
             // sekme
             _n.set(h.nx, h.ny, h.nz);
@@ -657,7 +862,13 @@ export class Combat {
             else if (sp > 2.5) audio.grenadeBounce(p.pos.x, p.pos.z, Math.min(1, sp / 12));
           }
         }
+        if (p.kind === 'gl') {
+          if (this.rayActors(p.prev, tmp, len + 0.3, p.attacker) || this.rayVehicles(p.prev, tmp, len + 0.3, p.attacker.vehicle) || this.rayTargets(p.prev, tmp, len + 0.3, p.attacker)) boom = true;
+          if (Math.random() < 0.5) { _b.copy(tmp).negate(); g.particles.trail(p.pos, _b, 0.35); }
+          p.mesh.lookAt(p.pos.x + tmp.x, p.pos.y + tmp.y, p.pos.z + tmp.z);
+        }
         if (p.kind === 'rocket') {
+          if (this.rayTargets(p.prev, tmp, len + 0.3, p.attacker)) boom = true;
           if (this.rayActors(p.prev, tmp, len + 0.3, p.attacker)) boom = true;
           if (this.rayVehicles(p.prev, tmp, len + 0.3, p.attacker.vehicle)) boom = true;
           // egzoz izi: yol boyunca aralıklı
