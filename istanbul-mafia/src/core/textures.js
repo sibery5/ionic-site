@@ -821,7 +821,7 @@ export function propAtlas() {
     // askeri uyarı tabelası 256x128 @ (256,1152)
     g.save(); g.translate(256, 1152);
     g.fillStyle = '#c8102e'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#fff'; g.fillRect(6, 6, 244, 116); g.fillStyle = '#c8102e'; g.fillRect(12, 12, 232, 104);
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 30px Arial'; g.fillText('ASKERİ BÖLGE', 128, 52); g.font = 'bold 18px Arial'; g.fillText('GİRMEK YASAKTIR', 128, 80); g.font = '14px Arial'; g.fillText('Ateş açılabilir', 128, 104);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 25px Arial'; g.fillText('ASKERİ YASAK BÖLGE', 128, 50); g.font = 'bold 18px Arial'; g.fillText('GİRMEK YASAKTIR', 128, 80); g.font = '14px Arial'; g.fillText('Ateş açılabilir', 128, 104);
     g.restore(); reg('military', 256, 1152, 256, 128);
     // kamuflaj 256x256 @ (512,1152)
     g.save(); g.translate(512, 1152);

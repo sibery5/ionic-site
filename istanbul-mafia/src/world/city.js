@@ -4,7 +4,7 @@
 // küçük ayrıntılar kameraya yakın örnekleyicilerle (NearInstancer) çizilir.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, districtAt } from './map.js';
+import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, HARBOR, districtAt } from './map.js';
 import { RNG } from '../core/util.js';
 import { oceanNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
 import { SHARED, OCEAN, oceanMaterial, oceanGeometry, oceanObstacle, terrainMaterial, pbrMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
@@ -17,6 +17,7 @@ import { buildMilitary, paintMilitary, MILITARY_PROP_DEFS, MILITARY_PROP_OPTS } 
 import { buildLandmark } from './landmarks.js';
 import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
+import { buildHarbor, buildForest, paintLocations, LOCATION_PROP_DEFS, LOCATION_PROP_OPTS } from './locations.js';
 
 export const PALETTE = BPAL;
 export const SHOP_SIGNS = BSIGNS;
@@ -40,6 +41,8 @@ export class City {
     this.rng = new RNG(99);
     this.doors = []; // {x,z,building}
     this.lamps = [];
+    this.lightSources = []; // {x,y,z,color,i,pool} — lights.js gerçek ışık atar, geri kalanlar ışık havuzu çıkartması
+    this.searchlights = []; // {x,y,z,tx,tz} askeri kule projektörleri (lights.js + ışık konisi)
     // ortak uniform'ları oyunun uniform nesnesine bağla
     if (uniforms) {
       if (uniforms.uNight) SHARED.uNight = uniforms.uNight; else uniforms.uNight = SHARED.uNight;
@@ -50,7 +53,7 @@ export class City {
     this.near = [];
     this.finalizeLater = [];
     this.props = {};
-    const defs = [[FACADE_PROP_DEFS, FACADE_PROP_OPTS], [STREET_PROP_DEFS, STREET_PROP_OPTS], [PARK_PROP_DEFS, PARK_PROP_OPTS], [POLICE_PROP_DEFS, POLICE_PROP_OPTS], [MILITARY_PROP_DEFS, MILITARY_PROP_OPTS], [ZONE_PROP_DEFS, ZONE_PROP_OPTS]];
+    const defs = [[FACADE_PROP_DEFS, FACADE_PROP_OPTS], [STREET_PROP_DEFS, STREET_PROP_OPTS], [PARK_PROP_DEFS, PARK_PROP_OPTS], [POLICE_PROP_DEFS, POLICE_PROP_OPTS], [MILITARY_PROP_DEFS, MILITARY_PROP_OPTS], [ZONE_PROP_DEFS, ZONE_PROP_OPTS], [LOCATION_PROP_DEFS, LOCATION_PROP_OPTS]];
     const lodK = quality === 'low' ? 0.6 : quality === 'high' ? 1.35 : 1;
     for (const [D, O] of defs) for (const k of Object.keys(D)) {
       const o = O[k] || {};
@@ -87,6 +90,31 @@ export class City {
   }
 
   // ---------- yardımcılar (diğer dünya modülleri kullanır) ----------
+  // Gece ışık kaynağı: (x,y,z) lamba başı; pool: zemine ışık havuzu çıkartması (y0 zemini)
+  addLight(x, y, z, color = 0xffc27a, i = 1, pool = true, y0 = null) {
+    const s = { x, y, z, color, i, pool, y0: y0 === null ? (this.onSlab(x, z) ? 0.17 : 0.02) : y0 };
+    this.lightSources.push(s);
+    return s;
+  }
+  // Tüm ışık kaynaklarının altına tek örnekli (InstancedMesh) eklemeli ışık havuzu (gece görünür)
+  buildLightPools() {
+    const L = this.lightSources.filter((s) => s.pool);
+    if (!L.length) return;
+    const geo = new THREE.CircleGeometry(1, 20); geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: poolTexture(), polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true });
+    this.poolMat = mat;
+    const mesh = new THREE.InstancedMesh(geo, mat, L.length);
+    const m = new THREE.Matrix4(), c = new THREE.Color();
+    L.forEach((s, i) => {
+      const r = Math.max(4, Math.min(11, (s.y - s.y0) * 1.25)) * (0.85 + 0.15 * (s.i || 1));
+      m.makeScale(r, 1, r); m.setPosition(s.x, s.y0, s.z);
+      mesh.setMatrixAt(i, m); mesh.setColorAt(i, c.setHex(s.color));
+    });
+    mesh.instanceColor.needsUpdate = true;
+    mesh.renderOrder = 2; mesh.computeBoundingSphere();
+    this.group.add(mesh);
+    this.pools = mesh;
+  }
   addNear(inst) { if (inst.finalize(this.group)) this.near.push(inst); }
   mark(x, z, w, d, ry = 0, color = null, y = 0.004) { this.markList.push([x, y, z, w, d, ry, color]); }
   addSign(key, x, y, z, ry, w, h) {
@@ -193,6 +221,7 @@ export class City {
     paintVillas(paint);
     paintMilitary(paint);
     paintAirport(paint);
+    paintLocations(paint);
     const maskTex = new THREE.DataTexture(mask, S, S, THREE.RGBAFormat);
     maskTex.magFilter = THREE.LinearFilter; maskTex.minFilter = THREE.LinearMipmapLinearFilter; maskTex.generateMipmaps = true; maskTex.anisotropy = 4;
     maskTex.needsUpdate = true;
@@ -334,13 +363,14 @@ export class City {
     const postGeo = new THREE.BoxGeometry(0.1, 1.0, 0.1); postGeo.translate(0, 0.5, 0);
     const posts = [];
     const marinaGaps = MARINA.entrances.map((e) => [e.z0, e.z1]);
+    const harborGaps = HARBOR.piers.map((p) => [p.x0, p.x1]); // liman rıhtımına kara bağlantısı
     for (const s of segs) {
       const len = s.b - s.a, mid = (s.a + s.b) / 2;
       const off = s.side * 0.6;
       const wg = new THREE.BoxGeometry(s.axis === 'z' ? 1.2 : len, 4.2, s.axis === 'z' ? len : 1.2);
       if (s.axis === 'z') wg.translate(s.v + off, -2.1, mid); else wg.translate(mid, -2.1, s.v + off);
       walls.push(wg);
-      const railParts = s.axis === 'z' && s.v === 200 ? split(s.a, s.b, marinaGaps) : [[s.a, s.b]];
+      const railParts = s.axis === 'z' && s.v === 200 ? split(s.a, s.b, marinaGaps) : s.axis === 'x' && s.v === 820 && s.a >= 420 ? split(s.a, s.b, harborGaps) : [[s.a, s.b]];
       for (const [ra, rb] of railParts) {
         const rl = rb - ra, rm = (ra + rb) / 2;
         const rx = s.axis === 'z' ? s.v + s.side * 0.4 : rm, rz = s.axis === 'z' ? rm : s.v + s.side * 0.4;
@@ -371,6 +401,9 @@ export class City {
     buildAirport(this);
     buildMarina(this);
     buildVillas(this);
+    buildHarbor(this);
+    buildForest(this);
+    this.buildLightPools();
     // çim (kamera çevresi)
     if (this.quality !== 'low') { this.grass = grassField(this.maskTex, this.quality === 'high' ? 42 : 32, this.quality === 'high' ? 0.45 : 0.55); this.group.add(this.grass); }
     // yol çizgileri: tek örnekli mesh
@@ -396,10 +429,20 @@ export class City {
 
   setNight(n) {
     if (this.haloMat) this.haloMat.opacity = n * 0.85;
-    if (this.poolMat) this.poolMat.opacity = n * (0.32 + SHARED.uWet.value * 0.2);
+    // gerçek ışıklar yakındakileri aydınlatır; havuz çıkartması uzaktakiler için (ıslak zeminde daha parlak)
+    if (this.poolMat) this.poolMat.opacity = n * (0.42 + SHARED.uWet.value * 0.25);
+    if (this.beamMat) this.beamMat.opacity = n * 0.16;
   }
 }
 
+
+function poolTexture() {
+  const c = makeCanvas(64, 64); const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.5, 'rgba(255,255,255,0.45)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 
 function cleanGeo(g) {
   const n = g.index ? g.toNonIndexed() : g;

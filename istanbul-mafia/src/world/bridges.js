@@ -305,6 +305,8 @@ function liftStreetPropsOntoBridges(city, cols) {
     if (!inst) continue;
     for (const it of inst.items) { const h = bridgeHeightAt(it.x, it.z); if (h) it.e[13] += h; }
   }
+  // gece ışık kaynakları (havuz çıkartmaları buildLightPools'ta bu yüksekliklerle kurulur)
+  for (const L of city.lightSources || []) { const h = bridgeHeightAt(L.x, L.z); if (h) { L.y += h; L.y0 = h + 0.02; } }
   // ışık havuzları / haleler (streetprops oluşturmuş durumda)
   city.group.traverse((o) => {
     if (o.isPoints && o.material === city.haloMat) {

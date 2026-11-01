@@ -35,6 +35,7 @@ import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
 import { formatMoney, clamp } from './core/util.js';
+import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
 
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
@@ -188,6 +189,7 @@ class Game {
     this.particles = new Particles(this.scene);
     this.combat = new Combat(this);
     this.vehicles = new VehicleManager(this);
+    this.nightLights = new NightLights(this, q); // [dünya/ışık] sabit sayıda lamba/far/projektör ışığı
     this.traffic = new TrafficLights(this);
     this.boats = new BoatManager(this);
     this.aircraft = new AircraftManager(this);
@@ -981,6 +983,7 @@ class Game {
     this.uniforms.uNight.value = this.env.nightFactor;
     this.city.setNight(this.env.nightFactor);
     this.city.update(dt, t);
+    this.nightLights.update(dt, this.camera.position); // [dünya/ışık]
     this.animals.update(dt);
     if (this.flag) this.flag.rotation.y = Math.sin(t * 2) * 0.15;
   }
@@ -1021,6 +1024,7 @@ class Game {
     if (!inside) {
       this.city.update(dt, t);
       this.vehicles.update(dt);
+      this.nightLights.update(dt, this.camera.position); // [dünya/ışık]
       this.traffic.update(dt);
       this.boats.update(dt);
       this.aircraft.update(dt);

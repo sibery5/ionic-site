@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import {
   asphaltPBR, pavementPBR, cobblePBR, grassPBR, plasterPBR, brickPBR, roofTilePBR, noiseTexture, propAtlas,
 } from '../core/textures.js';
+import { HARBOR } from './map.js';
+const HARBOR_BOX = HARBOR.box;
 
 // Ortak (paylaşılan) uniform'lar. uNight ana oyundaki uniforms.uNight ile aynı nesneye bağlanır.
 export const SHARED = {
@@ -757,7 +759,7 @@ export function skyDomeMaterial() {
 // karşı kıyı silüeti / gece şehir ışığı yansıması (ucuz kıyı ışın yürüyüşü), güneş/ay parıltısı,
 // kıyıdan uzaklığa göre derinlik rengi, kıyı/iskele/gemi köpüğü ve Kelvin dümen suyu, yağmur halkaları.
 // Tek çizim çağrısı. Gemi verisi: OCEAN.uShipP/uShipD (ships.js doldurur), engeller: OCEAN.uObs.
-export const MAX_SHIPS = 14, MAX_OBS = 32;
+export const MAX_SHIPS = 14, MAX_OBS = 40;
 export const OCEAN = {
   uWave: { value: 0.15 }, uCenter: { value: new THREE.Vector2() },
   uDeep: { value: new THREE.Color(0.005, 0.026, 0.036) }, uShallow: { value: new THREE.Color(0.018, 0.07, 0.066) },
@@ -798,16 +800,31 @@ export function oceanMaterial(quality) {
   const hi = quality === 'high' ? 1 : 0;
   const mat = new THREE.ShaderMaterial({
     uniforms, fog: true, side: THREE.FrontSide,
-    defines: { MAX_SHIPS, MAX_OBS, HIQ: hi },
+    defines: { MAX_SHIPS, MAX_OBS, HIQ: hi, HARBOR_A: 'vec2(' + HARBOR_BOX[0].toFixed(1) + ',' + HARBOR_BOX[1].toFixed(1) + ')', HARBOR_B: 'vec2(' + HARBOR_BOX[2].toFixed(1) + ',' + HARBOR_BOX[3].toFixed(1) + ')' },
     vertexShader: `
       uniform float uTime, uWave; uniform vec2 uCenter;
       varying vec3 vW; varying float vDist; varying float vCrest;
       ${OCEAN_WAVES}
       #include <fog_pars_vertex>
+      float bxD(vec2 p, vec2 a, vec2 b){ vec2 c = (a + b) * 0.5, e = (b - a) * 0.5; vec2 d = abs(p - c) - e; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+      // rıhtım / köprü / iskele yakınında dalga genliği kısılır (yapı ile su arasında hep görünür serbest yükseklik)
+      float structD(vec2 p){
+        float d = bxD(p, vec2(-1000.0, -1000.0), vec2(200.0, 70.0));
+        d = min(d, bxD(p, vec2(-1000.0, 70.0), vec2(-850.0, 190.0)));
+        d = min(d, bxD(p, vec2(-1000.0, 190.0), vec2(200.0, 820.0)));
+        d = min(d, bxD(p, vec2(420.0, -1000.0), vec2(1000.0, 820.0)));
+        d = min(d, length(p - vec2(312.0, 290.0)) - 16.0);
+        d = min(d, bxD(p, vec2(-162.0, 60.0), vec2(-138.0, 200.0)));
+        d = min(d, bxD(p, vec2(-512.0, 60.0), vec2(-488.0, 200.0)));
+        d = min(d, bxD(p, vec2(200.0, -700.0), vec2(262.0, -560.0)));
+        d = min(d, bxD(p, HARBOR_A, HARBOR_B));
+        return d;
+      }
       void main(){
         vec3 p = position + vec3(uCenter.x, 0.0, uCenter.y);
         float dist = length(p.xz - cameraPosition.xz);
         float fade = 1.0 - smoothstep(120.0, 520.0, dist);
+        fade *= mix(0.12, 1.0, smoothstep(0.0, 38.0, structD(p.xz)));
         vec3 w = waves(p.xz, uTime) * uWave * fade;
         // Gerstner: tepelere doğru yatay sıkışma
         p.xz -= vec2(w.y, w.z) * 1.0;

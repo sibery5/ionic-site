@@ -166,8 +166,8 @@ export function buildStreetProps(city) {
         const y0 = inBridge(x, z) ? 0 : 0.15;
         (classic ? P.lampClassic : P.lampModern).addTRS(x, y0, z, rot);
         cols.addCircle(x, z, 0.2, 0, classic ? 4.9 : 6.6, 'lamp');
-        if (classic) halos.push(x, y0 + 4.75, z);
-        else { const hx = x - Math.sin(rot) * 1.6, hz = z - Math.cos(rot) * 1.6; halos.push(hx, y0 + 6.4, hz); }
+        if (classic) { halos.push(x, y0 + 4.75, z); city.addLight(x, y0 + 4.75, z, 0xffc27a, 0.75); }
+        else { const hx = x - Math.sin(rot) * 1.6, hz = z - Math.cos(rot) * 1.6; halos.push(hx, y0 + 6.4, hz); city.addLight(hx, y0 + 6.4, hz, 0xffd9a0, 1); }
         // lamba dibinde çöp kovası
         if (r.chance(0.18) && !rd.bridge) {
           const bx = horiz ? x + 1.3 : x, bz = horiz ? z : z + 1.3;
@@ -286,24 +286,8 @@ export function buildStreetProps(city) {
   city.haloMat = new THREE.PointsMaterial({ map: glowTexture(), color: 0xffc880, size: 2.6, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const hp = new THREE.Points(hg, city.haloMat); hp.renderOrder = 3;
   city.group.add(hp);
-  // ışık havuzları (zemine düşen sahte ışık)
-  const poolGeo = new THREE.CircleGeometry(6, 18); poolGeo.rotateX(-Math.PI / 2);
-  const poolMat = new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: poolTexture(), polygonOffset: true, polygonOffsetFactor: -4 });
-  city.poolMat = poolMat;
-  const pools = new THREE.InstancedMesh(poolGeo, poolMat, lamps.length);
-  const m = new THREE.Matrix4();
-  lamps.forEach(([x, z, rot], i) => { m.makeTranslation(x + Math.sin(rot + Math.PI) * 1.6, 0.17, z + Math.cos(rot + Math.PI) * 1.6); pools.setMatrixAt(i, m); });
-  pools.renderOrder = 2;
-  city.group.add(pools);
+  // ışık havuzları: city.buildLightPools (tüm ışık kaynakları toplandıktan sonra)
   buildMarkings(city);
-}
-
-function poolTexture() {
-  const c = makeCanvas(64, 64); const g = c.getContext('2d');
-  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.5, 'rgba(255,255,255,0.45)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
 }
 
 // Yol çizgileri: şerit, orta çift sarı, kenar, yaya geçidi, dur çizgisi
