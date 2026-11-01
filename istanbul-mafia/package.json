@@ -1,7 +1,7 @@
 {
   "name": "istanbul-mafia",
   "productName": "Istanbul Mafia",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Istanbul Mafia - acik dunya 3D mafya oyunu",
   "main": "electron/main.js",
   "author": "Istanbul Mafia Team",
