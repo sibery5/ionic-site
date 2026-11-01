@@ -30,7 +30,7 @@ module.exports = async (p, out) => {
     CM.animate = orig;
     const R = g.renderer;
     R.info.autoReset = false;
-    const draw = () => { R.info.reset(); const t = performance.now(); g.render(); const ms = performance.now() - t; return { calls: R.info.render.calls, tris: R.info.render.triangles, ms: +ms.toFixed(1) }; };
+    const draw = () => { R.info.reset(); R.shadowMap.needsUpdate = true; const t = performance.now(); g.render(); const ms = performance.now() - t; return { calls: R.info.render.calls, tris: R.info.render.triangles, ms: +ms.toFixed(1) }; };
     const avg = () => { const r = [draw(), draw(), draw()]; return { calls: r[2].calls, tris: r[2].tris, ms: +((r[0].ms + r[1].ms + r[2].ms) / 3).toFixed(1) }; };
     for (let i = 0; i < 4; i++) { sim(1 / 30); draw(); }
     const withN = avg();

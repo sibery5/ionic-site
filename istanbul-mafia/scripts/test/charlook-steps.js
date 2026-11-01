@@ -1,6 +1,6 @@
 // Karakter görsel kontrolü: yaratıcı yakın plan, 8 NPC dizisi, koşu orta adım.
 //   SETTINGS='{"quality":"medium"}' node scripts/test/play.js file://$PWD/app/index.html <out> $PWD/scripts/test/charlook-steps.js
-const clickText = (p, t) => p.evaluate((t) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === t).click(), t);
+const clickText = (p, t) => p.click('text=' + t, { timeout: 180000 });
 module.exports = async (p, out) => {
   p.setDefaultTimeout(600000);
   const errs = [];
@@ -13,16 +13,17 @@ module.exports = async (p, out) => {
   // yaratıcı yakın plan (yüz + gövde)
   await p.evaluate(() => {
     const g = game, m = g.creatorModel;
+    g.frameCreatorCam = () => {}; g.creatorCam.clearViewOffset();
     m.root.rotation.y = 0.35;
     for (let k = 0; k < 30; k++) m.animate(1 / 30, { speed: 0, force: true });
-    g.creatorCam.position.set(-0.9 + 0.2, 1.7, 0.75); g.creatorCam.lookAt(-0.9, 1.64, 0); g.creatorCam.fov = 30; g.creatorCam.updateProjectionMatrix();
+    g.creatorCam.position.set(0.2, 1.7, 0.75); g.creatorCam.lookAt(0, 1.64, 0); g.creatorCam.fov = 30; g.creatorCam.updateProjectionMatrix();
     document.querySelectorAll('.panel, .modal, #hud').forEach((e) => (e.style.visibility = 'hidden'));
     g.renderer.render(g.creatorScene, g.creatorCam); g.renderer.render(g.creatorScene, g.creatorCam);
   });
   await p.screenshot({ path: out + '-creator-face.png' });
   await p.evaluate(() => {
     const g = game;
-    g.creatorCam.position.set(-0.9 + 0.6, 1.2, 3.2); g.creatorCam.lookAt(-0.9, 0.95, 0); g.creatorCam.updateProjectionMatrix();
+    g.creatorCam.position.set(0.6, 1.2, 3.2); g.creatorCam.lookAt(0, 0.95, 0); g.creatorCam.updateProjectionMatrix();
     g.renderer.render(g.creatorScene, g.creatorCam);
   });
   await p.screenshot({ path: out + '-creator.png' });

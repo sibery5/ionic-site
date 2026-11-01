@@ -394,6 +394,8 @@ export class CharacterModel {
     this.time += dt;
     const t = this.time, P = this.P, Q = this.Q, W = this.w;
     if (!this.root.parent && !st.force) return;
+    // uzak LOD (>38 m): pozu yarı hızda hesapla (görsel fark yok, CPU yarıya iner)
+    if (this.lod === 2 && !st.dead && !st.force) { this.skipDt = (this.skipDt || 0) + dt; if ((this.skipN = (this.skipN || 0) + 1) & 1) return; dt = Math.min(0.1, this.skipDt); this.skipDt = 0; }
     if (st.force && this.forceLod === null && this.lod !== 0) this.setLod(0);
     const fistW = this.fistWant || (this.fistWant = [0, 0]);
     fistW[0] = 0; fistW[1] = 0;
@@ -862,12 +864,15 @@ export class CharacterModel {
   // parmak bükümü (0 açık, 1 yumruk)
   applyHands(dt, want) {
     for (let i = 0; i < 2; i++) {
-      this.curl[i] = dmp(this.curl[i], want[i], 14, dt);
+      const prev = this.curl[i];
+      this.curl[i] = dmp(prev, want[i], 14, dt);
+      if (Math.abs(this.curl[i] - prev) < 1e-4 && this.handsSet) continue;
       const a = this.arms[i], s = a.s, c = this.curl[i];
       a.fi.rotation.set(0, 0, -s * c * 1.5);
       a.fd.rotation.set(0, 0, -s * c * 1.45);
       a.th.rotation.set(0.35 * c, -s * 0.2 * c, -s * c * 0.85);
     }
+    this.handsSet = true;
   }
 
   // pozu kemiklere yaz; FK durumlarında kalça yüksekliği bacaklardan hesaplanır (ayak yere basar)
@@ -1034,6 +1039,8 @@ export class CharacterModel {
 
   solveWeaponIK(st, wid, wdef, twoH, gunW, pitch, yawO, rec) {
     const W = this.w, V = WV;
+    // alçak tek elli tutuş (nişan/şarjör yok): FK pozu yeterli, dünya matrisi güncellemesi gereksiz
+    if (!twoH && W.aim < 0.01 && W.reload < 0.01) return;
     this.root.updateMatrixWorld(true);
     const ry = this.root.rotation.y, h = ry + yawO * W.aim;
     const aimP = wid === 'rpg' ? Math.max(pitch, -0.2) : pitch;

@@ -3,7 +3,7 @@
 const H = require('./harness.js');
 // yavaş makinelerde playwright click'in kararlılık beklemesini atla
 const shot = async (p, path) => { await p.evaluate(() => { game.render(); }); await p.screenshot({ path, timeout: 400000 }); };
-const clickText = (p, t) => p.evaluate((t) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === t).click(), t);
+const clickText = (p, t) => p.click('text=' + t, { timeout: 180000 });
 module.exports = async (p, out) => {
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message));
