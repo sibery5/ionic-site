@@ -101,7 +101,7 @@ function buildTiles() {
   };
   tiles[5] = (u, v) => { // deri: hücre kırışıkları
     const c = cl(u, v), cr = sst(0.0, 0.09, c);
-    return { h: 0.25 + 0.6 * cr + 0.15 * n3(u, v), alb: 0.78 + 0.2 * cr + 0.06 * n1(u, v) };
+    return { h: 0.4 + 0.4 * cr + 0.1 * n3(u, v), alb: 0.88 + 0.1 * cr + 0.04 * n1(u, v) };
   };
   tiles[6] = (u, v) => { const h = 0.5 + 0.5 * Math.sin(TAU * 18 * u) * (0.85 + 0.15 * Math.sin(TAU * 48 * v)); return { h, alb: 0.82 + 0.18 * h }; };
   tiles[7] = (u, v) => { const h = fuzz(u, v); return { h, alb: 0.86 + 0.16 * h }; };
@@ -124,7 +124,7 @@ export function charAtlas() {
   const ga = ca.getContext('2d'), gn = cn.getContext('2d');
   const ia = ga.createImageData(S, S), inn = gn.createImageData(S, S);
   const H = new Float32Array(T * T), A = new Float32Array(T * T), AL = new Float32Array(T * T);
-  const STR = [2.2, 3, 3, 3, 2.5, 4, 3, 2.5, 1.5, 3, 3, 3, 0, 3, 3, 3];
+  const STR = [2.2, 3, 3, 3, 2.5, 1.6, 3, 2.5, 1.5, 3, 3, 3, 0, 3, 3, 3];
   for (let id = 0; id < 16; id++) {
     const fn = tiles[id];
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
@@ -160,7 +160,7 @@ export function charAtlas() {
 }
 
 // ---------------- kafa UV + yüz dokusu ----------------
-export function headDims(f) { return f ? { cy: 0.112, cz: 0.012, rx: 0.073, ry: 0.108, rz: 0.094 } : { cy: 0.115, cz: 0.012, rx: 0.078, ry: 0.113, rz: 0.099 }; }
+export function headDims(f) { return f ? { cy: 0.11, cz: 0.012, rx: 0.076, ry: 0.112, rz: 0.097 } : { cy: 0.112, cz: 0.012, rx: 0.082, ry: 0.117, rz: 0.103 }; }
 export function headUV(dx, dy, dz) {
   const phi = Math.atan2(dx, dz);
   const lat = Math.asin(Math.max(-1, Math.min(1, dy)));
@@ -250,7 +250,7 @@ export function faceTexture(look) {
   }
   // dudaklar
   {
-    const [mx, my] = P(0, -0.06), [sx, sy] = sc(0, -0.06);
+    const [mx, my] = P(0, -0.06), [sx, sy] = sc(0.012, -0.06);
     const mw = (f ? 0.021 : 0.022) * sx, uh = (f ? 0.0058 : 0.0045) * sy, lh = (f ? 0.0075 : 0.006) * sy;
     const lip = f || look.makeup ? new THREE.Color('#a8404c').lerp(skin, 0.3) : tint(0.18, -0.2, -0.12).lerp(new THREE.Color('#8a4a40'), 0.3);
     g.fillStyle = hex(lip);
@@ -273,7 +273,7 @@ export function faceTexture(look) {
     const hc = new THREE.Color(look.hairColor);
     const dens = look.beard === 'stubble' ? 0.55 : 0.85;
     for (let i = 0; i < 11000; i++) {
-      const x = r.float(-0.078, 0.078), y = r.float(-0.128, 0.0);
+      const x = r.float(-0.072, 0.072), y = r.float(-0.128, 0.0);
       const ax = Math.abs(x);
       const inBeard = y < -0.022 - Math.max(0, 0.03 - ax) * 0.6 && !(ax < 0.024 && Math.abs(y + 0.062) < 0.008) && (ax > 0.05 ? y < 0.005 : true);
       const mus = ax < 0.026 && y > -0.057 && y < -0.045;
@@ -281,7 +281,7 @@ export function faceTexture(look) {
       if (look.beard === 'mustache' && !mus && r.next() > 0.2) continue;
       if (look.beard === 'keci' && !mus && !(ax < 0.022 && y < -0.065) && r.next() > 0.2) continue;
       const [px, py] = P(x, y);
-      g.fillStyle = rgba(hc.clone().multiplyScalar(0.8), dens * r.float(0.3, 0.9));
+      g.fillStyle = rgba(hc.clone().multiplyScalar(0.8), dens * r.float(0.3, 0.9) * (1 - 0.75 * Math.min(1, Math.max(0, (ax - 0.05) / 0.022))));
       g.fillRect(px, py, 1.4, 1.4);
     }
   }

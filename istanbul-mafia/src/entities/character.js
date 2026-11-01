@@ -1094,3 +1094,6 @@ export class CharacterModel {
     }
   }
 }
+
+// test/araç kancası (headless testler için)
+if (typeof window !== "undefined") window.__randomLook = randomLook;

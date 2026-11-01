@@ -26,7 +26,7 @@ export const BONE_PARENT = {
   hipL: 'hips', knL: 'hipL', anL: 'knL', toeL: 'anL', hipR: 'hips', knR: 'hipR', anR: 'knR', toeR: 'anR',
 };
 // geriye uyum: eski sabitler
-export const RIG = { hips: 0.95, spine: 1.05, chest: 1.25, neck: 1.47, head: 1.56, shX: 0.2, shY: 1.45, elY: 1.16, wrY: 0.9, hipX: 0.095, hipY: 0.92, knY: 0.49, anY: 0.08 };
+export const RIG = { hips: 0.95, spine: 1.05, chest: 1.25, neck: 1.46, head: 1.54, shX: 0.19, shY: 1.45, elY: 1.16, wrY: 0.9, hipX: 0.095, hipY: 0.92, knY: 0.49, anY: 0.08 };
 
 const q4 = (v, s) => Math.round(v / s) * s;
 // görünüşten vücut ölçüleri (birim erkek uzayı; boy farkı body.scale ile)
@@ -37,10 +37,10 @@ export function rigFor(L) {
   const fat = q4(clamp(L.fat || 0, 0, 1), 0.1);
   const age = q4(clamp(L.age || 0, 0, 1), 0.25);
   const height = q4(clamp(L.height || 1, 0.9, 1.1), 0.02) * (f ? 0.94 : 1) * (1 - 0.025 * age);
-  const shX = 0.2 * (f ? 0.87 : 1) * (0.55 + 0.45 * bk) * sw;
+  const shX = 0.19 * (f ? 0.88 : 1) * (0.55 + 0.45 * bk) * sw;
   const hipX = 0.095 * (f ? 1.05 : 1) * (0.72 + 0.28 * bk + 0.04 * fat);
   const hk = f ? 0.9 : 1;
-  const pos = { hips: [0, 0.95, 0], spine: [0, 1.05, 0], chest: [0, 1.25, 0], neck: [0, 1.47, 0], head: [0, 1.56, 0] };
+  const pos = { hips: [0, 0.95, 0], spine: [0, 1.05, 0], chest: [0, 1.25, 0], neck: [0, 1.46, 0], head: [0, 1.54, 0] };
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R', x = s * shX;
     pos['sh' + S] = [x, 1.45, 0]; pos['el' + S] = [x, 1.16, 0]; pos['wr' + S] = [x, 0.9, 0];
@@ -361,7 +361,7 @@ export function headPoint(f, dx, dy, dz, out, age = 0) {
     dzv += (f ? 0.004 : 0.0068) * g2(0, 0.031, 0.05, 0.007); // kaş kemeri
     dzv += (f ? 0.006 : 0.0048) * g2(0, -0.054, 0.019, 0.0045); // üst dudak
     dzv += (f ? 0.007 : 0.0058) * g2(0, -0.066, 0.018, 0.005); // alt dudak
-    dzv -= 0.0028 * g2(0, -0.0602, 0.022, 0.0016); // ağız çizgisi
+    dzv -= 0.0018 * g2(0, -0.0602, 0.013, 0.0022); // ağız çizgisi
     dzv -= 0.003 * g2(0, -0.078, 0.016, 0.004); // dudak altı çukur
     dzv += (f ? 0.004 : 0.007) * g2(0, -0.097, 0.019, 0.013); // çene ucu
     dzv -= 0.0015 * g2(0, -0.046, 0.004, 0.005); // filtrum
@@ -422,11 +422,11 @@ function torsoKeys(R) {
   const f = R.f, b = R.bk, sw = R.sw, fat = R.fat;
   const rows = f
     ? [[0.8, 0.03, 0.02, 0.02], [0.83, 0.12, 0.075, 0.085], [0.88, 0.172, 0.09, 0.112], [0.94, 0.178, 0.09, 0.112], [1.0, 0.158, 0.082, 0.094], [1.06, 0.133, 0.078, 0.08], [1.11, 0.126, 0.078, 0.078],
-      [1.18, 0.134, 0.084, 0.08], [1.25, 0.145, 0.098, 0.085], [1.31, 0.15, 0.1, 0.088], [1.36, 0.152, 0.095, 0.09], [1.41, 0.15, 0.088, 0.088], [1.45, 0.126, 0.068, 0.078], [1.48, 0.074, 0.052, 0.056],
-      [1.51, 0.05, 0.046, 0.046], [1.57, 0.047, 0.045, 0.045], [1.63, 0.04, 0.036, 0.04], [1.66, 0.01, 0.01, 0.01]]
+      [1.18, 0.134, 0.084, 0.08], [1.25, 0.145, 0.098, 0.085], [1.31, 0.15, 0.1, 0.088], [1.36, 0.152, 0.095, 0.09], [1.41, 0.15, 0.088, 0.088], [1.45, 0.14, 0.07, 0.08], [1.48, 0.095, 0.056, 0.06],
+      [1.51, 0.056, 0.05, 0.05], [1.57, 0.053, 0.049, 0.05], [1.63, 0.045, 0.04, 0.044], [1.66, 0.01, 0.01, 0.01]]
     : [[0.8, 0.03, 0.02, 0.02], [0.83, 0.115, 0.07, 0.08], [0.87, 0.158, 0.088, 0.104], [0.93, 0.166, 0.09, 0.11], [0.99, 0.162, 0.088, 0.097], [1.05, 0.152, 0.09, 0.086], [1.12, 0.15, 0.095, 0.086],
-      [1.2, 0.158, 0.1, 0.09], [1.28, 0.17, 0.106, 0.095], [1.35, 0.18, 0.108, 0.1], [1.41, 0.18, 0.098, 0.098], [1.45, 0.15, 0.075, 0.088], [1.48, 0.084, 0.058, 0.064],
-      [1.51, 0.056, 0.052, 0.052], [1.57, 0.052, 0.05, 0.05], [1.63, 0.044, 0.04, 0.044], [1.66, 0.01, 0.01, 0.01]];
+      [1.2, 0.158, 0.1, 0.09], [1.28, 0.17, 0.106, 0.095], [1.35, 0.18, 0.108, 0.1], [1.41, 0.18, 0.098, 0.098], [1.45, 0.165, 0.08, 0.09], [1.48, 0.11, 0.062, 0.07],
+      [1.51, 0.064, 0.056, 0.058], [1.57, 0.06, 0.055, 0.056], [1.63, 0.05, 0.045, 0.05], [1.66, 0.01, 0.01, 0.01]];
   return rows.map(([y, rx, rf, rb]) => {
     const bulk = y < 1.47 ? 0.62 + 0.38 * b : 0.85 + 0.15 * b;
     const shK = 1 + (sw - 1) * smooth(1.25, 1.4, y) * smooth(1.48, 1.44, y);
@@ -502,7 +502,7 @@ function buildTorso(c) {
   const skirtP = pants === 'skirt' || pants === 'longskirt';
   // V yaka / açık önü: (th,t) -> alt katman mı?
   const openHalf = (t) => {
-    if (topSpec.open && t > topSpec.open) return 0.03 + 0.6 * smooth(topSpec.open, 1.42, t);
+    if (topSpec.open && t > topSpec.open) return 0.03 + 0.4 * smooth(topSpec.open, 1.44, t);
     if ((top === 'leather' || top === 'denim') && t > 1.36) return 0.02 + 0.32 * smooth(1.36, 1.46, t);
     if (top === 'coat' && t > 0.8) return 0.05;
     return 0;
@@ -534,12 +534,12 @@ function buildTorso(c) {
   else bands.push({ t0: neckTop, t1: 1.66, off: 0, mat: c.skinM });
   T.emit(mb, bands, Q.torso, Q.dtT);
   c.neckTop = neckTop;
+  const darker = M(tc, topSpec.tile, topSpec.rough, 0, 0.78);
+  const seamM = M(tc, topSpec.tile, topSpec.rough, 0, 0.7);
   if (det) {
   const frontZ = (t) => { T.point(t, Math.PI / 2, 0, _p3); return _p3.z; };
   void frontZ;
   // --- yaka ve detaylar ---
-  const darker = M(tc, topSpec.tile, topSpec.rough, 0, 0.78);
-  const seamM = M(tc, topSpec.tile, topSpec.rough, 0, 0.7);
   if (top === 'tshirt' || top === 'sweater' || top === 'police') T.patch(mb, -Math.PI / 2, Math.PI * 1.5, 1.455, neckTop + 0.004, topSpec.off + 0.004, M(tc, 'rib', 0.9, 0, 0.92), 18, 1);
   if (top === 'shirt' || top === 'police_shirt' || top === 'polo' || top === 'vest' || top === 'police_vest') {
     const cc = top === 'vest' ? underM : topM;
@@ -656,7 +656,7 @@ function buildTorso(c) {
     const ck = [];
     for (const [y, rx, rf, rb] of [[0.99, 0.172, 0.105, 0.112], [0.9, 0.19, 0.112, 0.128], [0.75, 0.2, 0.125, 0.14], [0.6, 0.215, 0.14, 0.15], [0.45, 0.23, 0.15, 0.16], [0.3, 0.24, 0.16, 0.17]]) {
       if (y < yb - 0.16) break;
-      ck.push([y, 0, y, 0, rx * (0.75 + 0.25 * R.bk) + R.fat * 0.02, rf * (0.75 + 0.25 * R.bk) + R.fat * 0.04, rb * (0.75 + 0.25 * R.bk), 2.2]);
+      ck.push([y, 0, y, 0, rx * (0.75 + 0.25 * R.bk) + R.fat * 0.02 + 0.014, rf * (0.75 + 0.25 * R.bk) + R.fat * 0.04 + 0.012, rb * (0.75 + 0.25 * R.bk) + 0.012, 2.2]);
     }
     ck.reverse();
     const S = new Limb(ck, V(1, 0, 0), V(0, 0, 1), V(0, 1, 0), skirtW(R, 0.95, 0.75));
@@ -692,14 +692,14 @@ function buildArms(c) {
   const { L, R, Q, mb, f } = c;
   const top = c.top, ts = c.topSpec;
   const k = (f ? 0.84 : 1) * (0.6 + 0.4 * R.bk);
-  const rows = [[0, 0.012, 0.012, 0.012], [0.015, 0.036, 0.042, 0.04], [0.04, 0.05, 0.052, 0.05], [0.075, 0.053, 0.053, 0.05], [0.13, 0.05, 0.049, 0.047], [0.2, 0.046, 0.047, 0.044], [0.27, 0.04, 0.042, 0.04],
+  const rows = [[0, 0.008, 0.008, 0.008], [0.02, 0.024, 0.028, 0.026], [0.045, 0.04, 0.044, 0.042], [0.075, 0.048, 0.05, 0.047], [0.13, 0.05, 0.049, 0.047], [0.2, 0.046, 0.047, 0.044], [0.27, 0.04, 0.042, 0.04],
     [0.33, 0.037, 0.038, 0.038], [0.355, 0.036, 0.035, 0.039], [0.39, 0.039, 0.038, 0.036], [0.44, 0.038, 0.036, 0.034], [0.52, 0.03, 0.03, 0.028], [0.585, 0.022, 0.027, 0.027], [0.615, 0.019, 0.026, 0.026], [0.625, 0.015, 0.02, 0.02], [0.632, 0.004, 0.004, 0.004]];
   const shortS = top === 'tshirt' || top === 'polo' || top === 'police_shirt' || top === 'vest' && false;
   const sleeveEnd = shortS ? 0.2 : top === 'vest' || top === 'police_vest' ? 0.6 : 0.585;
-  const sleeveOff = (th, t) => ts.off + (shortS ? 0.008 * smooth(0.06, 0.2, t) : 0.004) + (top === 'coat' || top === 'suit' || top === 'blazer' ? 0.008 * smooth(0.1, 0.0, t) : 0);
+  const sleeveOff = (th, t) => ts.off + (shortS ? 0.003 + 0.003 * smooth(0.1, 0.2, t) : 0.004) + (top === 'coat' || top === 'suit' || top === 'blazer' ? 0.008 * smooth(0.1, 0.0, t) : 0);
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R', sh = P(c, 'sh' + S);
-    const top0 = sh[1] + 0.065;
+    const top0 = sh[1] + 0.05;
     const keys = rows.map(([t, rx, rf, rb]) => [t, sh[0] - s * 0.004 * smooth(0.0, 0.1, t), top0 - t, 0.0, rx * k, rf * k, rb * k, 2]);
     const st = [[0, { [BI.chest]: 0.45, [BI['sh' + S]]: 0.55 }], [0.07, W(BI['sh' + S])], [0.32, W(BI['sh' + S])], [0.39, W(BI['el' + S])], [0.585, W(BI['el' + S])], [0.62, W(BI['wr' + S])]];
     const wfn = (t) => chainW(t, st);
@@ -1015,7 +1015,7 @@ function shell(c, covFn, thFn, mat, ws, hs, mod, cmFn) {
       const ly = _p.y - D.cy, phi = Math.atan2(dx, dz);
       const cv = covFn(_p.x, ly, _p.z - D.cz, phi);
       n.set(dx / D.rx, dy / D.ry, dz / D.rz).normalize();
-      const t = cv > 0.001 ? 0.0015 + thFn(_p.x, ly, _p.z - D.cz, phi) * cv : 0;
+      const t = cv > 0.02 ? 0.0015 + thFn(_p.x, ly, _p.z - D.cz, phi) * cv : -0.004;
       _p.addScaledVector(n, t);
       if (mod) mod(_p, ly, phi, dx, dy, dz);
       crow.push(cv);
@@ -1025,7 +1025,7 @@ function shell(c, covFn, thFn, mat, ws, hs, mod, cmFn) {
     rows.push(row); cov.push(crow);
   }
   for (let i = 0; i < hs; i++) for (let j = 0; j < ws; j++) {
-    if (cov[i][j] > 0.02 && cov[i][j + 1] > 0.02 && cov[i + 1][j + 1] > 0.02 && cov[i + 1][j] > 0.02) {
+    if (cov[i][j] > 0.02 || cov[i][j + 1] > 0.02 || cov[i + 1][j + 1] > 0.02 || cov[i + 1][j] > 0.02) {
       const a = rows[i][j], b = rows[i][j + 1], cc = rows[i + 1][j + 1], d = rows[i + 1][j]; mb.t(a, b, cc); mb.t(a, cc, d);
     }
   }
@@ -1162,7 +1162,7 @@ function buildHair(c) {
         const sides = pts.map(() => V(-Math.sin(a), 0, Math.cos(a)));
         card(c.mb, pts, sides, (s) => 0.03 * (1 - s * 0.6), M(hc, 'hairCard', 0.42), tw2, (s) => 0.75 + 0.35 * s);
       }
-      tube(c.mb, [V(-0.0, anchor.y + 0.012, anchor.z - 0.006), V(0, anchor.y - 0.012, anchor.z - 0.022)], 0.024, 8, M('#1a1a1a', 'flat', 0.4), hw);
+      tube(c.mb, [V(-0.0, anchor.y + 0.012, anchor.z - 0.006), V(0, anchor.y - 0.012, anchor.z - 0.022)], 0.024, 8, M('#1a1a1a', 'flat', 0.4), () => hw);
     }
   }
 }
