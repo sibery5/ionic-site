@@ -51,6 +51,10 @@ module.exports = async (p, out) => {
   console.log('lineup', JSON.stringify(info));
   await p.evaluate(() => { const m = window.__lineup[0]; m.forceLod = 0; m.setLod(0); game.renderer.render(game.creatorScene, game.creatorCam); });
   await p.screenshot({ path: out + '-lineup.png' });
+  for (const [nm, cx] of [['faces1', -1.75], ['faces2', 0.35], ['faces3', 1.75]]) {
+    await p.evaluate((cx) => { const g = game; g.creatorCam.position.set(cx, 1.62, 1.1); g.creatorCam.lookAt(cx, 1.5, -0.6); g.creatorCam.fov = 38; g.creatorCam.updateProjectionMatrix(); g.renderer.render(g.creatorScene, g.creatorCam); }, cx);
+    await p.screenshot({ path: out + '-' + nm + '.png' });
+  }
   // koşu orta adım: yandan
   await p.evaluate(() => {
     const g = game, s = g.creatorScene;

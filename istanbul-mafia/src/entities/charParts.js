@@ -232,7 +232,8 @@ class Limb {
       }
       rows.push(row);
     }
-    const fl = this.flip !== (thB < thA) !== (tB < tA);
+    const a0 = typeof thA === 'function' ? thA((tA + tB) / 2) : thA, b0 = typeof thB === 'function' ? thB((tA + tB) / 2) : thB;
+    const fl = this.flip !== (b0 < a0) !== (tB < tA);
     for (let i = 0; i < nt; i++) for (let j = 0; j < nth; j++) {
       const a = rows[i][j], b = rows[i][j + 1], c = rows[i + 1][j + 1], d = rows[i + 1][j];
       if (fl) { mb.t(a, d, c); mb.t(a, c, b); } else { mb.t(a, b, c); mb.t(a, c, d); }
@@ -502,12 +503,13 @@ function buildTorso(c) {
   const skirtP = pants === 'skirt' || pants === 'longskirt';
   // V yaka / açık önü: (th,t) -> alt katman mı?
   const openHalf = (t) => {
-    if (topSpec.open && t > topSpec.open) return 0.03 + 0.4 * smooth(topSpec.open, 1.44, t);
+    if (topSpec.open && t > topSpec.open) return 0.02 + 0.3 * smooth(topSpec.open, 1.44, t);
     if ((top === 'leather' || top === 'denim') && t > 1.36) return 0.02 + 0.32 * smooth(1.36, 1.46, t);
-    if (top === 'coat' && t > 0.8) return 0.05;
     return 0;
   };
-  const inOpen = (th, t) => { const h = openHalf(t); return h > 0 && Math.abs(angD(th, Math.PI / 2)) < h; };
+  // açık ön alt katmanı ayrı yama olarak çizilir (keskin kenar); ana bant tam kaplar
+  const inOpen = () => false;
+  const openT0 = topSpec.open || (top === 'leather' || top === 'denim' ? 1.36 : 0);
   const hemY = topSpec.tuck ? waist : topSpec.hem;
   const topOff = (th, t) => {
     let o = topSpec.off;
@@ -530,9 +532,10 @@ function buildTorso(c) {
   const t0top = bands[bands.length - 1].t1;
   bands.push({ t0: t0top, t1: neckTop, off: topOff, mat: topMat, bumpK: topSpec.off > 0.012 ? 0.55 : 1 });
   // boyun: ten ya da başörtüsü
-  if (c.hat === 'basortusu') bands.push({ t0: neckTop, t1: 1.66, off: 0.024, mat: M(L.hatColor || '#5a2a3a', 'weave', 0.85) });
+  if (c.hat === 'basortusu') bands.push({ t0: neckTop, t1: 1.62, off: 0.02, mat: M(L.hatColor || '#5a2a3a', 'weave', 0.85) });
   else bands.push({ t0: neckTop, t1: 1.66, off: 0, mat: c.skinM });
   T.emit(mb, bands, Q.torso, Q.dtT);
+  if (openT0) T.patch(mb, (t) => Math.PI / 2 + openHalf(t), (t) => Math.PI / 2 - openHalf(t), openT0 + 0.004, neckTop, topSpec.off + 0.0015, underM, Q.detail ? 4 : 2, Q.detail ? 8 : 3);
   c.neckTop = neckTop;
   const darker = M(tc, topSpec.tile, topSpec.rough, 0, 0.78);
   const seamM = M(tc, topSpec.tile, topSpec.rough, 0, 0.7);
@@ -692,24 +695,23 @@ function buildArms(c) {
   const { L, R, Q, mb, f } = c;
   const top = c.top, ts = c.topSpec;
   const k = (f ? 0.84 : 1) * (0.6 + 0.4 * R.bk);
-  const rows = [[0, 0.008, 0.008, 0.008], [0.02, 0.024, 0.028, 0.026], [0.045, 0.04, 0.044, 0.042], [0.075, 0.048, 0.05, 0.047], [0.13, 0.05, 0.049, 0.047], [0.2, 0.046, 0.047, 0.044], [0.27, 0.04, 0.042, 0.04],
-    [0.33, 0.037, 0.038, 0.038], [0.355, 0.036, 0.035, 0.039], [0.39, 0.039, 0.038, 0.036], [0.44, 0.038, 0.036, 0.034], [0.52, 0.03, 0.03, 0.028], [0.585, 0.022, 0.027, 0.027], [0.615, 0.019, 0.026, 0.026], [0.625, 0.015, 0.02, 0.02], [0.632, 0.004, 0.004, 0.004]];
+  const rows = [[0, 0.008, 0.008, 0.008], [0.015, 0.03, 0.034, 0.032], [0.03, 0.044, 0.048, 0.046], [0.045, 0.048, 0.05, 0.047], [0.1, 0.05, 0.049, 0.047], [0.17, 0.046, 0.047, 0.044], [0.24, 0.04, 0.042, 0.04], [0.3, 0.037, 0.038, 0.038], [0.325, 0.036, 0.035, 0.039], [0.36, 0.039, 0.038, 0.036], [0.41, 0.038, 0.036, 0.034], [0.49, 0.03, 0.03, 0.028], [0.555, 0.022, 0.027, 0.027], [0.585, 0.019, 0.026, 0.026], [0.595, 0.015, 0.02, 0.02], [0.602, 0.004, 0.004, 0.004]];
   const shortS = top === 'tshirt' || top === 'polo' || top === 'police_shirt' || top === 'vest' && false;
-  const sleeveEnd = shortS ? 0.2 : top === 'vest' || top === 'police_vest' ? 0.6 : 0.585;
-  const sleeveOff = (th, t) => ts.off + (shortS ? 0.003 + 0.003 * smooth(0.1, 0.2, t) : 0.004) + (top === 'coat' || top === 'suit' || top === 'blazer' ? 0.008 * smooth(0.1, 0.0, t) : 0);
+  const sleeveEnd = shortS ? 0.17 : top === 'vest' || top === 'police_vest' ? 0.57 : 0.555;
+  const sleeveOff = (th, t) => ts.off + (shortS ? 0.003 + 0.003 * smooth(0.08, 0.17, t) : 0.004) + (top === 'coat' || top === 'suit' || top === 'blazer' ? 0.008 * smooth(0.1, 0.0, t) : 0);
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R', sh = P(c, 'sh' + S);
-    const top0 = sh[1] + 0.05;
+    const top0 = sh[1] + 0.035;
     const keys = rows.map(([t, rx, rf, rb]) => [t, sh[0] - s * 0.004 * smooth(0.0, 0.1, t), top0 - t, 0.0, rx * k, rf * k, rb * k, 2]);
-    const st = [[0, { [BI.chest]: 0.45, [BI['sh' + S]]: 0.55 }], [0.07, W(BI['sh' + S])], [0.32, W(BI['sh' + S])], [0.39, W(BI['el' + S])], [0.585, W(BI['el' + S])], [0.62, W(BI['wr' + S])]];
+    const st = [[0, { [BI.chest]: 0.45, [BI['sh' + S]]: 0.55 }], [0.07, W(BI['sh' + S])], [0.29, W(BI['sh' + S])], [0.36, W(BI['el' + S])], [0.555, W(BI['el' + S])], [0.59, W(BI['wr' + S])]];
     const wfn = (t) => chainW(t, st);
     const A = new Limb(keys, V(s, 0, 0), V(0, 0, 1), V(0, -1, 0), wfn, { bump: (t, th) => 0.005 * R.bk * gauss(t - 0.17, 0.06) * gauss(angD(th, Math.PI / 2), 0.7) + 0.004 * gauss(t - 0.42, 0.06) * gauss(angD(th, 0.3), 0.8) });
     const bands = [];
     // vest/police_vest: kollar gömlek kolları (shirtColor) — yelekte iç gömlek uzun kollu
     const sleeveM = top === 'vest' || top === 'police_vest' ? M(L.shirtColor || '#a8c0e0', 'weave', 0.8) : c.topM;
     if (top === 'vest' || top === 'police_vest') {
-      if (top === 'police_vest') { bands.push({ t0: 0, t1: 0.2, off: 0.012, mat: sleeveM }); bands.push({ t0: 0.2, t1: 0.632, off: 0, mat: c.skinM }); }
-      else { bands.push({ t0: 0, t1: 0.585, off: 0.006, mat: sleeveM }); bands.push({ t0: 0.585, t1: 0.632, off: 0, mat: c.skinM }); }
+      if (top === 'police_vest') { bands.push({ t0: 0, t1: 0.17, off: 0.012, mat: sleeveM }); bands.push({ t0: 0.17, t1: 0.602, off: 0, mat: c.skinM }); }
+      else { bands.push({ t0: 0, t1: 0.555, off: 0.006, mat: sleeveM }); bands.push({ t0: 0.555, t1: 0.602, off: 0, mat: c.skinM }); }
     } else {
       bands.push({ t0: 0, t1: sleeveEnd, off: sleeveOff, mat: sleeveM, bumpK: ts.off > 0.012 ? 0.4 : 1 });
       if (!shortS) {
@@ -717,7 +719,7 @@ function buildArms(c) {
         else if (ts.open || top === 'leather' || top === 'denim' || top === 'coat' || top === 'pardesu') bands.push({ t0: sleeveEnd, t1: sleeveEnd + 0.018, off: 0.006, mat: M(L.shirtColor || '#e8e8e8', 'weave', 0.75) });
         else if (top === 'shirt') bands.push({ t0: sleeveEnd - 0.035, t1: sleeveEnd, off: ts.off + 0.003, mat: c.topM });
       }
-      bands.push({ t0: bands[bands.length - 1].t1, t1: 0.632, off: 0, mat: c.skinM });
+      bands.push({ t0: bands[bands.length - 1].t1, t1: 0.602, off: 0, mat: c.skinM });
     }
     A.emit(mb, bands, Q.limb, Q.dtL, { th0: Math.PI });
     if (Q.detail && top === 'track') A.patch(mb, -0.12, -0.02, 0.03, sleeveEnd, ts.off + 0.006, M('#f0f0f0', 'poly', 0.5), 1, 6);
@@ -730,8 +732,8 @@ function buildArms(c) {
     // saat (sol bilek)
     if (L.watch && s > 0 && Q.detail) {
       const wc = L.watchColor || (L.watch === 'goldwatch' ? '#d4af37' : L.watch === 'digital' ? '#1a1a1a' : '#cfd2d6');
-      A.patch(mb, Math.PI, Math.PI * 3, 0.588, 0.6, 0.006, M(wc, 'flat', 0.25, L.watch === 'digital' ? 0 : 0.95), 12, 1);
-      if (Q.detail > 1) A.button(mb, 0.594, 0, 0.009, 0.012, M('#202428', 'flat', 0.1, 0.3), 10);
+      A.patch(mb, Math.PI, Math.PI * 3, 0.558, 0.57, 0.006, M(wc, 'flat', 0.25, L.watch === 'digital' ? 0 : 0.95), 12, 1);
+      if (Q.detail > 1) A.button(mb, 0.564, 0, 0.009, 0.012, M('#202428', 'flat', 0.1, 0.3), 10);
     }
     buildHand(c, s, S, A);
   }
@@ -1296,12 +1298,12 @@ function buildHat(c) {
     // başörtüsü: yüz ovali dışında tüm kafa + boyun + omuza dökülen etek
     const sm2 = M(hc, 'weave', 0.85);
     shell(c, (x, y, z) => {
-      const face = z > 0.02 && Math.abs(x) < 0.056 * (1 - Math.max(0, -y - 0.06) * 3) && y < 0.05 && y > -0.12;
+      const face = z > 0.0 && Math.abs(x) < 0.064 * (1 - Math.max(0, -y - 0.07) * 2.5) && y < 0.058 && y > -0.13;
       return face ? 0 : (y < -0.06 && z < 0.0 ? 1 : y > -0.115 ? 1 : 0);
     }, (x, y, z) => 0.016 + T + (y > 0.06 ? 0.006 : 0) + (z < 0 ? 0.008 : 0), sm2, ws, hs, (v, ly) => { if (ly < -0.08) v.z -= 0.006; });
-    const dk = [[1.37, 0, 1.37, 0.0, 0.19, 0.13, 0.13, 2.2], [1.43, 0, 1.43, 0.0, 0.13, 0.1, 0.11, 2.2], [1.5, 0, 1.5, 0.008, 0.075, 0.075, 0.075, 2], [1.58, 0, 1.58, 0.012, 0.072, 0.075, 0.075, 2]];
+    const dk = [[1.37, 0, 1.37, 0.0, 0.19, 0.13, 0.13, 2.2], [1.43, 0, 1.43, 0.0, 0.13, 0.1, 0.11, 2.2], [1.49, 0, 1.49, 0.006, 0.08, 0.072, 0.075, 2], [1.53, 0, 1.53, 0.008, 0.07, 0.066, 0.072, 2]];
     const Dr = new Limb(dk, V(1, 0, 0), V(0, 0, 1), V(0, 1, 0), (t, p) => chainW(p.y, [[1.42, W(BI.chest)], [1.5, W(BI.neck)], [1.58, W(BI.head)]]));
-    Dr.emit(mb, [{ t0: 1.37, t1: 1.58, off: 0.012, mat: sm2 }], Q.torso, 0.03, { double: true });
+    Dr.emit(mb, [{ t0: 1.37, t1: 1.53, off: 0.012, mat: sm2 }], Q.torso, 0.03, { double: true });
   }
 }
 
