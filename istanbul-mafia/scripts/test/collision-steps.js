@@ -63,7 +63,7 @@ module.exports = async (p, out) => {
     // trafik ışığı direkleri
     if (g.traffic && g.traffic.poles) {
       const m = g.traffic.poles.instanceMatrix.array; let ok = 0, bad = 0;
-      for (let i = 0; i < g.traffic.count; i++) { const x = m[i * 16 + 12], z = m[i * 16 + 14]; if (probe('trafficPole', x, 0, z, 0.2, 5) >= 1) ok++; else bad++; }
+      for (let i = 0; i < g.traffic.count; i++) { const x = m[i * 16 + 12], z = m[i * 16 + 14]; if (probe('trafficPole', x, m[i * 16 + 13], z, 0.2, 5) >= 1) ok++; else bad++; }
       res.trafficPole = { n: ok + bad, missing: bad };
     }
     // binalar: cephe ortasına doğru ışın

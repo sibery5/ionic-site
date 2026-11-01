@@ -40,22 +40,32 @@ export function addPostFX(composer, renderer, scene, camera, { quality = 'medium
     composer.insertPass(ao, insertAt);
     passes.push(ao);
   }
+  // Parlama (bloom) geçişi main.js'te eklenir; eşiğini pozlamaya bağla: yalnız gerçekten parlak ışıklar
+  // (güneş diski, lambalar, neon, şimşek) parlasın, gün ışığındaki beyaz duvar/gökyüzü değil.
+  const bloom = composer.passes.find((p) => p && 'threshold' in p && 'strength' in p && 'radius' in p) || null;
   const grade = new ShaderPass(GradeShader);
   // OutputPass'tan önce (son geçiş olarak değil) ekle
   composer.insertPass(grade, Math.max(1, composer.passes.length - 1));
   passes.push(grade);
   return {
-    passes, grade, ao,
+    passes, grade, ao, bloom,
     update(env, dt) {
       const u = grade.uniforms;
       u.uTime.value += dt || 0.016;
       if (!env) return;
       const n = env.nightFactor, rain = env.rainAmount || 0;
       // gece: soğuk gölgeler, sıcak ışıklar; yağmur: daha soluk
-      u.uSat.value = 1.08 - rain * 0.2 - n * 0.05;
-      u.uContrast.value = 1.05 + n * 0.05;
+      u.uSat.value = 1.06 - rain * 0.18 - n * 0.04;
+      u.uContrast.value = 1.03 + n * 0.04;
       u.uShadowTint.value.set(0.96 - n * 0.06, 1.0, 1.05 + n * 0.1);
-      u.uHighTint.value.set(1.05 + n * 0.04, 1.0, 0.94 - n * 0.04);
+      u.uHighTint.value.set(1.04 + n * 0.04, 1.0, 0.95 - n * 0.04);
+      if (bloom) {
+        // sahne-doğrusal eşik: ekranda ~beyaza ulaşan değerin biraz üstü (ACES: x*pozlama/0.6 ~ 2.2)
+        const ex = env.exposure || 0.62;
+        bloom.threshold = (2.0 - n * 0.9) * 0.6 / ex;
+        bloom.strength = 0.22 + n * 0.3 + rain * 0.1;
+        bloom.radius = 0.55;
+      }
     },
     setSize(w, h) { if (ao) ao.setSize(w, h); },
   };

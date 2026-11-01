@@ -12,6 +12,7 @@ import { audio } from '../core/audio.js';
 import { integrateVehicle, collideAllVehicles } from './vehicle_physics.js';
 import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
 import { Debris } from '../world/debris.js';
+import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
 
 // ======================================================================
 // Malzemeler
@@ -1151,7 +1152,8 @@ export class Vehicle {
 
   sync() {
     this.mesh.position.copy(this.pos);
-    this.mesh.rotation.set(this.sinking > 0 ? Math.min(0.5, this.sinking * 0.2) : 0, this.heading, this.lean);
+    this.mesh.rotation.order = 'YXZ'; // yönelim sonra yerel eğim (köprü rampası, batma)
+    this.mesh.rotation.set(this.sinking > 0 ? Math.min(0.5, this.sinking * 0.2) : (this.roadPitch || 0), this.heading, this.lean);
   }
 
   dispose() {
@@ -1238,7 +1240,7 @@ export class Vehicle {
     if (this.destroyed) {
       this.wreckT -= dt;
       if (this.wreckT > 30 && Math.random() < 0.5) g.particles.fire({ x: this.pos.x, y: this.pos.y + 0.8, z: this.pos.z }, 1);
-      if (this.vy) { this.vy -= 20 * dt; this.pos.y = Math.max(0, this.pos.y + this.vy * dt); if (this.pos.y <= 0 && this.vy < 0) this.vy = 0; }
+      if (this.vy) { this.vy -= 20 * dt; const gy = this.groundY || 0; this.pos.y = Math.max(gy, this.pos.y + this.vy * dt); if (this.pos.y <= gy && this.vy < 0) this.vy = 0; }
     }
   }
 
@@ -1350,6 +1352,16 @@ export class Vehicle {
 
     // konum + statik çarpışma (alt adımlı OBB çözücü)
     integrateVehicle(this, dt, phys, isPlayer);
+    // köprü tabliyesi: yükseklik ve eğim (Boğaz köprüsü ~20 m, Galata 4.2 m)
+    if (this.kind === 'car' && !this.sinking && !this.vy) {
+      const by = phys.interiorMode ? null : bridgeHeightAt(this.pos.x, this.pos.z);
+      this.groundY = by === null ? 0 : by;
+      this.pos.y = this.groundY;
+      if (by !== null) {
+        const sl = bridgeSlopeAt(this.pos.x, this.pos.z, this._slope || (this._slope = { x: 0, z: 0 }));
+        this.roadPitch = -Math.atan(sl.x * Math.sin(this.heading) + sl.z * Math.cos(this.heading));
+      } else this.roadPitch = 0;
+    }
     // suya düşme
     if (phys.inWater(this.pos.x, this.pos.z)) {
       if (this.sinking === 0) { audio.splash(this.pos.x, this.pos.z); g.particles.splash({ x: this.pos.x, y: -1.3, z: this.pos.z }); }
