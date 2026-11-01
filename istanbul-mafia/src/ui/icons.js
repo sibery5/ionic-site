@@ -133,6 +133,20 @@ export const ICONS = {
   globe: S('<circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" stroke-width="5"/><ellipse cx="32" cy="32" rx="11" ry="26" fill="none" stroke="currentColor" stroke-width="4"/><path d="M6 32 L58 32 M11 18 L53 18 M11 46 L53 46" stroke="currentColor" stroke-width="4"/>'),
 };
 
+// arayüz ikonları (menüler / kayıt göstergesi / karakter önizleme)
+Object.assign(ICONS, {
+  gauge: S('<path d="M6 46 A26 26 0 1 1 58 46" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><path d="M32 42 L46 22" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="42" r="5"/>'),
+  save: S('<path d="M8 8 L48 8 L56 16 L56 56 L8 56Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="18" y="8" width="24" height="14"/><rect x="16" y="34" width="32" height="16" rx="2"/>'),
+  rotate: S('<path d="M50 22 A22 22 0 1 0 54 38" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M42 8 L56 20 L40 26Z"/>'),
+  reset: S('<path d="M14 32 A18 18 0 1 0 22 17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M10 8 L26 12 L14 24Z"/>'),
+  zoom_in: S('<circle cx="27" cy="27" r="18" fill="none" stroke="currentColor" stroke-width="5"/><path d="M40 40 L58 58 M27 18 L27 36 M18 27 L36 27" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>'),
+  zoom_out: S('<circle cx="27" cy="27" r="18" fill="none" stroke="currentColor" stroke-width="5"/><path d="M40 40 L58 58 M18 27 L36 27" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>'),
+  user: S('<circle cx="32" cy="20" r="13"/><path d="M8 60 Q8 38 32 38 Q56 38 56 60Z"/>'),
+  face: S('<ellipse cx="32" cy="34" rx="20" ry="24" fill="none" stroke="currentColor" stroke-width="5"/><path d="M12 26 Q14 8 32 8 Q50 8 52 26 Q40 16 12 26Z"/><circle cx="24" cy="34" r="3"/><circle cx="40" cy="34" r="3"/>'),
+  play: S('<path d="M18 8 L54 32 L18 56Z"/>'),
+  exit: S('<path d="M26 8 L8 8 L8 56 L26 56" fill="none" stroke="currentColor" stroke-width="5"/><path d="M24 32 L54 32 M42 20 L54 32 L42 44" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>'),
+});
+
 export const PIN_FOR = {
   gun: 'pin_gun', clothes: 'pin_clothes', food: 'pin_food', trade: 'pin_trade', dealer: 'pin_dealer', bank: 'pin_bank', hospital: 'pin_hospital',
   police: 'pin_police', safehouse: 'pin_house', konak: 'pin_reis', estate: 'pin_estate', cafe: 'pin_cafe', club: 'pin_club', garage: 'pin_garage',
