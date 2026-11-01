@@ -89,12 +89,12 @@ module.exports = async (p) => {
   ok('pause -> DEVAM ET resumes', res.mode === 'playing' && res.enabled && !res.blocking, res);
 
   // 5) otomatik kayıt: zamanlayıcı, aranırken erteleme
-  const auto = await p.evaluate(() => {
+  const auto = await p.evaluate(async () => {
     const g = game; const key = 'istanbul-mafia-save-auto';
     localStorage.removeItem(key);
     g.wanted.level = 2; g.autosave('mission'); sim(2);
     const whileWanted = !!localStorage.getItem(key);
-    g.wanted.reset(); sim(1.5);
+    g.wanted.reset(); sim(1.5); await new Promise((r) => setTimeout(r, 100));
     const after = !!localStorage.getItem(key);
     return { whileWanted, after, ind: g.ui.saveEl.classList.contains('show') };
   });

@@ -91,7 +91,7 @@ export const SettingsMethods = {
     $('.x', p).onclick = () => this.closeModal(m);
     const body = $('.panel-body', p);
     body.classList.add('set-body');
-    const rail = el('div', 'set-rail');
+    const rail = el('div', 'set-rail seg-tabs');
     const host = el('div', 'srows');
     const info = el('div', 'set-info');
     body.append(rail, host);
@@ -141,7 +141,7 @@ export const SettingsMethods = {
       clearTimeout(liveT);
       rail.innerHTML = '';
       for (const [k, l, ic] of TABS) {
-        const b = el('button', 'set-tab' + (k === tab ? ' on' : ''), `${svgImg(ic, null, 18)}<span>${l}</span>`);
+        const b = el('button', 'btn set-tab' + (k === tab ? ' on' : ''), `${svgImg(ic, null, 18)}<span>${l}</span>`);
         b.onclick = () => { if (tab === k) return; tab = k; audio.click(); render(); };
         rail.appendChild(b);
       }
