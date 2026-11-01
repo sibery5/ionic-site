@@ -21,6 +21,7 @@ import { VehicleManager } from './entities/vehicles.js';
 import { TrafficLights } from './world/traffic.js';
 import { ShipTraffic } from './world/ships.js';
 import { BoatManager, nearestWaterSpot } from './entities/boats.js';
+import { spawnWorldVehicles } from './entities/military_vehicles.js';
 import { AircraftManager } from './entities/aircraft.js';
 import * as MAPDATA from './world/map.js';
 import { Combat } from './game/combat.js';
@@ -466,12 +467,8 @@ class Game {
     state.ownedCars.forEach((c, i) => { if (i < cap) this.spawnOwnedCar(i, false); });
     (state.luxury || []).forEach((e, i) => this.spawnLuxury(e, i, true));
     // askerî üs: park hâlinde tank, cip ve kamyonlar
-    const mb = MAPDATA.MILITARY_BASE;
-    if (mb && mb.spawnPoints) for (const sp of mb.spawnPoints) {
-      // yer tutucu modeller dünya tarafından çizilir; yalnızca boş noktalara gerçek araç koy
-      const t = { tank: 'tank', jeep: 'cip', truck: 'kamyon' }[sp.type];
-      if (t && !sp.placeholder) this.vehicles.spawnProp(t, sp.x, sp.z, sp.heading || 0);
-    }
+    // [araçlar] askerî üs (tank, zırhlı, kamyon, taarruz helikopteri), havalimanı jeti, marina tekneleri
+    spawnWorldVehicles(this);
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
     this.applyPixelRatio();

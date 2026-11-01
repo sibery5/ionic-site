@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Vehicle, colorize, lightize, prep, bx, rbx, cyl, beam, darkMat, chromeMat, glassMat, paintMat, makeLightsMat } from './vehicles.js';
-import { isLand, WATER_Y } from '../world/map.js';
+import { isLand, inBridge, WATER_Y } from '../world/map.js';
+import { bridgeHeightAt } from '../world/bridge_profile.js';
 import { clamp } from '../core/util.js';
 import { audio } from '../core/audio.js';
 import { makeCanvas } from '../core/textures.js';
@@ -239,7 +240,7 @@ export class Boat extends Vehicle {
     const f2x = Math.sin(this.heading), f2z = Math.cos(this.heading);
     let hit = false;
     for (const [a, b] of [[hl, 0], [-hl, 0], [hl * 0.4, hw], [hl * 0.4, -hw], [-hl * 0.6, hw], [-hl * 0.6, -hw]]) {
-      if (isLand(this.pos.x + f2x * a - f2z * b, this.pos.z + f2z * a + f2x * b)) { hit = true; break; }
+      if (this.blocked(this.pos.x + f2x * a - f2z * b, this.pos.z + f2z * a + f2x * b)) { hit = true; break; }
     }
     if (hit) {
       this.pos.x = ox; this.pos.z = oz;
@@ -258,9 +259,18 @@ export class Boat extends Vehicle {
     const accel = (fs - fs0) / Math.max(dt, 1e-3);
     if (this.destroyed) { this.sinking += dt; }
     const sinkY = this.destroyed ? Math.min(6, this.sinking * 0.5) : 0;
-    this.pos.y = WATER_Y + Math.sin(t * 1.6) * 0.06 * (8 / d.len + 0.3) + sp * 0.18 - sinkY;
-    this.pitch += ((-sp * 0.12 - accel * 0.006 + Math.sin(t * 1.3) * 0.025) - this.pitch) * Math.min(1, dt * 3);
-    this.roll += ((this.yawRate * fs * 0.012 + Math.sin(t * 1.1 + 1) * 0.03) - this.roll) * Math.min(1, dt * 3);
+    const W = (x, z) => waveH(x, z, t);
+    const hb = d.len * 0.4, hw2 = d.wid * 0.45;
+    const yB = W(this.pos.x + f2x * hb, this.pos.z + f2z * hb), yS = W(this.pos.x - f2x * hb, this.pos.z - f2z * hb);
+    const yP = W(this.pos.x - f2z * hw2, this.pos.z + f2x * hw2), yT = W(this.pos.x + f2z * hw2, this.pos.z - f2x * hw2);
+    const heave = (yB + yS + yP + yT) / 4;
+    const kh = Math.min(1, dt * (6 / Math.sqrt(d.len)));
+    this.heave = (this.heave || 0) + (heave - (this.heave || 0)) * kh;
+    this.pos.y = WATER_Y + this.heave + sp * 0.18 - sinkY;
+    // baş kalkması (planing) + dalga eğimi (uzun tekne daha az sallanır)
+    this.pitch += ((-sp * 0.12 - accel * 0.006 + Math.atan((yS - yB) / (hb * 2)) * 0.9) - this.pitch) * kh;
+    this.roll += ((this.yawRate * fs * 0.012 + Math.atan((yP - yT) / (hw2 * 2)) * 0.8) - this.roll) * kh;
+    if (sp > 0.5 && Math.random() < sp * 0.25 && yB - this.heave > 0.05) g.particles.splash({ x: this.pos.x + f2x * hb, y: WATER_Y + 0.2, z: this.pos.z + f2z * hb });
     ud.chassis.rotation.x = this.pitch; ud.chassis.rotation.z = this.roll;
     // iz
     this.wakeT -= dt;
@@ -278,7 +288,9 @@ export class Boat extends Vehicle {
     ud.lights.uA.value.set(0.4 + night * 3, (on ? 0.4 : 0.1) + night * 2, 0, 0);
     if (this.driver && this.driver.isPlayer) {
       const rpm = 0.25 + Math.abs(thr) * 0.35 + sp * 0.7;
-      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed, rpm, 0.1 + Math.abs(thr) * 0.06);
+      const o = this._snd || (this._snd = { kind: 'boat' });
+      o.throttle = Math.abs(thr); o.speed = Math.abs(fs); o.rpm01 = rpm; o.big = d.len > 10;
+      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed, rpm, 0.1 + Math.abs(thr) * 0.06, undefined, o);
       if (g.input && g.input.hit('KeyH') && this.def.style !== 'speedboat') g.boats.horn(this.pos.x, this.pos.z, 0.6);
     }
     ud.driverDummy.visible = !!this.driver;
@@ -289,6 +301,17 @@ export class Boat extends Vehicle {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.set(0, this.heading, 0);
   }
+  // kara/iskele/köprü engeli. Köprü tabliyesi teknenin üstünde yeterince yüksekse (15 Temmuz ~20 m) altından geçilir.
+  blocked(x, z) {
+    if (!isLand(x, z)) return false;
+    if (!inBridge(x, z)) return true;
+    const by = bridgeHeightAt(x, z);
+    return by === null || by - 2.6 < WATER_Y + this.def.hei + 1.0;
+  }
+}
+// Su yüzeyi yüksekliği (dünya konumu + zaman): birkaç yönlü dalga; tüm tekneler tutarlı sallanır
+export function waveH(x, z, t) {
+  return Math.sin(x * 0.11 + t * 1.3) * 0.12 + Math.sin(z * 0.17 - t * 1.7 + 1.3) * 0.08 + Math.sin((x + z) * 0.31 + t * 2.3) * 0.04;
 }
 
 // ---------------- Yönetici ----------------
@@ -298,6 +321,7 @@ export class BoatManager {
     this.wakes = new Wakes(game.scene);
   }
   get list() { return this.game.vehicles.list.filter((v) => v.kind === 'boat'); }
+  get types() { return BOAT_TYPES; }
   add(type, x, z, heading = 0, color) {
     const v = new Boat(this.game, type, x, z, heading, color);
     this.game.vehicles.addVehicle(v);

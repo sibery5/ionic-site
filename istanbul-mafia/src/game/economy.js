@@ -155,21 +155,33 @@ export const DISTRICT_PRICE = {
   kadikoy: { cay: 1.3, sigara: 1.25, saat: 1.2, telefon: 1.35, hali: 1.15, altin: 1.15, antika: 1.1 },
 };
 
+// Kara araçları. Tüm marka/model adları kurgusaldır. len/wid/hei çarpışma kutusu (m), mass kg (yoksa fizik türetir).
+// body: gövde şablonu (vehicles.js specFor), style: davranış/ses sınıfı, livery: boya/ekipman (police, taxi...)
 export const CARS = {
-  kartal: { name: 'Kartal 131', price: 18000, maxSpeed: 32, accel: 9, len: 4.3, wid: 1.7, hei: 1.35, hp: 700, colors: ['#e8e0d0', '#8a1a1a', '#1d3d6e', '#5a6a4a', '#c9b48a'], style: 'sedan', body: 'wagon' },
+  kartal: { name: 'Leylek 131 Klasik', price: 18000, maxSpeed: 32, accel: 9, len: 4.3, wid: 1.7, hei: 1.35, hp: 700, colors: ['#e8e0d0', '#8a1a1a', '#1d3d6e', '#5a6a4a', '#c9b48a'], style: 'sedan', body: 'wagon' },
+  hatch3: { name: 'Pırpır 3 Kapı', price: 21000, maxSpeed: 34, accel: 10, len: 3.7, wid: 1.68, hei: 1.42, hp: 600, colors: ['#c81010', '#f2f2f2', '#2a6ab0', '#f2a000', '#2d7a4a'], style: 'sedan', body: 'hatch3' },
+  hatch: { name: 'Serçe 1.4 Hatchback', price: 32000, maxSpeed: 37, accel: 11, len: 4.05, wid: 1.75, hei: 1.46, hp: 700, colors: ['#6a6a6a', '#e8e8e8', '#1d2440', '#8a1a1a', '#3a5a7a'], style: 'sedan', body: 'hatch' },
   taksi: { name: 'Sarı Taksi', price: 26000, maxSpeed: 36, accel: 10, len: 4.5, wid: 1.8, hei: 1.4, hp: 800, colors: ['#f2c200'], style: 'taxi' },
+  estate: { name: 'Kervan SW Station', price: 48000, maxSpeed: 40, accel: 11, len: 4.8, wid: 1.84, hei: 1.5, hp: 850, colors: ['#2a2a2a', '#c8c8c8', '#4a5a3a', '#5a2a1a'], style: 'sedan', body: 'estate' },
   dolmus: { name: 'Dolmuş Minibüs', price: 34000, maxSpeed: 28, accel: 7, len: 5.2, wid: 2.0, hei: 2.2, hp: 1000, colors: ['#f2c200', '#e8e8e8'], style: 'van' },
-  sedan: { name: 'Lüks Sedan', price: 85000, maxSpeed: 44, accel: 13, len: 4.9, wid: 1.9, hei: 1.4, hp: 900, colors: ['#111111', '#e8e8e8', '#6a6a6a', '#1d2440'], style: 'sedan' },
+  sedan: { name: 'Paşa L8 Lüks Sedan', price: 85000, maxSpeed: 44, accel: 13, len: 4.9, wid: 1.9, hei: 1.4, hp: 900, colors: ['#111111', '#e8e8e8', '#6a6a6a', '#1d2440'], style: 'sedan' },
+  offroad: { name: 'Dağkeçisi 4x4', price: 95000, maxSpeed: 38, accel: 11, len: 4.3, wid: 1.92, hei: 1.95, hp: 1600, mass: 2100, colors: ['#4a5a3a', '#c8b48a', '#111111', '#8a1a1a', '#e8e8e8'], style: 'jeep', body: 'offroad' },
+  coupe: { name: 'Poyraz Coupé', price: 120000, maxSpeed: 52, accel: 16, len: 4.6, wid: 1.86, hei: 1.3, hp: 850, colors: ['#1d3d8e', '#111111', '#e8e8e8', '#7a0a0a', '#c0c0c0'], style: 'sport', body: 'coupe' },
   suv: { name: 'Karabasan SUV', price: 140000, maxSpeed: 42, accel: 12, len: 4.9, wid: 2.0, hei: 1.8, hp: 1400, colors: ['#0a0a0a', '#2a2a2a', '#e8e8e8'], style: 'suv' },
+  cabrio: { name: 'Meltem Cabrio', price: 150000, maxSpeed: 50, accel: 15, len: 4.45, wid: 1.84, hei: 1.26, hp: 750, colors: ['#c81010', '#f2f2f2', '#0a2a5a', '#d8c090', '#111111'], style: 'sport', body: 'cabrio' },
   gt: { name: 'Rüzgar GT', price: 260000, maxSpeed: 60, accel: 20, len: 4.5, wid: 1.95, hei: 1.15, hp: 800, colors: ['#c81010', '#f2c200', '#1060c8', '#111111', '#e8e8e8'], style: 'sport' },
   police: { name: 'Polis Ekip Aracı', price: 0, maxSpeed: 46, accel: 14, len: 4.7, wid: 1.85, hei: 1.45, hp: 1100, colors: ['#f2f2f2'], style: 'police' },
+  polsuv: { name: 'Polis Ekip SUV', price: 0, maxSpeed: 44, accel: 13, len: 4.9, wid: 2.0, hei: 1.85, hp: 1600, colors: ['#f2f2f2'], style: 'police', body: 'suv', livery: 'police', siren: true },
   bus: { name: 'Şehir Otobüsü', price: 0, maxSpeed: 22, accel: 5, len: 11, wid: 2.5, hei: 3.0, hp: 2500, colors: ['#d8d8d0'], style: 'bus' },
-  swat: { name: 'Özel Harekat Zırhlısı', price: 0, maxSpeed: 40, accel: 11, len: 5.4, wid: 2.2, hei: 2.2, hp: 3000, colors: ['#1a1a1a'], style: 'swat' },
-  motor: { name: 'Motosiklet', price: 12000, maxSpeed: 46, accel: 15, len: 2.1, wid: 0.8, hei: 1.2, hp: 400, colors: ['#c81010', '#111111', '#1060c8', '#e8e8e8'], style: 'moto' },
-  kamyon: { name: 'Kamyon', price: 60000, maxSpeed: 24, accel: 5, len: 8, wid: 2.4, hei: 3.3, hp: 3000, mass: 4500, colors: ['#e8e8e8', '#1d5aa8', '#8a1a1a'], style: 'truck' },
-  ambulans: { name: 'Ambulans', price: 0, maxSpeed: 38, accel: 10, len: 5.8, wid: 2.1, hei: 2.6, hp: 1400, colors: ['#f4f4f4'], style: 'ambulance' },
+  swat: { name: 'Kalkan Özel Harekat Zırhlısı', price: 0, maxSpeed: 40, accel: 11, len: 5.4, wid: 2.2, hei: 2.2, hp: 3000, mass: 5200, colors: ['#1a1a1a'], style: 'swat' },
+  bisiklet: { name: 'Tozkoparan Şehir Bisikleti', price: 1500, maxSpeed: 11, accel: 3.2, len: 1.75, wid: 0.6, hei: 1.1, hp: 150, mass: 95, colors: ['#1d6ec8', '#c81010', '#111111', '#2d7a4a', '#e8e8e8'], style: 'bike' },
+  motor: { name: 'Yıldırım 600 Motosiklet', price: 12000, maxSpeed: 46, accel: 15, len: 2.1, wid: 0.8, hei: 1.2, hp: 400, mass: 260, colors: ['#c81010', '#111111', '#1060c8', '#e8e8e8'], style: 'moto' },
+  kamyon: { name: 'Boğaz Nakliyat Kamyonu', price: 60000, maxSpeed: 24, accel: 5, len: 8, wid: 2.4, hei: 3.3, hp: 3000, mass: 4500, colors: ['#e8e8e8', '#1d5aa8', '#8a1a1a'], style: 'truck' },
+  ambulans: { name: 'Ambulans', price: 0, maxSpeed: 38, accel: 10, len: 5.8, wid: 2.1, hei: 2.6, hp: 1400, colors: ['#f4f4f4'], style: 'ambulance', siren: true },
   cip: { name: 'Askerî Cip', price: 0, maxSpeed: 36, accel: 10, len: 4.4, wid: 1.9, hei: 1.95, hp: 1800, colors: ['#4b5432'], style: 'jeep' },
-  tank: { name: 'Leopard Tank', price: 0, maxSpeed: 14, accel: 4, len: 7.5, wid: 3.5, hei: 2.4, hp: 9000, mass: 20000, colors: ['#4b5432'], style: 'tank' },
+  askkamyon: { name: 'Katır 6x6 Askerî Kamyon', price: 0, maxSpeed: 26, accel: 6, len: 8.2, wid: 2.5, hei: 3.2, hp: 4000, mass: 9000, colors: ['#4b5432'], style: 'truck', body: 'mtruck' },
+  apc: { name: 'Koçbaşı 8x8 Zırhlı Personel Taşıyıcı', price: 0, maxSpeed: 28, accel: 7, len: 7.6, wid: 2.8, hei: 2.6, hp: 6500, mass: 16000, colors: ['#4b5432'], style: 'apc', armed: 'mg' },
+  tank: { name: 'Bozkurt A3 Ana Muharebe Tankı', price: 0, maxSpeed: 14, accel: 4, len: 7.5, wid: 3.5, hei: 2.4, hp: 9000, mass: 20000, colors: ['#4b5432'], style: 'tank', armed: 'cannon' },
 };
 export const DEALER_CARS = ['kartal', 'taksi', 'dolmus', 'sedan', 'suv', 'gt'];
 
@@ -229,7 +241,7 @@ export function dealerCarList() {
   for (const [k, c] of Object.entries(CARS)) if (c.price > 0 && !out.includes(k) && !c.hidden) out.push(k);
   return out;
 }
-export const CAR_CLASS = { sedan: 'Sedan', taxi: 'Ticari', van: 'Ticari', suv: 'SUV', sport: 'Spor', bus: 'Ağır vasıta', police: 'Resmî', swat: 'Resmî' };
+export const CAR_CLASS = { sedan: 'Sedan', taxi: 'Ticari', van: 'Ticari', suv: 'SUV', sport: 'Spor', bus: 'Ağır vasıta', police: 'Resmî', swat: 'Resmî', jeep: 'Arazi', moto: 'Motosiklet', bike: 'Bisiklet', truck: 'Ağır vasıta', hatch: 'Hatchback', hatch3: 'Hatchback', estate: 'Station', coupe: 'Coupé', cabrio: 'Cabrio', offroad: 'Arazi 4x4' };
 
 // Lüks araçlar: deniz ve hava. Teslimat noktaları (iskele/helipad) mimar tarafından
 // `game.spawnLuxury(entry)` ile bağlanır. `type`, boats.js / aircraft.js tür kimlikleriyle eşleşir.
