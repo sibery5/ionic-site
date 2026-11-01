@@ -889,3 +889,145 @@ export function propAtlas() {
     return t;
   });
 }
+
+// =====================================================================
+// Gökyüzü / deniz / simge yapı dokuları (dalga 2)
+// =====================================================================
+// Döşenebilir Worley (hücresel) gürültü: en yakın öznitelik noktasına uzaklık (0..~1)
+function worley(u, v, N, seed) {
+  const x = u * N, y = v * N, xi = Math.floor(x), yi = Math.floor(y);
+  let best = 9;
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    const cx = xi + ox, cy = yi + oy;
+    const wx = ((cx % N) + N) % N, wy = ((cy % N) + N) % N;
+    const px = cx + hashI(wx, wy, seed), py = cy + hashI(wx, wy, seed + 1);
+    const d = (px - x) * (px - x) + (py - y) * (py - y);
+    if (d < best) best = d;
+  }
+  return Math.min(1, Math.sqrt(best));
+}
+
+// Bulut gürültüsü (RGBA, doğrusal, döşenebilir): R kabarık Perlin-Worley gövde, G ayrıntı, B ince aşındırma,
+// A sirrus lifleri. CPU'da da örneklenir (güneşin önünden geçen bulut -> güneş ışığı kısılır).
+export function cloudNoiseData() {
+  return cached('cloudNoiseData', () => {
+    const S = 256, d = new Uint8Array(S * S * 4);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const u = x / S, v = y / S, i = (y * S + x) * 4;
+      const f = fbm(u, v, 4, 5, 201);
+      const w = 1 - worley(u, v, 6, 211), w2 = 1 - worley(u, v, 12, 213);
+      const pw = Math.max(0, Math.min(1, (f - 0.5) * 1.6 + 0.5 + (w * 0.65 + w2 * 0.35 - 0.5) * 0.75));
+      const det = fbm(u, v, 16, 4, 221) * 0.55 + (1 - worley(u, v, 20, 223)) * 0.45;
+      const fine = 1 - worley(u, v, 32, 231);
+      // sirrus: tek eksende uzatılmış gürültü
+      const ci = fbm(u, v, 8, 4, 241) * 0.5 + vnoise(u * 2, v * 32, 2, 243) * 0.5;
+      d[i] = pw * 255; d[i + 1] = det * 255; d[i + 2] = fine * 255; d[i + 3] = ci * 255;
+    }
+    return { data: d, S };
+  });
+}
+export function cloudNoiseTexture() {
+  return cached('cloudNoiseTex', () => {
+    const { data, S } = cloudNoiseData();
+    return dataTex(data, S, false, 2);
+  });
+}
+// CPU örnekleme (çift doğrusal), u,v döşenir; ch kanal (0=R)
+export function sampleCloudNoise(u, v, ch = 0) {
+  const { data, S } = cloudNoiseData();
+  const x = (u - Math.floor(u)) * S - 0.5, y = (v - Math.floor(v)) * S - 0.5;
+  const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+  const at = (xx, yy) => data[((((yy % S) + S) % S) * S + (((xx % S) + S) % S)) * 4 + ch] / 255;
+  const a = at(x0, y0), b = at(x0 + 1, y0), c = at(x0, y0 + 1), e = at(x0 + 1, y0 + 1);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + e) * fx * fy;
+}
+
+// Okyanus ayrıntı normali: tamsayı dalga vektörlü yönlü dalga toplamı (döşenebilir), spektrum k^-1.6.
+// RGB normal, A yükseklik (köpük maskesi için).
+export function oceanNormalTexture() {
+  return cached('oceanN', () => {
+    const S = 256, H = new Float32Array(S * S), r = new RNG(77);
+    const waves = [];
+    for (let i = 0; i < 48; i++) {
+      const k = r.float(2, 22), a = r.float(-1.2, 1.2) + 0.6; // ağırlıkla rüzgâr yönüne
+      const kx = Math.round(Math.cos(a) * k), ky = Math.round(Math.sin(a) * k);
+      if (!kx && !ky) continue;
+      waves.push({ kx, ky, p: r.float(0, 6.283), amp: Math.pow(Math.hypot(kx, ky), -1.6) });
+    }
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let v = 0;
+      for (const w of waves) v += w.amp * Math.sin(((w.kx * x + w.ky * y) / S) * 6.2832 + w.p);
+      H[y * S + x] = v;
+    }
+    let mn = 1e9, mx = -1e9;
+    for (const v of H) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+    const d = new Uint8Array(S * S * 4);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const i = y * S + x;
+      const dx = (H[y * S + ((x + 1) % S)] - H[y * S + ((x - 1 + S) % S)]) * 9;
+      const dy = (H[((y + 1) % S) * S + x] - H[((y - 1 + S) % S) * S + x]) * 9;
+      const l = Math.hypot(dx, dy, 1);
+      d[i * 4] = (-dx / l * 0.5 + 0.5) * 255; d[i * 4 + 1] = (-dy / l * 0.5 + 0.5) * 255; d[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255;
+      d[i * 4 + 3] = ((H[i] - mn) / (mx - mn)) * 255;
+    }
+    return dataTex(d, S, false, 4);
+  });
+}
+
+// Kurşun kubbe kaplaması: kenet dikişli kurşun levhalar, bindirmeler, beyazımsı patina akıntıları
+export function leadPBR(q) {
+  return cached('pbr:lead', () => {
+    const S = SQ(q);
+    return makePBR(S, 2.5, (u, v, o) => {
+      const cu = u * 6, fu = cu - Math.floor(cu);
+      const rv = v * 4 + (Math.floor(cu) % 2) * 0.5, fv = rv - Math.floor(rv);
+      const seam = Math.min(fu, 1 - fu), lap = fv;
+      const n = fbm(u, v, 16, 4, 301), streak = fbm(u, v, 24, 3, 303);
+      let c = 0.44 + (n - 0.5) * 0.12 + hashI(Math.floor(cu), Math.floor(rv), 305) * 0.06;
+      c += Math.max(0, streak - 0.55) * 0.5; // patina akıntısı
+      let h = 0.5 + n * 0.1;
+      if (seam < 0.04) { h = 0.95; c *= 1.08; } // kenet çıkıntısı
+      if (lap < 0.05) { h = 0.2; c *= 0.78; } // bindirme gölgesi
+      o[0] = c * 0.95; o[1] = c * 1.0; o[2] = c * 1.06; o[3] = h; o[4] = 0.55 + n * 0.2;
+    });
+  });
+}
+
+// Çelik (köprü kulesi/kirişi): perçinli levha paneller, hafif boya aşınması. Tonu malzemede çarpılır.
+export function steelPBR(q) {
+  return cached('pbr:steel', () => {
+    const S = SQ(q);
+    return makePBR(S, 1.5, (u, v, o, x, y) => {
+      const pu = (u * 4) % 1, pv = (v * 2) % 1;
+      const e = Math.min(pu, 1 - pu, pv * 2, (1 - pv) * 2);
+      const n = fbm(u, v, 20, 3, 311);
+      let c = 0.86 + (n - 0.5) * 0.08;
+      let h = 0.5;
+      if (e < 0.012) { c *= 0.7; h = 0.3; }
+      const rv = (u * 64) % 1, rivet = e > 0.02 && e < 0.045 && rv > 0.4 && rv < 0.6;
+      if (rivet) { h = 0.9; c *= 1.05; }
+      if (hashI(x >> 2, y >> 2, 313) > 0.985) c *= 0.8;
+      o[0] = c; o[1] = c; o[2] = c; o[3] = h; o[4] = 0.5 + n * 0.25;
+    });
+  });
+}
+
+// Konteyner yan yüzü: oluklu sac (dikey nervürler), üst/alt kiriş, köşe dökümleri, pas/kir lekeleri.
+// Gri tonlu; renk köşe renginden (vertexColors) gelir.
+export function containerTexture() {
+  return cached('container', () => {
+    const W = 256, H = 128, c = makeCanvas(W, H), g = c.getContext('2d');
+    const r = new RNG(88);
+    g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x += 8) {
+      const grd = g.createLinearGradient(x, 0, x + 8, 0);
+      grd.addColorStop(0, '#9a9a9a'); grd.addColorStop(0.35, '#f2f2f2'); grd.addColorStop(0.7, '#c8c8c8'); grd.addColorStop(1, '#8a8a8a');
+      g.fillStyle = grd; g.fillRect(x, 8, 8, H - 16);
+    }
+    g.fillStyle = '#7a7a7a'; g.fillRect(0, 0, W, 8); g.fillRect(0, H - 8, W, 8);
+    g.fillStyle = '#5a5a5a'; g.fillRect(0, 0, 8, H); g.fillRect(W - 8, 0, 8, H);
+    for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(90,60,40,${r.float(0.05, 0.18)})`; const x = r.float(0, W), y = r.float(0, H); g.fillRect(x, y, r.float(2, 6), r.float(10, 50)); }
+    g.fillStyle = 'rgba(255,255,255,0.85)'; g.font = 'bold 14px sans-serif'; g.fillText(['MSKU', 'TGHU', 'CMAU', 'ARKU', 'TRLU'][r.int(0, 4)] + ' ' + r.int(100000, 999999), 14, 24);
+    return toTex(c, { wrap: false });
+  });
+}

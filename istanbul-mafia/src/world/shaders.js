@@ -61,6 +61,32 @@ export function pbrMaterial(set, { color = 0xffffff, scale = 0.5, rough = 1, met
   return mat;
 }
 
+// ---------- Simge yapı malzemesi: pbrMaterial + gece projektör aydınlatması (aşağıdan yukarı sönen sıcak ışık) ----------
+export function floodMaterial(set, { flood = 0.3, floodCol = 0xffc890, floodTop = 60, ...opts } = {}) {
+  const mat = pbrMaterial(set, opts);
+  const prev = mat.onBeforeCompile;
+  const fc = new THREE.Color(floodCol).multiplyScalar(flood);
+  mat.onBeforeCompile = (sh) => {
+    prev(sh);
+    sh.uniforms.uNight = SHARED.uNight; sh.uniforms.uFlood = { value: fc }; sh.uniforms.uFloodTop = { value: floodTop };
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uNight; uniform vec3 uFlood; uniform float uFloodTop;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * uFlood * uNight * (0.45 + 0.55 * (1.0 - smoothstep(0.0, uFloodTop, vWP.y)));');
+  };
+  mat.customProgramCacheKey = () => 'pbrFlood';
+  return mat;
+}
+// ---------- Gece yanan pencere/vitray: gündüz koyu cam (hafif yansıma), gece sıcak ışık ----------
+export function nightGlowMaterial(color, emissive, k = 1.2, { rough = 0.25, metal = 0.2 } = {}) {
+  const mat = new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: 1, roughness: rough, metalness: metal });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = SHARED.uNight; sh.uniforms.uGlowK = { value: k };
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uNight; uniform float uGlowK;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance *= 0.03 + uNight * uGlowK;');
+  };
+  mat.customProgramCacheKey = () => 'nightGlow';
+  return mat;
+}
+
 // ---------- Zemin malzemesi (yol/kaldırım/arnavut/çim/toprak) ----------
 // mask: R asfalt, G kaldırım taşı, B çim, A arnavut kaldırımı; kalan = toprak/çakıl.
 export function terrainMaterial(maskTex, quality, { slab = false } = {}) {
@@ -613,4 +639,325 @@ export function markingMaterial() {
   mat.envMapIntensity = 0.4;
   mat.customProgramCacheKey = () => 'marking';
   return mat;
+}
+
+// =====================================================================
+// Gökyüzü (ortak GLSL) + Okyanus
+// =====================================================================
+// Gökyüzü uniform'ları: sky.js her karede günceller; gökyüzü kubbesi, çevre yansıması (PMREM) ve deniz
+// yansıması aynı fonksiyonları kullanır. Renkler sahne-doğrusal (ton eşlemeden ÖNCEKİ) değerlerdir.
+export const SKY = {
+  uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+  uZenith: { value: new THREE.Color(0.05, 0.15, 0.6) }, uHorizon: { value: new THREE.Color(0.5, 0.6, 0.8) },
+  uGroundSky: { value: new THREE.Color(0.2, 0.2, 0.2) }, uSunGlow: { value: new THREE.Color(0.3, 0.25, 0.2) },
+  uSunDisc: { value: new THREE.Color(20, 18, 15) }, uCloudLit: { value: new THREE.Color(1, 1, 1) },
+  uCloudShade: { value: new THREE.Color(0.4, 0.42, 0.48) }, uMoonCol: { value: new THREE.Color(0.8, 0.8, 0.75) },
+  uCover: { value: 0.2 }, uCloudDark: { value: 0 }, uStars: { value: 0 }, uMoonK: { value: 0 }, uFlash: { value: 0 },
+  uEnvPass: { value: 0 }, uSkyTime: { value: 0 }, uWind: { value: new THREE.Vector2() },
+  tCloud: { value: null },
+};
+
+export const SKY_GLSL = `
+uniform vec3 uSunDir, uMoonDir, uZenith, uHorizon, uGroundSky, uSunGlow, uSunDisc, uCloudLit, uCloudShade, uMoonCol;
+uniform float uCover, uCloudDark, uStars, uMoonK, uFlash, uEnvPass, uSkyTime;
+uniform vec2 uWind;
+uniform sampler2D tCloud;
+// gökyüzü degradesi: koyu mavi tepe -> soluk ufuk, güneş tarafında Mie parıltısı
+vec3 skyBase(vec3 d) {
+  float y = d.y;
+  float h = 1.0 - clamp(y, 0.0, 1.0);
+  float hw = h * h * h;
+  vec3 c = mix(uZenith, uHorizon, hw);
+  c = mix(c, uGroundSky, smoothstep(0.0, -0.25, y));
+  float sd = max(dot(d, uSunDir), 0.0);
+  c += uSunGlow * (pow(sd, 5.0) * (0.2 + 0.8 * hw) * 0.8 + pow(sd, 42.0) * 0.55);
+  return c;
+}
+// bulut katmanı (düzleme izdüşüm, iki ölçek gürültü, kenar aşındırma, güneşe doğru öz-gölge, gümüş kenar)
+vec4 skyClouds(vec3 d) {
+  float dy = d.y;
+  if (dy <= 0.0) return vec4(0.0);
+  vec2 p = d.xz / (dy + 0.1);
+  vec2 q = p * 0.085 + uWind;
+  vec4 nA = texture2D(tCloud, q);
+  vec4 nB = texture2D(tCloud, q * 3.1 + uWind * 0.7 + 0.37);
+  float n = nA.r * 0.78 + nB.g * 0.22;
+  float thr = mix(0.8, 0.24, uCover);
+  float soft = 0.15 + uCover * 0.2;
+  float dens = smoothstep(thr, thr + soft, n);
+  dens = clamp(dens - (1.0 - dens) * nB.b * 0.45, 0.0, 1.0);
+  float strat = smoothstep(0.62, 1.0, uCover);
+  dens = max(dens, strat * (0.7 + 0.3 * nA.r));
+  vec2 so = normalize(uSunDir.xz + 1e-4) * 0.04 * (1.0 - abs(uSunDir.y) * 0.5);
+  float nL = texture2D(tCloud, q + so).r * 0.78 + nB.g * 0.22;
+  float dL = smoothstep(thr, thr + soft * 1.6, nL);
+  float thick = smoothstep(thr, min(thr + 0.5, 1.0), n);
+  float light = exp(-2.0 * dL) * (1.0 - thick * 0.5);
+  vec3 col = mix(uCloudShade, uCloudLit, clamp(light + 0.12, 0.0, 1.0));
+  float sd = max(dot(d, uSunDir), 0.0);
+  col += uSunGlow * pow(sd, 9.0) * (1.0 - dens) * 2.5 * (1.0 - uCover * 0.7);
+  col *= 1.0 - uCloudDark * 0.5 * (0.4 + thick * 0.6);
+  col += uFlash * vec3(0.85, 0.9, 1.0) * (0.3 + thick);
+  // sirrus
+  vec2 pr = vec2(p.x * 0.87 - p.y * 0.5, p.x * 0.5 + p.y * 0.87);
+  float ci = smoothstep(0.62, 0.92, texture2D(tCloud, vec2(pr.x * 0.03, pr.y * 0.13) + uWind * 0.35).a);
+  ci *= smoothstep(0.45, 0.7, texture2D(tCloud, p * 0.021 + uWind * 0.2 + 0.5).r) * (1.0 - uCover) * 0.35;
+  float a = max(dens, ci);
+  col = mix(uCloudLit * 0.92 + uSunGlow * pow(sd, 4.0) * 0.4, col, dens / max(a, 1e-3));
+  col = mix(uHorizon, col, 0.35 + 0.65 * smoothstep(0.0, 0.3, dy));
+  return vec4(col, a * smoothstep(0.0, 0.08, dy));
+}
+vec3 skyFull(vec3 d) { vec3 c = skyBase(d); vec4 cl = skyClouds(d); return mix(c, cl.rgb, cl.a); }
+`;
+
+// Gökyüzü kubbesi malzemesi (tek çizim: degrade + güneş + ay + yıldızlar + bulutlar + şimşek)
+export function skyDomeMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: SKY, depthWrite: false, depthTest: true, side: THREE.BackSide, fog: false,
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; vec4 wp = modelMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * viewMatrix * wp; gl_Position.z = gl_Position.w; }`,
+    fragmentShader: `${SKY_GLSL}
+      varying vec3 vDir;
+      float h13(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
+      void main(){
+        vec3 d = normalize(vDir);
+        vec3 c = skyBase(d);
+        if (uEnvPass < 0.5) {
+          if (uStars > 0.001 && d.y > 0.0) {
+            vec3 sp = d * 230.0; vec3 cell = floor(sp); float hs = h13(cell);
+            if (hs > 0.991) {
+              vec3 ctr = cell + 0.5 + (vec3(h13(cell + 1.7), h13(cell + 3.1), h13(cell + 5.3)) - 0.5) * 0.5;
+              float b = (hs - 0.991) / 0.009; float tw = 0.7 + 0.3 * sin(uSkyTime * (2.0 + hs * 9.0) + hs * 50.0);
+              c += vec3(0.75 + b * 0.25, 0.82 + b * 0.1, 1.0) * smoothstep(0.34, 0.0, length(sp - ctr)) * (0.12 + b * b * 1.4) * tw * uStars * smoothstep(0.0, 0.3, d.y);
+            }
+          }
+          if (uMoonK > 0.001) {
+            float md = dot(d, uMoonDir), R = 0.03, cr = cos(R);
+            float disc = smoothstep(cr - 0.00005, cr + 0.00005, md);
+            vec3 up = abs(uMoonDir.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+            vec3 ax = normalize(cross(up, uMoonDir)); vec3 ay = cross(uMoonDir, ax);
+            vec2 mu = vec2(dot(d, ax), dot(d, ay)) / R;
+            float cra = texture2D(tCloud, mu * 0.3 + 0.5).g;
+            vec3 mc = uMoonCol * (0.6 + 0.5 * cra) * (1.0 - 0.3 * dot(mu, mu));
+            c = mix(c, mc, disc * uMoonK);
+            c += uMoonCol * 0.05 * (pow(max(md, 0.0), 400.0) * 2.0 + pow(max(md, 0.0), 30.0) * 0.35) * uMoonK;
+          }
+          c += uSunDisc * smoothstep(0.99986, 0.99993, dot(d, uSunDir));
+        } else c += uSunDisc * 0.015 * pow(max(dot(d, uSunDir), 0.0), 300.0);
+        vec4 cl = skyClouds(d);
+        c = mix(c, cl.rgb, cl.a);
+        c += uFlash * vec3(0.5, 0.55, 0.7) * 0.35 * smoothstep(-0.1, 0.5, d.y);
+        gl_FragColor = vec4(max(c, 0.0), 1.0);
+      }`,
+  });
+}
+
+// ---------- Okyanus ----------
+// Deniz: kamerayı izleyen kutupsal ızgara (yakında 0.4 m, uzakta 100 m+), Gerstner tepe kaydırması, analitik
+// dalga normali + iki katman ayrıntı normali, Fresnel gök/bulut yansıması (aynı gökyüzü fonksiyonu),
+// karşı kıyı silüeti / gece şehir ışığı yansıması (ucuz kıyı ışın yürüyüşü), güneş/ay parıltısı,
+// kıyıdan uzaklığa göre derinlik rengi, kıyı/iskele/gemi köpüğü ve Kelvin dümen suyu, yağmur halkaları.
+// Tek çizim çağrısı. Gemi verisi: OCEAN.uShipP/uShipD (ships.js doldurur), engeller: OCEAN.uObs.
+export const MAX_SHIPS = 14, MAX_OBS = 32;
+export const OCEAN = {
+  uWave: { value: 0.15 }, uCenter: { value: new THREE.Vector2() },
+  uDeep: { value: new THREE.Color(0.005, 0.026, 0.036) }, uShallow: { value: new THREE.Color(0.018, 0.07, 0.066) },
+  uWaterLight: { value: new THREE.Color(1, 1, 1) }, uSunCol: { value: new THREE.Color(1, 1, 1) }, uMoonLight: { value: 0 },
+  uCityDay: { value: new THREE.Color(0.2, 0.22, 0.25) },
+  uShipP: { value: Array.from({ length: MAX_SHIPS }, () => new THREE.Vector4(1e5, 1e5, 0, 1)) },
+  uShipD: { value: Array.from({ length: MAX_SHIPS }, () => new THREE.Vector4(1, 1, 0, 0)) },
+  uObs: { value: Array.from({ length: MAX_OBS }, () => new THREE.Vector4(1e5, 1e5, 0, 0)) },
+  tOceanN: { value: null },
+};
+
+let obsN = 0;
+// Köpük halkası oluşturacak sudaki engel (iskele, köprü ayağı): merkez + yarı boyutlar
+export function oceanObstacle(x, z, hx, hz) {
+  if (obsN >= MAX_OBS) return false;
+  OCEAN.uObs.value[obsN++].set(x, z, hx, hz);
+  return true;
+}
+
+const OCEAN_WAVES = `
+const vec4 W0 = vec4(0.8, 0.6, 24.0, 1.0);
+const vec4 W1 = vec4(0.28, 0.96, 14.0, 0.6);
+const vec4 W2 = vec4(0.95, -0.31, 9.0, 0.38);
+const vec4 W3 = vec4(-0.5, 0.866, 5.5, 0.22);
+// (yükseklik, dh/dx, dh/dz)
+vec3 wv(vec2 p, vec4 w, float t, float ph) {
+  float k = 6.2831853 / w.z; float om = sqrt(9.81 * k);
+  float a = k * dot(w.xy, p) - om * t + ph;
+  float s = sin(a), c = cos(a);
+  return vec3(s * w.w, c * w.w * k * w.x, c * w.w * k * w.y);
+}
+vec3 waves(vec2 p, float t) { return wv(p, W0, t, 0.0) + wv(p, W1, t, 1.7) + wv(p, W2, t, 4.1) + wv(p, W3, t, 2.3); }
+`;
+
+export function oceanMaterial(quality) {
+  const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
+  Object.assign(uniforms, SKY, OCEAN, { uTime: SHARED.uTime, uRain: SHARED.uRain, uNight: SHARED.uNight, uLightning: SHARED.uLightning });
+  const hi = quality === 'high' ? 1 : 0;
+  const mat = new THREE.ShaderMaterial({
+    uniforms, fog: true, side: THREE.FrontSide,
+    defines: { MAX_SHIPS, MAX_OBS, HIQ: hi },
+    vertexShader: `
+      uniform float uTime, uWave; uniform vec2 uCenter;
+      varying vec3 vW; varying float vDist; varying float vCrest;
+      ${OCEAN_WAVES}
+      #include <fog_pars_vertex>
+      void main(){
+        vec3 p = position + vec3(uCenter.x, 0.0, uCenter.y);
+        float dist = length(p.xz - cameraPosition.xz);
+        float fade = 1.0 - smoothstep(120.0, 520.0, dist);
+        vec3 w = waves(p.xz, uTime) * uWave * fade;
+        // Gerstner: tepelere doğru yatay sıkışma
+        p.xz -= vec2(w.y, w.z) * 1.0;
+        p.y += w.x;
+        vCrest = w.x / max(uWave, 0.01);
+        vW = p; vDist = dist;
+        vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      ${SKY_GLSL}
+      uniform float uTime, uWave, uRain, uNight, uLightning, uMoonLight;
+      uniform vec3 uDeep, uShallow, uWaterLight, uSunCol, uCityDay;
+      uniform vec4 uShipP[MAX_SHIPS]; uniform vec4 uShipD[MAX_SHIPS]; uniform vec4 uObs[MAX_OBS];
+      uniform sampler2D tOceanN;
+      varying vec3 vW; varying float vDist; varying float vCrest;
+      ${OCEAN_WAVES}
+      ${HASH}
+      #include <fog_pars_fragment>
+      float boxD(vec2 p, vec2 a, vec2 b){ vec2 c = (a + b) * 0.5, e = (b - a) * 0.5; vec2 d = abs(p - c) - e; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+      // kara mesafe alanı (harita: Avrupa 3 parça, Anadolu, Kız Kulesi adası)
+      float landD(vec2 p){
+        float d = boxD(p, vec2(-1000.0, -1000.0), vec2(200.0, 70.0));
+        d = min(d, boxD(p, vec2(-1000.0, 70.0), vec2(-850.0, 190.0)));
+        d = min(d, boxD(p, vec2(-1000.0, 190.0), vec2(200.0, 820.0)));
+        d = min(d, boxD(p, vec2(420.0, -1000.0), vec2(1000.0, 820.0)));
+        return d;
+      }
+      float landDI(vec2 p){ return min(landD(p), length(p - vec2(312.0, 290.0)) - 16.0); }
+      void main(){
+        vec2 P = vW.xz;
+        float t = uTime;
+        vec3 V = normalize(cameraPosition - vW);
+        float fadeN = 1.0 - smoothstep(150.0, 900.0, vDist);
+        // --- normal: analitik dalgalar + ayrıntı dokusu ---
+        vec3 w = waves(P, t) * uWave;
+        vec2 sl = vec2(w.y, w.z) * fadeN;
+        float detK = (0.35 + uWave * 1.6 + uRain * 0.4);
+        vec2 n1 = texture2D(tOceanN, P / 19.0 + vec2(t * 0.011, t * 0.007)).xy * 2.0 - 1.0;
+        vec2 n2 = texture2D(tOceanN, P / 7.3 + vec2(-t * 0.017, t * 0.021)).xy * 2.0 - 1.0;
+        vec2 n3 = texture2D(tOceanN, P / 2.6 + vec2(t * 0.04, -t * 0.031)).xy * 2.0 - 1.0;
+        sl += (n1 * 0.35 + n2 * 0.25 * fadeN + n3 * 0.15 * (1.0 - smoothstep(20.0, 90.0, vDist))) * detK * 0.35;
+        // yağmur halkaları
+        if (uRain > 0.01 && vDist < 70.0) {
+          vec2 rc = floor(P * 0.9); vec2 rf = fract(P * 0.9) - 0.5;
+          float ph = fract(t * 1.1 + hsh(rc)); vec2 ctr = (vec2(hsh(rc + 3.1), hsh(rc + 7.7)) - 0.5) * 0.5;
+          float d = length(rf - ctr); float ring = sin((d - ph * 0.45) * 50.0) * (1.0 - ph) * smoothstep(0.1, 0.0, abs(d - ph * 0.45));
+          sl += normalize(rf - ctr + 1e-4) * ring * 0.25 * uRain * (1.0 - vDist / 70.0);
+        }
+        vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y));
+        float NdV = max(dot(N, V), 0.0);
+        // --- derinlik (kıyıdan uzaklık) ---
+        float ld = landDI(P);
+        float shallow = 1.0 - smoothstep(2.0, 45.0, ld);
+        // --- engeller (iskele, köprü ayakları) ---
+        float ob = 1e4;
+        for (int i = 0; i < MAX_OBS; i++) { vec4 o = uObs[i]; if (o.z <= 0.0) continue; ob = min(ob, boxD(P, o.xy - o.zw, o.xy + o.zw)); }
+        // --- gemi gövde köpüğü + Kelvin dümen suyu ---
+        float sf = 0.0, wakeN = 0.0;
+        for (int i = 0; i < MAX_SHIPS; i++) {
+          vec4 s = uShipP[i]; vec4 sd = uShipD[i];
+          vec2 dd = P - s.xy;
+          if (abs(dd.x) + abs(dd.y) > sd.x * 7.0 + 80.0) continue;
+          vec2 f = vec2(s.z, s.w);
+          float lz = dot(dd, f), lx = dd.x * f.y - dd.y * f.x;
+          float k = clamp(sd.z / 6.0, 0.0, 1.0);
+          float e = length(vec2(lx / (sd.y + 1.0 + k), (lz - sd.x * 0.05) / (sd.x + 1.5 + k * 2.0)));
+          sf += smoothstep(1.2, 0.97, e) * (0.25 + 0.75 * smoothstep(-sd.x, sd.x, lz)) * (0.3 + k * 0.9);
+          float b = -lz - sd.x * 0.85;
+          if (b > 0.0 && k > 0.02) {
+            float wdt = sd.y * 0.8 + b * 0.354;
+            float decay = exp(-b / (25.0 + sd.x * 2.2));
+            float arm = exp(-abs(abs(lx) - wdt) * (0.9 - 0.6 * smoothstep(0.0, 200.0, b))) * decay;
+            float cen = smoothstep(sd.y * 1.1 + b * 0.06, 0.0, abs(lx)) * exp(-b / (15.0 + sd.x * 1.4));
+            sf += (arm * 0.55 + cen * 0.9) * k;
+            wakeN += cen * k;
+          }
+        }
+        // --- köpük deseni ---
+        float fpat = texture2D(tOceanN, P / 5.0 + vec2(t * 0.02, 0.0)).a * 0.6 + texture2D(tOceanN, P / 1.7 - vec2(0.0, t * 0.035)).a * 0.4;
+        float shoreF = (1.0 - smoothstep(0.0, 2.6 + uWave * 6.0, ld + (fpat - 0.5) * 3.0)) * (0.55 + uWave);
+        float obsF = (1.0 - smoothstep(0.0, 1.6 + uWave * 3.0, ob + (fpat - 0.5) * 1.5)) * 0.8;
+        float crestF = smoothstep(0.75, 1.1, vCrest + fpat * 0.4) * smoothstep(0.25, 0.6, uWave) * 0.6;
+        float fm = clamp(shoreF + obsF + sf + crestF, 0.0, 1.6);
+        float foam = smoothstep(1.0 - min(fm, 1.0), 1.0 - min(fm, 1.0) + 0.25, fpat) * min(fm, 1.0);
+        foam = max(foam, smoothstep(0.9, 1.4, fm) * 0.7);
+        // --- yansıma: gökyüzü + bulutlar, karşı kıyı silüeti/ışıkları ---
+        vec3 R = reflect(-V, N); R.y = abs(R.y) + 0.002;
+        vec3 refl = skyFull(R);
+        {
+          vec2 rd = R.xz; float lh = length(rd);
+          if (lh > 1e-3) {
+            rd /= lh; float slope = R.y / lh; float tt = 2.0; float hitT = -1.0;
+            for (int i = 0; i < 9; i++) { float s = landD(P + rd * tt); if (s < 1.0) { hitT = tt; break; } tt += max(s, 3.0); if (tt > 1400.0) break; }
+            if (hitT > 0.0) {
+              vec2 Q = P + rd * hitT; float y = slope * hitT;
+              float bh = 9.0 + 30.0 * texture2D(tCloud, Q / 260.0).r;
+              float cov = (1.0 - smoothstep(bh * 0.85, bh, y)) * (1.0 - smoothstep(700.0, 1400.0, hitT));
+              vec3 city = mix(uCityDay, uHorizon, smoothstep(80.0, 1200.0, hitT) * 0.85);
+              // gece pencereleri / sokak ışıkları
+              vec2 cid = floor(vec2((Q.x + Q.y) / 3.3, y / 3.1));
+              float lit = step(0.62, hsh(cid)) * step(2.5, y);
+              vec3 warm = mix(vec3(1.0, 0.62, 0.28), vec3(0.9, 0.85, 0.7), hsh(cid + 9.0));
+              city += uNight * (warm * lit * 1.4 + vec3(1.0, 0.55, 0.22) * (1.0 - smoothstep(0.0, 4.0, y)) * 2.0) * (1.0 - smoothstep(300.0, 1300.0, hitT) * 0.6);
+              refl = mix(refl, city, cov);
+            }
+          }
+        }
+        float F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
+        F = mix(F, 0.06, 1.0 - fadeN) * (1.0 - uRain * 0.15);
+        // --- su gövdesi: derinlik rengi + ışık saçılması (dalga tepelerinde turkuaz) ---
+        vec3 body = mix(uDeep, uShallow, shallow) * uWaterLight;
+        float sss = pow(max(dot(V, normalize(-uSunDir + vec3(0.0, 0.3, 0.0))), 0.0), 3.0) * max(vCrest + 0.3, 0.0) * fadeN;
+        body += vec3(0.02, 0.09, 0.08) * uSunCol * sss * 0.5;
+        vec3 col = mix(body, refl, F);
+        // --- güneş parıltısı (uzaklıkla genişleyen yansıma yolu) ---
+        vec3 H = normalize(uSunDir + V);
+        float shin = mix(60.0, 900.0, fadeN);
+        float spec = pow(max(dot(N, H), 0.0), shin) * (shin + 8.0) / 25.0;
+        col += uSunCol * spec * 0.06 * (1.0 - uCover * 0.85) * step(0.0, uSunDir.y);
+        // ay parıltısı
+        vec3 Hm = normalize(uMoonDir + V);
+        col += vec3(0.6, 0.7, 0.9) * pow(max(dot(N, Hm), 0.0), 300.0) * 3.0 * uMoonLight;
+        // köpük (beyaz, ortam ışığıyla aydınlanır)
+        col = mix(col, uWaterLight * 0.28 + uSunCol * 0.06, clamp(foam, 0.0, 1.0));
+        col += uLightning * vec3(0.4, 0.45, 0.6) * F * 3.0;
+        gl_FragColor = vec4(col, 1.0);
+        #include <fog_fragment>
+      }`,
+  });
+  return mat;
+}
+
+// Kutupsal okyanus ızgarası: halkalar üstel aralıklı (r = 13.5(e^{0.037 i} - 1)), ~150x320 = 48k köşe
+export function oceanGeometry(rings = 150, segs = 320) {
+  const pos = new Float32Array((rings + 1) * segs * 3);
+  let k = 0;
+  for (let i = 0; i <= rings; i++) {
+    const r = 13.5 * (Math.exp(0.037 * i) - 1) * (3600 / (13.5 * (Math.exp(0.037 * 150) - 1)));
+    for (let j = 0; j < segs; j++) { const a = (j / segs) * Math.PI * 2 + (i % 2) * (Math.PI / segs); pos[k++] = Math.cos(a) * r; pos[k++] = 0; pos[k++] = Math.sin(a) * r; }
+  }
+  const idx = [];
+  for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) {
+    const a = i * segs + j, b = i * segs + ((j + 1) % segs), c = (i + 1) * segs + j, d = (i + 1) * segs + ((j + 1) % segs);
+    idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+  return g;
 }

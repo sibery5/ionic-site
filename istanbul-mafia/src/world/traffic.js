@@ -2,6 +2,7 @@
 // Tümü örneklemeli (InstancedMesh) çizilir; lamba renkleri yalnız faz değişince güncellenir.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { bridgeHeightAt } from './bridge_profile.js';
 
 // Faz döngüsü (sn): KG yeşil, KG sarı, tümü kırmızı, DB yeşil, DB sarı, tümü kırmızı
 const G = 14, Y = 3, AR = 2;
@@ -84,15 +85,16 @@ export class TrafficLights {
       const px = n0.x + a.dx * (a.stop + 0.4) + rx * (a.hw + 1.0), pz = n0.z + a.dz * (a.stop + 0.4) + rz * (a.hw + 1.0);
       const rot = Math.atan2(a.dx, a.dz);
       Q.setFromAxisAngle(UP, rot);
-      M.compose(P.set(px, 0, pz), Q, S.set(1, 1, 1)); this.poles.setMatrixAt(a.idx, M);
-      cols.add(px - 0.15, pz - 0.15, px + 0.15, pz + 0.15, 0, 5.5, 'trafik');
+      const py = bridgeHeightAt(px, pz) || 0; // köprü rampasındaysa tabliye üstüne
+      M.compose(P.set(px, py, pz), Q, S.set(1, 1, 1)); this.poles.setMatrixAt(a.idx, M);
+      cols.addCircle(px, pz, 0.2, py, py + 5.5, 'trafik');
       // kol yola doğru uzanır
       const armLen = Math.min(a.hw * 0.75, 5);
       // kolun yerel +X'i yol ortasına
       const q2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-rx, 0, -rz));
-      M.compose(P.set(px, 5.2, pz), q2, S.set(armLen, 1, 1)); this.arms.setMatrixAt(a.idx, M);
+      M.compose(P.set(px, py + 5.2, pz), q2, S.set(armLen, 1, 1)); this.arms.setMatrixAt(a.idx, M);
       Q.setFromAxisAngle(UP, rot);
-      const heads = [[px, 2.9, pz], [px - rx * armLen, 4.75, pz - rz * armLen]];
+      const heads = [[px, py + 2.9, pz], [px - rx * armLen, py + 4.75, pz - rz * armLen]];
       heads.forEach(([hx, hy, hz], k) => {
         M.compose(P.set(hx, hy, hz), Q, S.set(1, 1, 1)); this.heads.setMatrixAt(a.idx * 2 + k, M);
         for (let i = 0; i < 3; i++) {

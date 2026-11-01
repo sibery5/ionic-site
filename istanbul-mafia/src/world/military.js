@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { MILITARY_BASE as MB } from './map.js';
 import { GeoBuilder } from './instancer.js';
+import { addBarrier } from './zones.js';
 
 export const MILITARY_PROP_DEFS = {
   guardtower: () => {
@@ -77,12 +78,12 @@ export function buildMilitary(city) {
   city.fenceLine(gx + 6, MB.z1, MB.x1, MB.z1, 'chain', H, 'razor');
   // nizamiye
   P.booth.addTRS(gx + 8.5, 0, MB.z1 - 2.5, Math.PI); cols.add(gx + 7.7, MB.z1 - 3.3, gx + 9.3, MB.z1 - 1.7, 0, 2.6, 'booth');
-  P.barrier.addTRS(gx - 5, 0, MB.z1, 0);
+  P.barrier.addTRS(gx - 5, 0, MB.z1, 0); addBarrier(city, gx - 5, MB.z1, 0, 0);
   for (const x of [gx - 6.4, gx + 6.4]) { P.gatepost.addTRS(x, 0, MB.z1, 0); cols.add(x - 0.35, MB.z1 - 0.35, x + 0.35, MB.z1 + 0.35, 0, 2.6, 'gatepost'); }
   city.addSign('military', gx, 3.4, MB.z1 + 0.25, 0, 6, 1.0);
   city.addTrimBox(13.6, 0.5, 0.5, gx, 2.6, MB.z1, [0.42, 0.46, 0.34]);
-  for (const x of [gx - 14, gx + 16]) P.milsign.addTRS(x, 0, MB.z1 + 1.2, 0);
-  for (const z of [MB.z0 + 60, MB.z0 + 140]) { P.milsign.addTRS(MB.x1 + 1.2, 0, z, Math.PI / 2); }
+  for (const x of [gx - 14, gx + 16]) { P.milsign.addTRS(x, 0, MB.z1 + 1.2, 0); cols.breakable(cols.addOBB(x, MB.z1 + 1.2, 2.0, 0.14, 0, 0, 2.4, 'sign'), 'sign', 15, P.milsign, x, 0, MB.z1 + 1.2, 0); }
+  for (const z of [MB.z0 + 60, MB.z0 + 140]) { P.milsign.addTRS(MB.x1 + 1.2, 0, z, Math.PI / 2); cols.breakable(cols.addOBB(MB.x1 + 1.2, z, 2.0, 0.14, Math.PI / 2, 0, 2.4, 'sign'), 'sign', 15, P.milsign, MB.x1 + 1.2, 0, z, Math.PI / 2); }
   // gözetleme kuleleri (köşeler + kapı yanları)
   for (const [x, z] of [[MB.x0 + 4, MB.z0 + 4], [MB.x1 - 4, MB.z0 + 4], [MB.x0 + 4, MB.z1 - 4], [MB.x1 - 4, MB.z1 - 4], [gx - 18, MB.z1 - 4], [(MB.x0 + MB.x1) / 2, MB.z0 + 4]]) {
     P.guardtower.addTRS(x, 0, z, z > MB.z0 + 100 ? 0 : Math.PI);
@@ -108,7 +109,7 @@ export function buildMilitary(city) {
   // helipad
   P.helipadM.addTRS(MB.helipad.x, 0, MB.helipad.z, 0);
   // tören alanı bayrağı
-  P.flagpole.addTRS(-830, 0, MB.z0 + 70, 0); cols.add(-830.15, MB.z0 + 69.85, -829.85, MB.z0 + 70.15, 0, 9, 'pole');
+  P.flagpole.addTRS(-830, 0, MB.z0 + 70, 0); cols.addCircle(-830, MB.z0 + 70, 0.12, 0, 9.2, 'pole');
   // park halindeki araçlar (yer tutucu) + doğma noktaları
   for (let i = 0; i < 5; i++) {
     const x = MB.x1 - 80 + i * 6, z = MB.z0 + 105;
@@ -124,5 +125,5 @@ export function buildMilitary(city) {
   for (let i = 0; i < 10; i++) MB.spawnPoints.push({ type: 'soldier', x: -860 + (i % 5) * 8, z: MB.z0 + 60 + Math.floor(i / 5) * 8, heading: Math.PI });
   MB.spawnPoints.push({ type: 'helicopter', x: MB.helipad.x, z: MB.helipad.z, heading: 0 });
   // sınır çevresi aydınlatma
-  for (let x = MB.x0 + 20; x < MB.x1; x += 40) P.lampModern.addTRS(x, 0, MB.z0 + 6, Math.PI);
+  for (let x = MB.x0 + 20; x < MB.x1; x += 40) { P.lampModern.addTRS(x, 0, MB.z0 + 6, Math.PI); cols.addCircle(x, MB.z0 + 6, 0.2, 0, 6.6, 'lamp'); }
 }

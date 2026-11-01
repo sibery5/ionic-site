@@ -85,6 +85,7 @@ export function buildVegetation(city) {
     const g = fn(new RNG(k.length * 77));
     const leaf = k === 'palm' ? leafMats.palm : k === 'cypress' || k === 'pine' ? leafMats.needle : leafMats.broad;
     inst[k] = { trunk: new NearInstancer(g.trunk, bark, { radius: R, cell: 60, shadow: true }), crown: new NearInstancer(g.crown, leaf, { radius: R, cell: 60, shadow: quality !== 'low' }) };
+    inst[k].trunk.name = 'tree:' + k; inst[k].crown.name = 'crown:' + k;
   }
   const col = new THREE.Color();
   const tree = (k, x, z, s, y = 0.15) => {
@@ -94,7 +95,7 @@ export function buildVegetation(city) {
     const h = k === 'cypress' ? 0.3 : k === 'palm' ? 0.28 : 0.25 + rng.float(-0.03, 0.03);
     inst[k].crown.addTRS(x, y, z, ry, s, s, s, col.setHSL(h, k === 'cypress' ? 0.35 : 0.5, (k === 'cypress' ? 0.26 : 0.38) + rng.float(-0.06, 0.06)));
     const tr = k === 'plane' ? 0.45 : 0.25;
-    cols.add(x - tr * s, z - tr * s, x + tr * s, z + tr * s, 0, 4 * s, 'tree');
+    cols.addCircle(x, z, tr * s, 0, 4 * s, 'tree');
   };
   city.addTree = tree;
   // park ağaçları
@@ -122,10 +123,13 @@ export function buildVegetation(city) {
   const hedgeMat = pbrMaterial(grassPBR(quality), { color: 0x6a9a50, scale: 1.4, normalScale: 2.5 });
   const hedgeBox = new THREE.BoxGeometry(1, 1, 1); hedgeBox.translate(0, 0.5, 0);
   const hedges = new NearInstancer(hedgeBox, hedgeMat, { radius: 360, cell: 60, shadow: true });
+  hedges.name = 'hedge';
   const tulipGeo = (() => { const g = new GeoBuilder(); g.cyl(0.012, 0.012, 0.36, 4, { color: 0x3a7a2a }); g.add(new THREE.ConeGeometry(0.055, 0.12, 6, 1, true), { y: 0.4, rx: Math.PI, rough: 0.6 }); g.sphere(0.045, { y: 0.37, rough: 0.6 }, 6, 4); g.box(0.1, 0.012, 0.03, { y: 0.12, rz: 0.6, color: 0x3a7a2a }); return g.build(); })();
   const tulips = new NearInstancer(tulipGeo, city.propsMat, { radius: 90, cell: 30 });
+  tulips.name = 'tulips';
   const bedGeo = new GeoBuilder().box(1, 0.25, 1, { color: 0xb8b0a0, rough: 0.9 }).box(0.92, 0.27, 0.92, { color: 0x3a2a1c, rough: 1 }).build();
   const beds = new NearInstancer(bedGeo, city.propsMat, { radius: 300, cell: 60 });
+  beds.name = 'bed';
   const TC = ['#d01020', '#f2c200', '#e8509a', '#7a2a9a', '#f4f0e8', '#ff6a1a'];
   const bed = (cx, cz, w, d, ry) => {
     beds.addTRS(cx, 0.15, cz, ry, w, 1, d);
@@ -136,7 +140,7 @@ export function buildVegetation(city) {
       const band = Math.floor((a + w / 2) / 1.2) % 2;
       tulips.addTRS(cx + lx * cs + lz * sn, 0.4, cz - lx * sn + lz * cs, rng.float(0, 6.28), 1, rng.float(0.85, 1.2), 1, col.set(band ? c1 : c2));
     }
-    cols.add(cx - (Math.abs(cs) * w + Math.abs(sn) * d) / 2, cz - (Math.abs(sn) * w + Math.abs(cs) * d) / 2, cx + (Math.abs(cs) * w + Math.abs(sn) * d) / 2, cz + (Math.abs(sn) * w + Math.abs(cs) * d) / 2, 0, 0.4, 'bed');
+    cols.addOBB(cx, cz, w, d, ry, 0, 0.4, 'bed');
   };
   city.addHedge = (x0, z0, x1, z1, h = 1.1) => { hedges.addTRS((x0 + x1) / 2, 0.15, (z0 + z1) / 2, 0, Math.max(0.8, x1 - x0), h, Math.max(0.8, z1 - z0)); cols.add(x0, z0, x1, z1, 0, h, 'hedge'); };
   city.addBed = bed;
@@ -160,17 +164,21 @@ export function buildVegetation(city) {
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
       const x = p.cx + Math.sin(a) * 10.5, z = p.cz + Math.cos(a) * 10.5;
-      if (k % 2 === 0) { P.bench.addTRS(x, 0.15, z, a + Math.PI); cols.add(x - 0.9, z - 0.9, x + 0.9, z + 0.9, 0, 0.5, 'bench'); }
-      else { P.lampClassic.addTRS(p.cx + Math.sin(a) * 12, 0.15, p.cz + Math.cos(a) * 12, 0); }
+      if (k % 2 === 0) { P.bench.addTRS(x, 0.15, z, a + Math.PI); cols.breakable(cols.addLocal(x, z, a + Math.PI, 0, -0.04, 1.8, 0.56, 0, 0.9, 'bench'), 'bench', 70, P.bench, x, 0.15, z, a + Math.PI); (city.benches || (city.benches = [])).push([x, z, a + Math.PI]); }
+      else { const lx = p.cx + Math.sin(a) * 12, lz = p.cz + Math.cos(a) * 12; P.lampClassic.addTRS(lx, 0.15, lz, 0); cols.addCircle(lx, lz, 0.25, 0, 4.9, 'lamp'); }
     }
     // çeşme
     P.fountain.addTRS(p.cx, 0.15, p.cz, 0);
-    cols.add(p.cx - 3.3, p.cz - 3.3, p.cx + 3.3, p.cz + 3.3, 0, 0.7, 'fountain');
+    cols.addCircle(p.cx, p.cz, 3.4, 0, 0.75, 'fountain');
+    cols.addCircle(p.cx, p.cz, 0.65, 0, 3.5, 'fountain');
     // oyun parkı (her iki parktan birinde)
     if (pi % 2 === 0 && p.x1 - p.x0 > 50) {
       const px = p.x0 + 12, pz = p.z1 - 12;
       P.playground.addTRS(px, 0.15, pz, 0);
-      cols.add(px - 5, pz - 1.2, px + 5, pz + 1.2, 0, 2.5, 'playground');
+      cols.add(px - 5.1, pz - 0.9, px - 1.9, pz + 0.9, 0, 2.5, 'playground'); // salıncak
+      cols.add(px + 0.55, pz - 0.65, px + 1.85, pz + 0.65, 0, 2.6, 'playground'); // kaydırak kulesi
+      cols.add(px + 0.75, pz + 0.65, px + 1.65, pz + 3.4, 0, 1.4, 'playground'); // kaydırak
+      cols.add(px + 2.4, pz - 0.25, px + 5.6, pz + 0.25, 0, 0.8, 'playground'); // tahterevalli
     }
   });
   city.finalizeLater.push(() => {

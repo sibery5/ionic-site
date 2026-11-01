@@ -6,8 +6,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, districtAt } from './map.js';
 import { RNG } from '../core/util.js';
-import { waterNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
-import { SHARED, terrainMaterial, pbrMaterial, waterMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
+import { oceanNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
+import { SHARED, OCEAN, oceanMaterial, oceanGeometry, oceanObstacle, terrainMaterial, pbrMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
 import { NearInstancer, ChunkInstancer, ChunkMerger } from './instancer.js';
 import { buildBuildings, FACADE_PROP_DEFS, FACADE_PROP_OPTS, signEntries, signMaterial, PALETTE as BPAL, SHOP_SIGNS as BSIGNS, SPECIAL_INFO as BINFO } from './buildings.js';
 import { buildStreetProps, STREET_PROP_DEFS, STREET_PROP_OPTS } from './streetprops.js';
@@ -15,6 +15,7 @@ import { buildVegetation, PARK_PROP_DEFS, PARK_PROP_OPTS } from './vegetation.js
 import { buildPoliceStations, POLICE_PROP_DEFS, POLICE_PROP_OPTS } from './police_station.js';
 import { buildMilitary, paintMilitary, MILITARY_PROP_DEFS, MILITARY_PROP_OPTS } from './military.js';
 import { buildLandmark } from './landmarks.js';
+import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
 
 export const PALETTE = BPAL;
@@ -25,8 +26,10 @@ export { facadeMaterial };
 const FENCE_W = { chain: 4, ironfence: 2, razor: 4 };
 const HISTORIC = new Set(['fatih', 'beyoglu']);
 
+let currentCity = null;
 export class City {
   constructor(scene, map, physics, uniforms, quality) {
+    currentCity = this;
     this.scene = scene;
     this.map = map;
     this.physics = physics;
@@ -280,18 +283,22 @@ export class City {
     this.minimapCanvas = mc;
   }
 
+  // Deniz: kamerayı izleyen kutupsal ızgara + okyanus şaderi (shaders.js oceanMaterial), tek çizim çağrısı
   buildWater() {
-    const mat = waterMaterial(waterNormalTexture());
+    OCEAN.tOceanN.value = oceanNormalTexture();
+    const mat = oceanMaterial(this.quality);
     this.waterMat = mat;
-    const geo = new THREE.PlaneGeometry(3200, 3200);
-    geo.rotateX(-Math.PI / 2);
+    const geo = this.quality === 'low' ? oceanGeometry(110, 220) : oceanGeometry(150, 320);
     const w = new THREE.Mesh(geo, mat);
     w.position.y = WATER_Y;
-    w.receiveShadow = true;
+    w.frustumCulled = false;
+    w.renderOrder = -2;
+    // ızgara merkezi kameraya 2 m adımlarla kilitlenir (dalgalar dünya koordinatında, kaymaz)
+    w.onBeforeRender = (r, s, cam) => { OCEAN.uCenter.value.set(Math.round(cam.position.x / 2) * 2, Math.round(cam.position.z / 2) * 2); };
     this.group.add(w);
-    const bed = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x0a1e28 }));
-    bed.position.y = WATER_Y - 5;
-    this.group.add(bed);
+    this.water = w;
+    // sudaki engeller (köpük): marina iskeleleri
+    for (const p of MARINA.piers) if (p.x0 >= 205) oceanObstacle((p.x0 + p.x1) / 2, (p.z0 + p.z1) / 2, (p.x1 - p.x0) / 2, (p.z1 - p.z0) / 2);
   }
 
   update(dt, t) {
@@ -410,60 +417,12 @@ function trimFinish(g, kind, col) {
   return n;
 }
 
-// Köprüler (tabliye, korkuluklar, Boğaz köprüsü kuleleri ve kabloları) ve Kız Kulesi
-export function buildBridgesAndIsland(group, cols, uniforms) {
+// Köprüler (bridges.js: 15 Temmuz asma köprü, iki katlı Galata, Unkapanı) ve Kız Kulesi.
+// main.js bu fonksiyonu (group, cols, uniforms) ile çağırır; şehir nesnesi (zemin maskesi, sokak eşyası) son kurulan City'den alınır.
+export function buildBridgesAndIsland(group, cols, uniforms, city = currentCity) {
   void uniforms;
-  const deckMat = pbrMaterial(ashlarPBR('medium'), { color: 0x8a867e, scale: 0.4 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb03a2e, metalness: 0.5, roughness: 0.45 });
-  const grey = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.6, roughness: 0.35 });
-  const deckG = [], greyG = [], steelG = [];
-  const bx = (arr, w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); arr.push(g); };
-  for (const b of BRIDGES) {
-    const w = b.x1 - b.x0, d = b.z1 - b.z0;
-    bx(deckG, w, 1.2, d, (b.x0 + b.x1) / 2, -0.6, (b.z0 + b.z1) / 2);
-    if (b.axis === 'z') {
-      for (const x of [b.x0 + 0.2, b.x1 - 0.2]) { bx(greyG, 0.15, 1.0, d, x, 0.5, (b.z0 + b.z1) / 2); cols.add(x - 0.1, b.z0 + 10, x + 0.1, b.z1 - 10, 0, 1.05, 'rail'); }
-      for (let z = b.z0 + 20; z < b.z1 - 10; z += 25) bx(deckG, w * 0.8, 5, 3, (b.x0 + b.x1) / 2, -3.6, z);
-    } else {
-      for (const z of [b.z0 + 0.2, b.z1 - 0.2]) { bx(greyG, w, 1.0, 0.15, (b.x0 + b.x1) / 2, 0.5, z); cols.add(b.x0 + 12, z - 0.1, b.x1 - 12, z + 0.1, 0, 1.05, 'rail'); }
-      const towers = [235, 385], H = 75;
-      for (const tx of towers) {
-        for (const z of [b.z0 - 0.8, b.z1 + 0.8]) { bx(steelG, 2.4, H + 6, 2.4, tx, H / 2 - 6, z); cols.add(tx - 1.2, z - 1.2, tx + 1.2, z + 1.2, -6, H, 'tower'); }
-        for (const y of [H - 2, H * 0.55, 8]) bx(steelG, 2, 2.2, d + 3.6, tx, y, (b.z0 + b.z1) / 2);
-      }
-      for (const z of [b.z0 - 0.8, b.z1 + 0.8]) {
-        const pts = [], xs = [150, 235, 385, 480];
-        for (let i = 0; i <= 80; i++) {
-          const x = xs[0] + ((xs[3] - xs[0]) * i) / 80;
-          let y;
-          if (x < xs[1]) y = 4 + ((x - xs[0]) / (xs[1] - xs[0])) ** 1.4 * (H - 4);
-          else if (x > xs[2]) y = 4 + ((xs[3] - x) / (xs[3] - xs[2])) ** 1.4 * (H - 4);
-          else { const u = (x - (xs[1] + xs[2]) / 2) / ((xs[2] - xs[1]) / 2); y = 4 + (H - 4) * u * u; }
-          pts.push(new THREE.Vector3(x, Math.max(y, 3), z));
-        }
-        const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.35, 6);
-        greyG.push(tg.toNonIndexed());
-        for (let x = 240; x < 382; x += 6) {
-          const u = (x - 310) / 75, y = 4 + (H - 4) * u * u;
-          if (y < 1.5) continue;
-          bx(greyG, 0.08, y, 0.08, x, y / 2, z);
-        }
-      }
-      const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4a7aff, emissiveIntensity: 2 });
-      for (const tx of towers) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 6), lightMat); l.position.set(tx, H + 0.8, (b.z0 + b.z1) / 2); group.add(l); }
-    }
-  }
-  const nI = (arr) => mergeGeometries(arr.map((g) => (g.index ? g.toNonIndexed() : g)));
-  const dm = new THREE.Mesh(nI(deckG), deckMat); dm.receiveShadow = true; group.add(dm);
-  const gm = new THREE.Mesh(nI(greyG), grey); gm.castShadow = true; group.add(gm);
-  const sm = new THREE.Mesh(nI(steelG), steel); sm.castShadow = true; group.add(sm);
-  // Kız Kulesi
-  const isl = new THREE.Mesh(new THREE.CylinderGeometry(ISLAND.r, ISLAND.r + 2, 3, 24), pbrMaterial(ashlarPBR('medium'), { color: 0xa89c86, scale: 0.6 }));
-  isl.position.set(ISLAND.x, -1.5, ISLAND.z); group.add(isl);
-  const white = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.7 });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(14, 6, 10), white); base.position.set(ISLAND.x, 3, ISLAND.z); base.castShadow = true; group.add(base);
-  const tw = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.8, 14, 12), white); tw.position.set(ISLAND.x + 3, 10, ISLAND.z); tw.castShadow = true; group.add(tw);
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(3, 5, 12), new THREE.MeshStandardMaterial({ color: 0x7a8a96, metalness: 0.5 })); cap.position.set(ISLAND.x + 3, 19.5, ISLAND.z); group.add(cap);
-  const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 })); spire.position.set(ISLAND.x + 3, 23, ISLAND.z); group.add(spire);
-  cols.add(ISLAND.x - 7, ISLAND.z - 5, ISLAND.x + 7, ISLAND.z + 5, 0, 6, 'kizkulesi');
+  const q = city ? city.quality : 'medium';
+  buildBridges(group, cols, city, q);
+  buildMaidensTower(group, cols, q);
+  hookLedMeshes(group);
 }
