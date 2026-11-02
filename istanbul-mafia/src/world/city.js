@@ -158,7 +158,7 @@ export class City {
       if (topKind) this.props[topKind].addTRS(x0 + dx * s, y0 + height, z0 + dz * s, ry, seg / (FENCE_W[topKind] || 4), 1, 1);
     }
     const th = 0.12;
-    this.physics.city.add(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, height + (topKind ? 0.6 : 0), 'fence');
+    return this.physics.city.add(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, height + (topKind ? 0.6 : 0), 'fence');
   }
   onSlab(x, z) {
     for (const b of this.map.blocks) if (b.kind !== 'zone' && x >= b.x0 - SIDEWALK - 0.01 && x <= b.x1 + SIDEWALK + 0.01 && z >= b.z0 - SIDEWALK - 0.01 && z <= b.z1 + SIDEWALK + 0.01) return true;

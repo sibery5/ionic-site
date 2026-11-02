@@ -219,8 +219,8 @@ export class Physics {
     for (let i = 0; i < boxes.length; i++) {
       const b = boxes[i];
       if (y + height < b.y0 || y > b.y1 - 0.001) {
-        // üstündeyiz: destek olarak say
-        if (y >= b.y1 - step && shapeContains(b, p.x, p.z, radius * 0.5)) support = Math.max(support, b.y1);
+        // üstündeyiz: destek olarak say (tırmanılamaz duvar/çit üstü destek vermez → düşer ve dışarı itilir)
+        if (!b.noClimb && y >= b.y1 - step && shapeContains(b, p.x, p.z, radius * 0.5)) support = Math.max(support, b.y1);
         continue;
       }
       if (b.y1 - y <= step && b.y1 - y > -0.01) {

@@ -91,6 +91,8 @@ export class Player extends Actor {
     for (const b of boxes) {
       const top = b.y1 - p.y;
       if (top <= 0.42 || top > 1.25 || b.y0 > p.y + 0.3) continue;
+      // [dünya] tırmanılamaz yapı (askeri üs duvarı/çiti, kuleler): tutunma reddedilir; girişim kanun ekibi için kaydedilir
+      if (b.noClimb) { this.climbAttempt = { t: performance.now() / 1000, x: p.x, z: p.z, tag: b.tag }; continue; }
       // yatay ışın - kutu: giriş/çıkış mesafesi
       let t0 = -Infinity, t1 = Infinity;
       for (const [o, d, lo, hi] of [[p.x, dx, b.x0, b.x1], [p.z, dz, b.z0, b.z1]]) {

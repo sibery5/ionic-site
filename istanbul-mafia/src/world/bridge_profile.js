@@ -8,7 +8,7 @@
 // z=168..200 (kavşaklar y=0).
 //
 // DECK_TOP = 0 yapılırsa köprü eski düz (y=0) hâline döner; gemiler de köprü önünde döner (ships.js).
-import { BRIDGES } from './map.js';
+import { BRIDGES, WATER_Y } from './map.js';
 
 export const DECK_TOP = 20;
 export const GALATA_TOP = 4.2;
@@ -16,6 +16,8 @@ const BOS = BRIDGES.find((b) => b.axis === 'x');
 const GAL = BRIDGES.find((b) => b.name.startsWith('Galata'));
 export const BOS_X0 = 190, BOS_X1 = 435, BOS_XC = (BOS_X0 + BOS_X1) / 2, BOS_HALF = (BOS_X1 - BOS_X0) / 2;
 export const GAL_Z0 = 60, GAL_Z1 = 200, GAL_RAMP = 32;
+// Bariyer/korkuluk uçları: kesişen ana caddelerin (16 m) kaldırım kenarı — uç elemanı kavşak şeridine taşmaz
+export const BAR_X0 = BOS_X0 + 9, BAR_X1 = BOS_X1 - 9, GAL_BZ0 = GAL_Z0 + 9, GAL_BZ1 = GAL_Z1 - 9;
 
 const ss = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const dss = (t) => (t <= 0 || t >= 1 ? 0 : 6 * t * (1 - t));
