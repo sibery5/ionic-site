@@ -505,7 +505,7 @@ export class Combat {
   }
   updatePlayerHealth(dt) {
     const g = this.game, p = g.player, s = g.state;
-    if (!p || p.dead) { this.healT = 0; return; }
+    if (!p || p.dead) { if (this.healT > 0) { this.healT = 0; g.ui.setProgress(null); } return; }
     p.lastHurtT = (p.lastHurtT || 0) + dt;
     if (p.staggerT > 0) { p.staggerT -= dt; if (!p.vehicle) { p.pos.x += p.staggerX * dt; p.pos.z += p.staggerZ * dt; } }
     if (p.bleed > 0) {

@@ -434,9 +434,9 @@ export class Wanted {
       vel: new THREE.Vector3(), orbit: ang, hp: 1600, dying: false, fallT: 0, shootT: 3, burst: 0, rocketT: 9, chopT: 0, leaveT: 0, aim: new THREE.Vector3().copy(p.pos), heading: 0,
     };
     // projektör: saydam koni + zemin halkası (ek ışık yok: gölgelendirici sayısı sabit)
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 4.2, 1, 20, 1, true).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: 0xfff4c8, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 3.2, 1, 20, 1, true).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: 0xfff4c8, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     cone.frustumCulled = false; cone.renderOrder = 11;
-    const spot = new THREE.Mesh(new THREE.CircleGeometry(4.2, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const spot = new THREE.Mesh(new THREE.CircleGeometry(3.2, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
     spot.renderOrder = 11;
     H.cone = cone; H.spot = spot;
     g.scene.add(mesh); g.scene.add(cone); g.scene.add(spot);
@@ -517,7 +517,7 @@ export class Wanted {
     H.cone.position.set(bx, by, bz);
     H.cone.quaternion.setFromUnitVectors(_down, _tmpv.set(ax / al, ay / al, az / al));
     H.cone.scale.set(1, al, 1);
-    H.cone.material.opacity = 0.04 + 0.12 * night;
+    H.cone.material.opacity = 0.015 + 0.045 * night;
     H.cone.visible = !p.inInterior;
     H.spot.position.set(H.aim.x, Math.max(0, g.physics.groundAt(H.aim.x, H.aim.z)) + 0.06, H.aim.z);
     H.spot.material.opacity = 0.08 + 0.4 * night;

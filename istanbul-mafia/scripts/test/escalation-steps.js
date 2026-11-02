@@ -18,8 +18,9 @@ module.exports = async (p, out) => {
   const fails = [];
   const check = (ok, msg) => { console.log((ok ? 'OK   ' : 'FAIL ') + msg); if (!ok) fails.push(msg); };
   const shot = async (n, cam) => {
+    if (process.env.NOSHOT) return;
     await p.evaluate((c) => { if (c) { game.camera.position.set(c.x, c.y, c.z); game.camera.lookAt(c.lx, c.ly, c.lz); game.camera.fov = 60; game.camera.updateProjectionMatrix(); } game.render(); }, cam || null);
-    await p.screenshot({ path: path.join(out, n), timeout: 600000 }); console.log('görüntü:', n);
+    try { await p.screenshot({ path: path.join(out, n), timeout: 600000 }); console.log('görüntü:', n); } catch (e) { console.log('görüntü alınamadı:', n, e.message.slice(0, 80)); }
   };
   await H.start(p);
   await H.install(p);
@@ -41,7 +42,7 @@ module.exports = async (p, out) => {
     const a = mk(200); fire(a, 0.45, 0); sim(0.1);
     const leg = { limp: +a.limp.toFixed(2), wounds: (a.model.wounds || []).length };
     let dropped = false;
-    for (let i = 0; i < 8 && !dropped; i++) { const b = mk(200); fire(b, 1.3, 0.3); sim(0.05); dropped = b.weapon === 'fists'; if (!dropped) g.npcs.remove(b); }
+    for (let i = 0; i < 8 && !dropped; i++) { const b = mk(200); fire(b, 1.3, 0.3); sim(0.05); dropped = b.weapon === "fists"; g.npcs.remove(b); }
     let downed = null;
     for (let i = 0; i < 10 && !downed; i++) { const c = mk(60); fire(c, 1.1, 0); sim(0.05); if (c.downed) downed = c; else g.npcs.remove(c); }
     if (downed) sim(2);

@@ -55,6 +55,16 @@ export const BARKS = {
   friendly: ['Hey! Bizdeniz, dikkat et!', 'Abi bana sıkma!', 'Sakin ol, benim!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// [savaş: taktik] silaha göre çatışma mesafesi [en yakın, ideal, etkili en uzak] (m)
+export function engageRange(def, kind) {
+  if (!def || def.type === 'melee') return [0, 1.5, 2];
+  if (def.pellets) return [3, 9, 15];
+  if (def.scope || def.range > 200) return [15, 38, 70];
+  if (def.type === 'launcher') return [18, 35, 60];
+  const rifle = def.range >= 140;
+  const k = kind === 'soldier' || kind === 'swat' ? 1.1 : 1;
+  return rifle ? [8, 28 * k, 45 * k] : def.range <= 70 ? [3, 12, 22] : [4, 16, 25];
+}
 
 export function copLook(r = lookRng) { return randomLook(r, 'police'); }
 export function swatLook(r = lookRng) { return Object.assign(randomLook(r, 'police'), { top: 'jacket', topColor: '#1a1a1a', pantsColor: '#1a1a1a', hat: 'bere', hatColor: '#111111', glasses: true, shoes: 'boots', gender: 'm' }); }
@@ -284,10 +294,20 @@ export class NPC extends Actor {
     }
   }
 
-  onDamaged(dmg, attacker) {
+  onDamaged(dmg, attacker, kind) {
     this.hurtT = 2.5;
     this.suppress = Math.min(1, this.suppress + 0.5);
     if (!attacker) return;
+    // [savaş: tepki] vurulunca kısa sersemleme, siper yolunu yeniden düşün, ağır baskıda yere kapan
+    if (kind !== 'bleed' && !this.downed && (this.faction !== 'civilian' || this.state === 'attack')) {
+      this.stunT = Math.min(0.35, 0.12 + dmg / 120);
+      this.coverRe = false;
+      if (this.tac === 'cover' && this.coverPt && attacker === this.target) {
+        const cd = Math.hypot(this.coverPt.x - this.pos.x, this.coverPt.z - this.pos.z);
+        if (cd > 6) { this.tacT = Math.min(this.tacT, 0.2); }
+      }
+      if (this.suppress > 0.8 && Math.random() < 0.35 && this.state === 'attack') this.diveT = 0.8;
+    }
     const g = this.game;
     if (attacker.isPlayer) {
       if (this.ally) { this.say(BARKS.friendly, 1); return; }
@@ -532,21 +552,27 @@ export class NPC extends Actor {
   }
 
   // Siper noktası bul: tehdide göre bina köşesi / kutu arkası / park halindeki araç
-  findCover(threat) {
+  // opts (isteğe bağlı): { ax, az } arama merkezi (ileri atılma noktası), advance: tehdide yaklaşan siperi sev,
+  // noRetreat: tehdide sırt dönmeyi gerektiren (geride kalan) siperleri ele, R: arama yarıçapı
+  findCover(threat, opts = null) {
     const g = this.game, ph = g.physics;
     const px = this.pos.x, pz = this.pos.z, tx = threat.pos.x, tz = threat.pos.z;
-    const R = 14;
+    const R = (opts && opts.R) || 14;
+    const ox = opts && opts.ax !== undefined ? opts.ax : px, oz = opts && opts.az !== undefined ? opts.az : pz;
+    const cur = Math.hypot(px - tx, pz - tz);
+    const tux = (tx - px) / (cur || 1), tuz = (tz - pz) / (cur || 1);
     coverCand.length = 0;
     const add = (cx, cz, low) => {
-      const dSelf = Math.hypot(cx - px, cz - pz);
+      const dSelf = Math.hypot(cx - ox, cz - oz);
       if (dSelf > R + 2) return;
       const dT = Math.hypot(cx - tx, cz - tz);
       if (dT < 6) return;
-      // tehdide çok yaklaşan siperleri sevme, mevcut mesafeyi koru
-      const cur = Math.hypot(px - tx, pz - tz);
-      coverCand.push({ x: cx, z: cz, low, s: dSelf + Math.max(0, cur - 4 - dT) * 0.8 + Math.max(0, 8 - dT) * 2 + (low ? 1.2 : 0) });
+      if (opts && opts.noRetreat) { const mx = cx - px, mz = cz - pz, ml = Math.hypot(mx, mz) || 1; if (ml > 3 && (mx * tux + mz * tuz) / ml < -0.25) return; }
+      // tehdide çok yaklaşan siperleri sevme, mevcut mesafeyi koru (ileri atılmada: yaklaşanı sev)
+      const adv = opts && opts.advance ? Math.max(0, dT - cur + 3) * 1.2 : Math.max(0, cur - 4 - dT) * 0.8;
+      coverCand.push({ x: cx, z: cz, low, s: dSelf + adv + Math.max(0, 8 - dT) * 2 + (low ? 1.2 : 0) });
     };
-    const boxes = ph.active.query(px - R, pz - R, px + R, pz + R, coverBoxes);
+    const boxes = ph.active.query(ox - R, oz - R, ox + R, oz + R, coverBoxes);
     for (const b of boxes) {
       if (b.y1 < 0.95 || b.y0 > 0.5) continue;
       const w = b.x1 - b.x0, d = b.z1 - b.z0;
@@ -570,7 +596,7 @@ export class NPC extends Actor {
     if (!this.inInterior) {
       for (const v of g.vehicles.list) {
         if (v.destroyed || v.speed > 1) continue;
-        const dx = v.pos.x - px, dz = v.pos.z - pz;
+        const dx = v.pos.x - ox, dz = v.pos.z - oz;
         if (dx * dx + dz * dz > R * R) continue;
         let ux = v.pos.x - tx, uz = v.pos.z - tz; const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
         add(v.pos.x + ux * (v.def.wid / 2 + 0.9), v.pos.z + uz * (v.def.wid / 2 + 0.9), true);
@@ -623,6 +649,7 @@ export class NPC extends Actor {
       if (!this.slotted) p *= 0.12;
     }
     if (def.pellets) p *= 0.6;
+    if (this.tac === 'suppress') p *= 0.55;
     const hit = Math.random() < p;
     const ey = this.pos.y + (this.crouch ? 1.15 : 1.45);
     tmp.set(this.pos.x, ey, this.pos.z);
@@ -641,6 +668,7 @@ export class NPC extends Actor {
         this.burst--;
         this.shotT = this.burst > 0 ? 1 / def.rate : 0.8 + Math.random() * 1.1;
       } else this.shotT = (def.rate < 2 ? 1.2 : 0.85) + Math.random() * 0.8;
+      if (this.tac === 'suppress' && this.burst <= 0) this.shotT *= 0.5; // [savaş] baskı ateşi: daha sık seri
       if (this.wstate.mag <= 0 && Math.random() < 0.4) this.say(this.faction === 'police' ? ['Şarjör!', 'Örtün beni!'] : ['Mermi!', 'Örtün beni!'], 0.6);
     }
   }
@@ -663,6 +691,7 @@ export class NPC extends Actor {
     if (this.shotT > 0) this.shotT -= dt;
     this.suppress = Math.max(0, this.suppress - dt * 0.25);
     this.aiming = false;
+    this.moveLocalX = 0; this.moveLocalZ = 1; // strafeMove bu karede değiştirebilir
     let speed = 0;
     if (this.knock && this.knock.t > 0) {
       this.knock.t -= dt;
@@ -901,15 +930,46 @@ export class NPC extends Actor {
       if (d > 120) { this.state = this.restState(); this.target = null; }
       return out;
     }
+    // [savaş: taktik] vurulunca kısa sersemleme; baskı altında yere kapanma
+    if (this.stunT > 0) { this.stunT -= dt; this.heading = dampAngle(this.heading, want, 8, dt); return out; }
+    if (this.diveT > 0) {
+      this.diveT -= dt; out.crouch = true; this.heading = dampAngle(this.heading, want, 8, dt);
+      if (los && this.diveT < 0.35 && d < def.range) { this.aiming = true; this.fireAt(t, d); }
+      return out;
+    }
+    const RG = engageRange(def, this.kind);
+    const threatened = this.hurtT > 0 || this.suppress > 0.35;
     // taktik seçimi
     this.tacT -= dt;
-    if (this.tacT <= 0) this.chooseTactic(t, d, los);
+    if (this.tacT <= 0) this.chooseTactic(t, d, los, RG);
     let moving = false;
-    const ideal = Math.min(def.range * 0.45, this.kind === 'soldier' || this.kind === 'swat' ? 22 : 16);
+    const ideal = RG[1];
+    // hareket yardımcısı: görüş varsa hedefe dönük yürüyerek (yan/geri adım) git, engel varsa normal yol bulma
+    if (this.navLockT > 0) this.navLockT -= dt;
+    const go = (x, z, sp, face) => {
+      if (face && !(this.navLockT > 0)) {
+        if (this.strafeMove(x, z, sp, dt, want) >= 0) { out.speed = this.speed; return; }
+        this.navLockT = 2; // önü kapalı: bir süre normal yol bulmayla devam (gidip gelme olmasın)
+      }
+      this.navTo(x, z, sp, dt, true); out.speed = this.speed;
+    };
+    // sırtını tehdide uzun süre dönme: say, gerekirse yan adıma geç
+    if (threatened && los && Math.abs(angleDiff(this.heading, want)) > 1.9) this.backT = (this.backT || 0) + dt; else this.backT = 0;
+    const faceT = los && (threatened || d < 30 || this.backT > 0.3);
     if (this.tac === 'cover' && this.coverPt) {
       const cd = Math.hypot(this.coverPt.x - this.pos.x, this.coverPt.z - this.pos.z);
       if (cd > 0.6) {
-        this.navTo(this.coverPt.x, this.coverPt.z, 4.6, dt, true); out.speed = this.speed; moving = true;
+        // ateş altındayken: uzak / geride kalan siperi yeniden değerlendir
+        if (threatened && !this.coverRe) {
+          this.coverRe = true;
+          const cx = this.coverPt.x - this.pos.x, cz = this.coverPt.z - this.pos.z;
+          const behind = (cx * dx + cz * dz) / ((cd * d) || 1) < -0.3;
+          if ((behind && cd > 3) || cd > 9) {
+            const c2 = g.npcs.coverBudget-- > 0 ? this.findCover(t, { noRetreat: true, R: 8 }) : null;
+            if (c2) this.coverPt = c2; else { this.tac = 'engage'; this.coverPt = null; this.tacT = 1.2 + Math.random(); }
+          }
+        }
+        if (this.coverPt) { go(this.coverPt.x, this.coverPt.z, 4.6, faceT); moving = true; }
       } else {
         // siperde: saklan / dışarı çık ve ateş et
         this.peekT -= dt;
@@ -921,15 +981,39 @@ export class NPC extends Actor {
       }
     } else if (this.tac === 'flank' && this.flankPt) {
       const fd = Math.hypot(this.flankPt.x - this.pos.x, this.flankPt.z - this.pos.z);
-      if (fd > 1) { this.navTo(this.flankPt.x, this.flankPt.z, 5.0, dt, true); out.speed = this.speed; moving = true; }
+      if (fd > 1) { go(this.flankPt.x, this.flankPt.z, 5.0, faceT && fd < 14); moving = true; }
       else { this.tac = 'engage'; this.tacT = 3; }
-    } else if (d > ideal || !los) {
+    } else if (this.tac === 'advance' && this.advPt) {
+      // kademeli ilerleme: bir sonraki mevziye koş, varınca çömel ve kısa süre ateş et
+      const ad = Math.hypot(this.advPt.x - this.pos.x, this.advPt.z - this.pos.z);
+      if (ad > 0.7 && this.holdT === undefined) { go(this.advPt.x, this.advPt.z, 4.6, faceT); moving = true; }
+      else {
+        if (this.holdT === undefined) this.holdT = 1.2 + Math.random() * 1.3;
+        this.holdT -= dt; out.crouch = !!this.advPt.low || this.suppress > 0.5;
+        this.heading = dampAngle(this.heading, want, 10, dt);
+        if (this.holdT <= 0) { this.holdT = undefined; this.advPt = null; this.tac = 'engage'; this.tacT = 0; }
+      }
+    } else if (this.tac === 'suppress') {
+      // baskı ateşi: takım arkadaşı ilerlerken yerinde kal, sık ateş et
+      this.heading = dampAngle(this.heading, want, 10, dt);
+      out.crouch = this.suppress > 0.5;
+      if (d > RG[2] + 10 || !los) { this.tac = 'engage'; this.tacT = 0.5; }
+    } else if (d > RG[2] || !los) {
+      // etkili menzil dışında / görüş yok: yaklaş
       let tx = t.pos.x, tz = t.pos.z;
       if (!los && this.lastSeen) { tx = this.lastSeen.x; tz = this.lastSeen.z; }
-      this.navTo(tx, tz, d > 30 ? 4.8 : 3.6, dt, true); out.speed = this.speed; moving = true;
-    } else if (d < ideal * 0.4 && this.kind !== 'boss') {
-      // çok yakın: geri çekil
-      this.steerMove(this.pos.x - dx / d * 3, this.pos.z - dz / d * 3, 2.2, dt, false); out.speed = this.speed; this.heading = dampAngle(this.heading, want, 10, dt);
+      go(tx, tz, d > 30 ? 4.8 : 3.8, los); moving = true;
+    } else if (d > ideal + 4) {
+      // menzilde ama ideal mesafeden uzak: ateş ederek yürüyerek yaklaş
+      go(t.pos.x + (-dz / d) * this.side * 2, t.pos.z + (dx / d) * this.side * 2, 2.4, true); moving = true;
+    } else if (d < RG[0] && this.kind !== 'boss') {
+      // çok yakın: hedefe dönük geri çekil
+      go(this.pos.x - dx / d * 3, this.pos.z - dz / d * 3, 2.2, true); moving = true;
+    } else if (threatened) {
+      // ateş altında açıkta: yan adım (hedef çizgisinden çık)
+      this.strafeT = (this.strafeT || 0) - dt;
+      if (this.strafeT <= 0) { this.strafeT = 1 + Math.random() * 1.2; this.side = -this.side; }
+      go(this.pos.x + (-dz / d) * this.side * 2, this.pos.z + (dx / d) * this.side * 2, 1.8, true); moving = true;
     }
     if (!moving || this.tac === 'flank' || los) {
       if (!moving) this.heading = dampAngle(this.heading, want, 10, dt);
@@ -945,11 +1029,46 @@ export class NPC extends Actor {
     return out;
   }
 
-  chooseTactic(t, d, los) {
+  // [savaş: taktik] yürüyerek / yan adımla hedefe dönük hareket. Engel varsa -1 (çağıran yol bulmaya döner).
+  strafeMove(wx, wz, speed, dt, faceYaw) {
+    const nav = this.game.physics.nav;
+    const dx = wx - this.pos.x, dz = wz - this.pos.z, d = Math.hypot(dx, dz);
+    if (d < 0.05) { this.speed = 0; this.heading = dampAngle(this.heading, faceYaw, 8, dt); return 0; }
+    const ux = dx / d, uz = dz / d;
+    if (nav) { const v = nav.at(this.pos.x + ux * 0.65, this.pos.z + uz * 0.65); if (v >= N_LOW) return -1; }
+    // geri geri koşma yavaş
+    const h = this.heading, c = Math.cos(h), sn = Math.sin(h);
+    const fwd = ux * sn + uz * c;
+    const s = Math.min(speed * (this.limpMul || 1) * (fwd < -0.3 ? 0.65 : 1), d / Math.max(dt, 1e-3));
+    this.pos.x += ux * s * dt; this.pos.z += uz * s * dt;
+    this.heading = dampAngle(this.heading, faceYaw, 8, dt);
+    this.moveLocalX = ux * c - uz * sn; this.moveLocalZ = fwd;
+    this.speed = s;
+    return d;
+  }
+
+  chooseTactic(t, d, los, RG) {
     const g = this.game;
     this.tacT = 3.5 + Math.random() * 3;
+    this.coverRe = false; this.holdT = undefined;
+    RG = RG || engageRange(this.wdef, this.kind);
     const k = COVER_K[this.kind] || 0.3;
     const wantsCover = this.hurtT > 0 || this.suppress > 0.4 || Math.random() < k;
+    // [savaş] kademeli ilerleme / baskı ateşi: menzil dışında ya da ideal mesafeden uzakta takım halinde
+    if (!this.inInterior && this.kind !== 'boss' && d > RG[1] + 4) {
+      const mates = g.npcs.attackersOn(t);
+      const someoneAdv = mates >= 2 && g.npcs.list.some((n) => n !== this && !n.dead && n.target === t && n.tac === 'advance');
+      if (someoneAdv && los && d < RG[2] + 8 && Math.random() < 0.6) { this.tac = 'suppress'; this.tacT = 2 + Math.random() * 1.5; return; }
+      const step = Math.min(10, d - RG[1]);
+      const ax = this.pos.x + (t.pos.x - this.pos.x) / d * step + (-(t.pos.z - this.pos.z) / d) * this.side * 2.5;
+      const az = this.pos.z + (t.pos.z - this.pos.z) / d * step + ((t.pos.x - this.pos.x) / d) * this.side * 2.5;
+      const c = g.npcs.coverBudget-- > 0 ? this.findCover(t, { ax, az, advance: true, R: 7, noRetreat: true }) : null;
+      probe.set(ax, 0, az); g.physics.resolveCircle(probe, 0.5, 0);
+      this.advPt = c || { x: probe.x, z: probe.z, low: false };
+      this.tac = 'advance'; this.tacT = 9;
+      if (Math.random() < 0.3) this.say(this.faction === 'police' ? ['İlerliyorum, örtün beni!', 'Yaklaşıyorum!'] : this.faction === 'military' ? ['İlerle!', 'Ateşle destek ver!'] : BARKS.gang, 0.5);
+      return;
+    }
     // kuşatma: kalabalık grupta bazıları yandan dolaşır
     if (!this.inInterior && d < 45 && d > 8 && Math.random() < (this.kind === 'gang' ? 0.25 : 0.3) && g.npcs.attackersOn(t) >= 3) {
       const f = this.findFlank(t);
