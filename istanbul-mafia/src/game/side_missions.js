@@ -52,6 +52,34 @@ export class MarkerSet {
   }
 }
 
+// kapkaç çantası (prosedürel deri el çantası)
+let BAG_GEO = null;
+function bagMesh() {
+  if (!BAG_GEO) {
+    BAG_GEO = {
+      body: new THREE.BoxGeometry(0.26, 0.19, 0.09),
+      flap: new THREE.BoxGeometry(0.265, 0.07, 0.095),
+      handle: new THREE.TorusGeometry(0.075, 0.011, 5, 14, Math.PI),
+      clasp: new THREE.BoxGeometry(0.03, 0.025, 0.01),
+    };
+    for (const k of Object.keys(BAG_GEO)) BAG_GEO[k].userData.shared = true;
+  }
+  const g = new THREE.Group();
+  const leather = new THREE.MeshStandardMaterial({ color: [0x5a2014, 0x1a1a1a, 0x8a5a2a, 0x7a1a3a][Math.floor(Math.random() * 4)], roughness: 0.55 });
+  const body = new THREE.Mesh(BAG_GEO.body, leather); body.position.y = -0.17; g.add(body);
+  const flap = new THREE.Mesh(BAG_GEO.flap, leather); flap.position.y = -0.1; g.add(flap);
+  const h = new THREE.Mesh(BAG_GEO.handle, leather); h.position.y = -0.075; g.add(h);
+  const c = new THREE.Mesh(BAG_GEO.clasp, new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.3 })); c.position.set(0, -0.12, 0.05); g.add(c);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+function holdBag(actor, bag) {
+  bag.parent && bag.parent.remove(bag);
+  const arm = actor.model.arms[0]; // sol el (sağ elde silah olabilir)
+  bag.position.set(0, 0.02, 0); bag.rotation.set(0, 0, 0); bag.scale.setScalar(1 / (actor.model.rig ? actor.model.rig.height : 1));
+  arm.socket.add(bag);
+}
+
 const CONTRACT_NAMES = ['Kasap Necmi', 'Tefeci Yaşar', 'Sarı Haydar', 'Kumarbaz Orhan', 'Şeytan Tahsin', 'Kel Vedat', 'Pala Ercan', 'Dişsiz Remzi', 'Tilki Suat', 'Çakal Fikret'];
 const CONTRACT_WHY = ['Mahalle esnafını tefecilikle soyuyor.', 'Ailemizin kamyonlarını ihbar etti.', 'Okul önünde çocukları tehdit etmiş.', 'Bizim kahvehaneyi kundaklattı.', 'Rakiplere bilgi satıyor.', 'Dul kadınların evlerini zorla elinden almış.'];
 const COND = [
@@ -108,14 +136,19 @@ export class SideContent {
     if (!s) return false;
     const ev = { type, npcs: [], cars: [], t: 0 };
     if (type === 'mugging') {
-      const victim = g.npcs.add('civilian', s.x, s.z, null, { mission: true, state: 'surrender' });
-      const thief = g.npcs.add('gang', s.x + 1.2, s.z + 0.6, this.gangLook('none'), { mission: true, weapon: 'knife', state: 'idle', name: 'Kapkaççı' });
-      thief.faceYaw = Math.atan2(victim.pos.x - thief.pos.x, victim.pos.z - thief.pos.z);
-      victim.handsUp = true;
-      ev.victim = victim; ev.thief = thief; ev.npcs.push(victim, thief);
-      this.setMarkers([{ actor: thief, color: 0xff3030 }]);
-      g.ui.notify('Sokak olayı: Birini soyuyorlar! Kapkaççıyı durdur.', 'warn');
-      g.ui.bark(victim, 'İmdat! Çantamı alıyorlar!');
+      // Kapkaç: hırsız yürüyen bir kadının arkasından yaklaşır, çantayı kapıp koşar.
+      const vl = randomLook(rng, 'civilian'); vl.gender = 'f'; vl.hair = Math.random() < 0.5 ? 'uzun' : 'topuz'; vl.beard = 'none';
+      const victim = g.npcs.add('civilian', s.x, s.z, vl, { mission: true, state: 'walk', name: 'Nermin Hanım' });
+      const tl = this.gangLook('none'); tl.top = 'hoodie'; tl.topColor = '#2a2a2a'; tl.hat = 'none';
+      const thief = g.npcs.add('gang', s.x - 7, s.z - 5, tl, { mission: true, weapon: 'knife', state: 'move', name: 'Kapkaççı' });
+      thief.maxHp = thief.hp = 70; thief.brave = false; thief.scriptKill = true; thief.static = false;
+      thief.setWeapon('fists');
+      thief.path = [{ x: victim.pos.x, z: victim.pos.z, r: 1.2 }]; thief.moveSpeed = 2.6; thief.afterMove = 'idle';
+      ev.bag = bagMesh(); holdBag(victim, ev.bag);
+      ev.cash = 300 + Math.floor(Math.random() * 1200);
+      ev.victim = victim; ev.thief = thief; ev.npcs.push(victim, thief); ev.phase = 'stalk';
+      this.setMarkers([{ actor: thief, color: 0xff3030, blink: true }]);
+      g.ui.notify('Sokak olayı: Biri kadının peşine takıldı... Kapkaççıya dikkat!', 'warn');
     } else if (type === 'footchase') {
       const fug = g.npcs.add('civilian', s.x, s.z, null, { mission: true, name: 'Şüpheli', state: 'flee' });
       fug.fleeFrom = new THREE.Vector3(s.x - 5, 0, s.z - 5); fug.fleeT = 60; fug.brave = false;
@@ -154,13 +187,7 @@ export class SideContent {
   updateEvent(dt) {
     const g = this.g, ev = this.event, p = g.player;
     ev.t += dt;
-    if (ev.type === 'mugging') {
-      const { victim, thief } = ev;
-      if (thief.dead) { this.reward(400 + Math.floor(Math.random() * 400), 8, 'Kapkaççıyı durdurdun. Kadın teşekkür etti.'); if (!victim.dead) { g.ui.bark(victim, 'Allah razı olsun evladım!'); victim.state = 'walk'; victim.path = []; } this.endEvent(true); return; }
-      const pd = Math.hypot(p.pos.x - thief.pos.x, p.pos.z - thief.pos.z);
-      if (thief.state === 'idle' && (pd < 12 || ev.t > 25)) { thief.state = 'flee'; thief.fleeFrom = p.pos.clone(); thief.fleeT = 40; g.ui.bark(thief, 'Kaç kaç!'); victim.state = 'cower'; victim.fleeT = 8; }
-      if (pd > 150 || ev.t > 90) this.endEvent(false, 'Kapkaççı kaçtı.');
-    } else if (ev.type === 'footchase') {
+    if (ev.type === 'mugging') { this.updatePurse(dt, ev); return; } else if (ev.type === 'footchase') {
       const { fug, cop } = ev;
       if (fug.dead) { if (fug.lastAttacker && fug.lastAttacker.isPlayer) g.ui.notify('Şüpheliyi vurdun... Polis bundan hoşlanmadı.', 'warn'); this.endEvent(true); return; }
       if (!cop.dead && Math.hypot(cop.pos.x - fug.pos.x, cop.pos.z - fug.pos.z) < 1.8) { g.ui.bark(cop, 'Yakalandın! Kelepçeleri tak!'); fug.state = 'surrender'; ev.caught = (ev.caught || 0) + dt; if (ev.caught > 2) { g.npcs.remove(fug); this.endEvent(true, 'Polis şüpheliyi yakaladı.'); } return; }
@@ -186,6 +213,147 @@ export class SideContent {
       } else if (ev.crew.every((n) => n.dead)) { this.reward(1200, 15, 'Pusuyu püskürttün.'); this.endEvent(true); }
       if (ev.t > 150) this.endEvent(false);
     }
+  }
+
+  // ---------------- kapkaç ----------------
+  snatch(ev) {
+    const g = this.g, { victim, thief } = ev;
+    ev.phase = 'run'; ev.runT = 0;
+    holdBag(thief, ev.bag);
+    g.ui.bark(victim, 'Hırsız var! Çantam! Tutun şunu!');
+    g.audio.scream && g.audio.scream(victim.pos.x, victim.pos.z);
+    victim.state = 'cower'; victim.fleeT = 3; victim.home = new THREE.Vector3(victim.pos.x, 0, victim.pos.z);
+    thief.state = 'flee'; thief.fleeFrom = g.player.pos.clone(); thief.fleeT = 60; thief.reactT = 0;
+    g.ui.bark(thief, 'Çekil yolumdan!');
+    g.ui.notify('KAPKAÇ! Hırsızı kovala: yakala (koşarak üstüne atla), döv ya da vur.', 'warn');
+    for (const o of g.npcs.list) if (o.faction === 'civilian' && o !== victim && !o.dead && Math.hypot(o.pos.x - victim.pos.x, o.pos.z - victim.pos.z) < 12) o.hearThreat(thief, 8);
+  }
+  updatePurse(dt, ev) {
+    const g = this.g, p = g.player, { victim, thief } = ev;
+    if (ev.phase === 'stalk') {
+      // hırsız kadını izler; yakalayınca çantayı kapar
+      if (thief.state === 'move' && thief.path[0]) { thief.path[0].x = victim.pos.x; thief.path[0].z = victim.pos.z; }
+      if (Math.hypot(thief.pos.x - victim.pos.x, thief.pos.z - victim.pos.z) < 1.4 || ev.t > 14 || thief.hp < thief.maxHp) this.snatch(ev);
+      return;
+    }
+    if (thief.dead) {
+      // çanta yere düşer: alıp sahibine götürebilirsin
+      const bag = ev.bag; bag.parent && bag.parent.remove(bag);
+      bag.scale.setScalar(1); bag.position.set(thief.pos.x + 0.4, 0.2, thief.pos.z); bag.rotation.set(Math.PI / 2, 0, Math.random() * 3);
+      g.scene.add(bag);
+      this.lostBag = { mesh: bag, x: bag.position.x, z: bag.position.z, victim, cash: ev.cash, t: 0 };
+      g.ui.notify('Kapkaççı öldü. Çanta yerde: al (E) ve sahibine götür — ya da kendine sakla.', 'info');
+      this.endEvent(true);
+      this.purseMarkers();
+      return;
+    }
+    const pd = Math.hypot(p.pos.x - thief.pos.x, p.pos.z - thief.pos.z);
+    if (ev.phase === 'run') {
+      ev.runT += dt;
+      if (thief.state === 'flee') { thief.fleeFrom = p.pos.clone(); thief.fleeT = 60; }
+      // yakalama: koşarak üstüne atla ya da dövülünce teslim olur
+      const tackle = pd < 1.3 && !p.vehicle && p.speed > 4.5;
+      if (tackle || thief.hp < thief.maxHp * 0.6) {
+        if (tackle) { thief.takeDamage(12, p, 'melee'); g.cameraShake(0.25); g.audio.punch && g.audio.punch(thief.pos.x, thief.pos.z, 1); }
+        if (!thief.dead) {
+          ev.phase = 'caught'; thief.state = 'surrender'; thief.target = null; thief.knock = null;
+          g.ui.bark(thief, 'Tamam abi, tamam! Al çantayı, vurma!');
+          g.ui.notify('Kapkaççı yakalandı. Yanına git (E): polise teslim et, çantayı geri al ya da...', 'info');
+          this.setMarkers([{ actor: thief, color: 0xffaa30 }]);
+        }
+        return;
+      }
+      if (pd > 140 || ev.runT > 100) { const b = ev.bag; b.parent && b.parent.remove(b); this.endEvent(false, 'Kapkaççı çantayla birlikte kayboldu.'); }
+    } else if (ev.phase === 'caught') {
+      if (pd > 60) { thief.state = 'flee'; ev.phase = 'run'; ev.runT = 60; g.ui.notify('Hırsızı bırakıp gittin, kaçtı!', 'warn'); }
+    } else if (ev.phase === 'cop') {
+      const cop = ev.cop;
+      if (!cop || cop.dead) { this.endEvent(false); return; }
+      if (cop.state === 'move' && cop.path[0]) { cop.path[0].x = thief.pos.x; cop.path[0].z = thief.pos.z; }
+      if (Math.hypot(cop.pos.x - thief.pos.x, cop.pos.z - thief.pos.z) < 1.8) {
+        ev.copT = (ev.copT || 0) + dt;
+        cop.state = 'idle'; cop.faceYaw = Math.atan2(thief.pos.x - cop.pos.x, thief.pos.z - cop.pos.z);
+        if (ev.copT > 0.1 && !ev.cuffed) { ev.cuffed = true; g.ui.bark(cop, 'Kelepçeleri tak! Sağ olun beyefendi, gerisi bizde.'); }
+        if (ev.copT > 3) {
+          g.npcs.remove(thief);
+          cop.state = 'walk'; cop.path = []; cop.mission = false;
+          const b = ev.bag; b.parent && b.parent.remove(b);
+          if (!victim.dead) { g.ui.bark(victim, 'Çantam! Allah razı olsun evladım!'); victim.state = 'walk'; victim.path = []; }
+          this.reward(1500, 8, 'Kapkaççıyı polise teslim ettin.');
+          g.state.legalRep = (g.state.legalRep || 0) + 6;
+          this.endEvent(true);
+        }
+      }
+    }
+  }
+  purseOptions(ev) {
+    const g = this.g, { victim, thief } = ev, D = this.M.dialogue;
+    D.play([
+      { who: 'Kapkaççı', text: 'Abi kurban olayım... Üç gündür aç geziyorum. Çanta burada, al!', choice: [
+        { label: 'Polise teslim et', value: 'cop', hint: 'Yasal itibar + polis ödülü. Çanta sahibine döner.' },
+        { label: 'Çantayı al, sahibine kendin götür', value: 'return', hint: 'Kadın sana bahşiş verir. Hırsız kaçar.' },
+        { label: 'Çanta artık benim', value: 'keep', hint: `İçindeki parayı al (yeraltı itibarı).` },
+        { label: 'Bir daha görmeyeyim seni (dövüp sal)', value: 'scare', hint: 'Mahallede sözün geçer.' },
+      ], key: 'k' },
+    ], (r) => {
+      const v = r.k || 'scare';
+      const bag = ev.bag;
+      if (v === 'cop') {
+        const sp = g.npcs.sidewalkSpot(thief.pos.x, thief.pos.z, 18, 35) || { x: thief.pos.x + 20, z: thief.pos.z };
+        const cop = g.npcs.add('police', sp.x, sp.z, null, { mission: true, state: 'move' });
+        cop.path = [{ x: thief.pos.x, z: thief.pos.z, r: 1.4 }]; cop.moveSpeed = 4.4; cop.afterMove = 'idle';
+        ev.cop = cop; ev.npcs.push(cop); ev.phase = 'cop';
+        g.ui.notify('155 arandı. Devriye geliyor; hırsızı tut.', 'info');
+        this.setMarkers([{ actor: thief, color: 0x5a8aff }]);
+      } else {
+        thief.state = 'flee'; thief.fleeFrom = g.player.pos.clone(); thief.fleeT = 20; thief.mission = false;
+        if (v === 'return') { bag.parent && bag.parent.remove(bag); this.bagCarry = { victim, cash: ev.cash, bag }; holdBag(g.player, bag); this.endEvent(true, 'Çanta sende. Sahibine götür.'); this.purseMarkers(); }
+        else if (v === 'keep') { bag.parent && bag.parent.remove(bag); g.state.money += ev.cash; g.state.crimeRep = (g.state.crimeRep || 0) + 5; g.audio.cash(); g.ui.notify(`Çantadan ${formatMoney(ev.cash)} çıktı. Kadın arkandan beddua ediyor.`, 'money'); if (!victim.dead) { g.ui.bark(victim, 'Sen de mi?! Allah belanı versin!'); victim.state = 'walk'; victim.path = []; } this.endEvent(true); }
+        else { bag.parent && bag.parent.remove(bag); g.state.respect += 3; g.ui.bark(thief, 'Tamam abi, bir daha bu mahalleye adım atmam!'); if (!victim.dead) { g.ui.bark(victim, 'Çantam geri geldi! Sağ ol evladım!'); victim.state = 'walk'; victim.path = []; } this.reward(300, 4, 'Hırsıza gözdağı verdin.'); this.endEvent(true); }
+      }
+    });
+  }
+  purseMarkers() {
+    const v = (this.bagCarry || this.lostBag || {}).victim;
+    const list = [];
+    if (this.lostBag) list.push({ x: this.lostBag.x, z: this.lostBag.z, color: 0xffcc40, icon: 'c_bag', label: 'Çanta' });
+    if (v && !v.dead) list.push({ actor: v, color: 0x7cdd6a, label: 'Çantanın sahibi', blink: !!this.bagCarry });
+    this.setMarkers(list);
+  }
+  // kapkaç etkileşimleri (main.findInteraction → social.prompt üzerinden)
+  prompt() {
+    const g = this.g, p = g.player;
+    if (p.vehicle || p.inInterior) return null;
+    const ev = this.event;
+    if (ev && ev.type === 'mugging' && ev.phase === 'caught' && Math.hypot(ev.thief.pos.x - p.pos.x, ev.thief.pos.z - p.pos.z) < 2.4) return { label: 'Kapkaççıyla ilgilen', action: () => this.purseOptions(ev) };
+    const L = this.lostBag;
+    if (L && Math.hypot(L.x - p.pos.x, L.z - p.pos.z) < 1.8) return { label: 'Çantayı al', action: () => { this.lostBag = null; this.bagCarry = { victim: L.victim, cash: L.cash, bag: L.mesh }; holdBag(p, L.mesh); g.ui.notify('Çanta sende. Sahibine götür ya da içindekini al (tekrar E).', 'info'); this.purseMarkers(); } };
+    const C = this.bagCarry;
+    if (C) {
+      const v = C.victim;
+      if (v && !v.dead && Math.hypot(v.pos.x - p.pos.x, v.pos.z - p.pos.z) < 2.4) return { label: 'Çantayı sahibine ver', action: () => {
+        this.bagCarry = null; holdBag(v, C.bag);
+        g.ui.bark(v, 'Çantam! Annemin yadigârı içindeydi... Al evladım, bu senin hakkın.');
+        this.reward(600 + Math.floor(C.cash * 0.4), 10, 'Çantayı sahibine verdin.');
+        g.state.legalRep = (g.state.legalRep || 0) + 4;
+        v.state = 'walk'; v.path = []; v.mission = false;
+        setTimeout(() => { C.bag.parent && C.bag.parent.remove(C.bag); }, 20000);
+        this.setMarkers([]);
+      } };
+    }
+    return null;
+  }
+  updateBag(dt) {
+    const L = this.lostBag;
+    if (L) { L.t += dt; if (L.t > 150 || !L.victim || L.victim.dead) { L.mesh.parent && L.mesh.parent.remove(L.mesh); this.lostBag = null; if (!this.event) this.setMarkers([]); } }
+    const C = this.bagCarry;
+    if (C && (!C.victim || C.victim.dead || C.victim.removeMe)) {
+      // sahibi yok: içindekini al
+      C.bag.parent && C.bag.parent.remove(C.bag);
+      this.g.state.money += C.cash; this.g.ui.notify(`Çantanın sahibi ortada yok. İçinden ${formatMoney(C.cash)} çıktı.`, 'money');
+      this.bagCarry = null; if (!this.event) this.setMarkers([]);
+    }
+    if (C && C.victim && !C.victim.dead) { C.victim.mission = true; if (C.victim.state === 'walk' && !C.victim.home) { C.victim.state = 'idle'; C.victim.home = C.victim.pos.clone(); } }
   }
 
   // ---------------- kontrat panosu ----------------
@@ -305,11 +473,12 @@ export class SideContent {
     if (g.player.inInterior) return;
     const storyBusy = !!this.M.active;
     if (this.event) this.updateEvent(dt);
-    else if (!storyBusy && !this.contract && !this.war) {
+    else if (!storyBusy && !this.contract && !this.war && !this.lostBag && !this.bagCarry) {
       this.eventT -= dt;
       if (this.eventT <= 0) { if (!this.startEvent()) this.eventT = 10; }
     }
     if (this.contract) this.updateContract(dt);
+    if (this.lostBag || this.bagCarry) this.updateBag(dt);
     if (this.war) this.updateWar(dt);
     else if (!storyBusy && !this.event && !this.contract) {
       this.warT -= dt;
