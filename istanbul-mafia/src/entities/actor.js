@@ -106,6 +106,7 @@ export class Actor {
       return true;
     }
     this.game.audio.gunshot(def.sound, this.pos.x, this.pos.z);
+    if (this.game.animals && this.game.animals.onNoise) this.game.animals.onNoise(this.pos.x, this.pos.z, def.sound === 'pistol' ? 35 : 55); // sokak hayvanları ürker
     // [savaş entegrasyonu] yıldız namlu alevi, ışık, duman ve kovan atma
     this.game.combat.muzzleFlash(this, muzzle, dir, def);
     // [savaş entegrasyonu] oyuncu için silaha özgü kamera geri tepmesi

@@ -906,8 +906,8 @@ class Game {
         return { label: `Gir: ${placeName(door.building.type, door.building)}`, action: () => this.interiors.enter(door) };
       }
     }
-    const cat = this.animals.nearestCat(p.pos.x, p.pos.z, 1.8);
-    if (cat) return { label: 'Kediyi sev', action: () => { cat.state = 'sit'; cat.t = 4; cat.petted = 2; audio.meow(cat.x, cat.z); if (p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 5); this.state.stats.cats = (this.state.stats.cats || 0) + 1; if (this.state.stats.cats === 10) this.ui.notify('Başarım: Kedi Dostu! İstanbul kedileri seni seviyor.', 'gold'); } };
+    const cat = this.animals.nearestPet(p.pos.x, p.pos.z, 1.8);
+    if (cat) return { label: cat.dog ? 'Köpeği sev' : 'Kediyi sev', action: () => { this.animals.pet(cat); if (p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 5); this.state.stats.cats = (this.state.stats.cats || 0) + 1; if (this.state.stats.cats === 10) this.ui.notify('Başarım: Kedi Dostu! İstanbul kedileri seni seviyor.', 'gold'); } };
     return null;
   }
 
