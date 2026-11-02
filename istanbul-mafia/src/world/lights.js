@@ -8,7 +8,7 @@
 // API: new NightLights(game, quality) · update(dt, camPos) · sources (city.lightSources) · searchlights
 import * as THREE from 'three';
 
-const COUNTS = { low: [6, 2], medium: [12, 4], high: [20, 6], ultra: [24, 6] };
+const COUNTS = { low: [4, 1], medium: [8, 2], high: [12, 3], ultra: [16, 4] };
 const CELL = 40;
 const cellKey = (i, j) => (i + 500) + 1000 * (j + 500);
 const LAMP_I = 38, LAMP_R = 24; // kandela, menzil (m)

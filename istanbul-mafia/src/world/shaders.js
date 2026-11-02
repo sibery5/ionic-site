@@ -726,7 +726,6 @@ export function skyDomeMaterial() {
         vec3 c = skyBase(d);
         if (uEnvPass < 0.5) {
           if (uStars > 0.001 && d.y > 0.0) {
-#ifdef NO_MW_TEST
             // Samanyolu: sabit galaktik düzlem çevresinde gürültülü parlak kuşak + koyu toz şeritleri
             vec3 GN = normalize(vec3(0.35, 0.42, 0.84));
             float gb = dot(d, GN);
@@ -737,9 +736,6 @@ export function skyDomeMaterial() {
             float mw = band * (0.35 + 0.9 * mwN) * (1.0 - 0.75 * dust);
             float hz = smoothstep(0.0, 0.35, d.y);
             c += vec3(0.62, 0.66, 0.85) * mw * 0.045 * uStars * hz;
-#else
-            float band = 0.0, hz = smoothstep(0.0, 0.35, d.y);
-#endif
             // yıldızlar (kuşakta daha yoğun), titreşim, renk sıcaklığı
             vec3 sp = d * 230.0; vec3 cell = floor(sp); float hs = h13(cell);
             float th = 0.991 - band * 0.012;
@@ -844,7 +840,9 @@ export function oceanMaterial(quality) {
         return d;
       }
       void main(){
-        vec3 p = position + vec3(uCenter.x, 0.0, uCenter.y);
+        // modelMatrix: mesh.position.y = WATER_Y. (Eskiden yok sayılıyordu → su y≈0'da zeminle z-çakışması yapıp
+        // yollarda/meydanlarda dalgalarla kayan lekeler olarak görünüyordu.)
+        vec3 p = (modelMatrix * vec4(position, 1.0)).xyz + vec3(uCenter.x, 0.0, uCenter.y);
         float dist = length(p.xz - cameraPosition.xz);
         float fade = 1.0 - smoothstep(120.0, 520.0, dist);
         fade *= mix(0.12, 1.0, smoothstep(0.0, 38.0, structD(p.xz)));

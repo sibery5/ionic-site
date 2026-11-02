@@ -307,8 +307,8 @@ export class Environment {
     // gece tabanı: mavi ay ışığı gök ışığı + aşağıdan turuncu şehir ışığı (aydınlık pencereler/sokak ışığı
     // bulutlardan ve cephelerden seken ışık). Böylece gece "kapkara" değil, okunur ve sinematik olur.
     if (n > 0) {
-      const nk = smooth(0.2, 1, n);
-      const floorI = nk * (0.5 + 0.15 * ovc);
+      const nk = smooth(0.1, 0.75, n);
+      const floorI = nk * (1.6 + 0.3 * ovc);
       if (this.hemi.intensity < floorI) {
         const k = 1 - this.hemi.intensity / Math.max(floorI, 1e-4);
         this.hemi.color.lerp(cT.setRGB(0.52, 0.64, 1.0), k * 0.85);

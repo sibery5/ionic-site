@@ -182,7 +182,7 @@ export function buildMilitary(city) {
   city.addSign('military', gx, 3.6, MB.z1 + 0.42, 0, 6, 1.0);
   city.addTrimBox(15.4, 0.5, 0.5, gx, 3.2, MB.z1, [0.42, 0.46, 0.34]);
   const sand = (x, z, rot, tag = 'sandbag') => { P.sandbag.addTRS(x, 0, z, rot); cols.addOBB(x, z, 4.2, 3.0, rot, 0, 1.1, tag); };
-  sand(gx - 11, MB.z1 - 4, Math.PI); sand(gx + 14, MB.z1 - 9, Math.PI);
+  sand(gx - 13, MB.z1 - 7, Math.PI); sand(gx + 14, MB.z1 - 9, Math.PI);
   const sign = (x, z, rot) => { P.milsign.addTRS(x, 0, z, rot); cols.breakable(cols.addOBB(x, z, 2.0, 0.14, rot, 0, 2.4, 'sign'), 'sign', 15, P.milsign, x, 0, z, rot); };
   for (const x of [gx - 16, gx + 18]) sign(x, MB.z1 + 1.4, 0);
   for (let x = MB.x0 + 30; x < MB.x1 - 20; x += 60) if (Math.abs(x - gx) > 30) sign(x, MB.z1 + 1.4, 0);
@@ -203,7 +203,7 @@ export function buildMilitary(city) {
     city.searchlights.push({ x: lx, y: 8.7, z: lz, baseA: i % 2 ? out : face, sweep: 0.9, reach: 40, speed: 0.35 + (i % 3) * 0.08, phase: i * 1.7, tx: x, tz: z });
   });
   MB.guardPosts.push({ type: 'gate', x: gx + 9, z: MB.z1 - 4.5, heading: 0, id: 'nizamiye' }, { type: 'gate', x: gx - 3, z: MB.z1 - 2.5, heading: 0, id: 'nizamiye2' });
-  MB.guardPosts.push({ type: 'bunker', x: gx - 11, z: MB.z1 - 6, heading: 0, id: 'mevzi1' }, { type: 'bunker', x: gx + 14, z: MB.z1 - 11, heading: 0, id: 'mevzi2' });
+  MB.guardPosts.push({ type: 'bunker', x: gx - 13, z: MB.z1 - 9, heading: 0, id: 'mevzi1' }, { type: 'bunker', x: gx + 14, z: MB.z1 - 11, heading: 0, id: 'mevzi2' });
   // ---- pist: işaretler + kenar ışıkları ----
   const r = RW(), rzc = (r.z0 + r.z1) / 2, W = new THREE.Color(0xf2f2ea), Yc = new THREE.Color(0xe8b830);
   for (let x = r.x0 + 30; x < r.x1 - 30; x += 16) city.mark(x, rzc, 8, 0.45, 0, W, 0.005);
@@ -250,9 +250,12 @@ export function buildMilitary(city) {
   sand(r.x0 + 4, r.z1 + 8, 0); sand(r.x1 - 4, r.z1 + 8, 0); sand(MB.x1 - 70, MB.z0 + 98, Math.PI); sand(cx + 12, MB.z0 + 11, 0);
   // ---- doğma noktaları (yer tutucu modeller; MB.removePlaceholder(sp) gerçek araç konunca gizler) ----
   const DIMS = { jetF: [10, 15, 1.6], aheli: [3.6, 13, 3.5], apc: [2.8, 7.4, 2.6], mtruck: [2.6, 7.6, 3], tank: [3.6, 7.2, 2.4] };
+  // Gerçek askerî araçlar entities/military_vehicles.js spawnWorldVehicles() ile bu noktalara konur
+  // (placeholder:false). MB.usePlaceholders = true yapılırsa (araç sistemi yoksa) statik yer tutucu modeller çizilir.
+  const usePH = !!MB.usePlaceholders;
   const ph = (type, propKey, x, z, heading, extra = {}) => {
-    const sp = { type, x, z, heading, placeholder: !!propKey, ...extra };
-    if (propKey) {
+    const sp = { type, x, z, heading, placeholder: !!propKey && usePH, ...extra };
+    if (propKey && usePH) {
       P[propKey].addTRS(x, 0, z, heading);
       const d = DIMS[propKey];
       sp.colliders = [cols.addOBB(x, z, d[0], d[1], heading, 0, d[2], 'milVehicle')];
