@@ -12,6 +12,7 @@ import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES, BEARDS, defaultLook } from '../en
 import { Life } from '../game/life.js';
 import { ShopMethods } from './shops.js';
 import { PhoneMethods } from './phone.js';
+import { JournalMethods } from './journal.js';
 import { SettingsMethods, applyExtendedSettings, withDefaults } from './settings.js';
 import { districtAt, DISTRICTS } from '../world/map.js';
 import { SLOTS, listSaves, latestSave } from '../game/save.js';
@@ -434,14 +435,24 @@ export class UI {
       }
     }
     c.restore();
-    // görev işaretçileri (kenara sabitlenir)
+    // görev işaretçileri (kenara sabitlenir). Sıradaki hikâye hedefi nabız gibi atar; konaktan yeni çıkınca güçlü yanıp söner.
+    const strong = now < g.missions.blinkUntil;
     for (const mk of g.missions.markers) {
       let x = mk.x, z = mk.z;
-      if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead) continue; }
+      if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead || mk.actor.passengerOf) continue; }
       if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
+      if (mk.mmHide) continue;
       this._mmTo(x, z); this._mmClamp(R, 18);
       const sx = this._sx, sy = this._sy;
+      if (mk.blink || (mk.story && strong)) {
+        const ph = (now % 900) / 900;
+        c.strokeStyle = hexOf(mk.color); c.globalAlpha = (1 - ph) * (strong ? 1 : 0.6); c.lineWidth = strong ? 5 : 3;
+        c.beginPath(); c.arc(sx, sy, 12 + ph * (strong ? 22 : 14), 0, Math.PI * 2); c.stroke();
+        c.globalAlpha = 1;
+        if (strong && Math.floor(now / 300) % 2) continue; // yanıp sön
+      }
       if (mk.giver) c.drawImage(iconBitmap('pin_reis', '#d4af37'), sx - 16, sy - 16, 32, 32);
+      else if (mk.icon) c.drawImage(iconBitmap(mk.icon, hexOf(mk.color)), sx - 14, sy - 14, 28, 28);
       else { c.fillStyle = hexOf(mk.color); c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fill(); c.stroke(); }
     }
     // iş işaretçileri (kenara sabitlenir, elmas biçimli)
@@ -991,12 +1002,22 @@ export class UI {
           ctx.beginPath(); ctx.moveTo(tx(pos.x), tz(pos.z) - 16); ctx.lineTo(tx(pos.x) + 13, tz(pos.z)); ctx.lineTo(tx(pos.x), tz(pos.z) + 16); ctx.lineTo(tx(pos.x) - 13, tz(pos.z)); ctx.closePath(); ctx.fill(); ctx.stroke();
         }
       }
+      const now = performance.now();
       for (const mk of g.missions.markers) {
         let x = mk.x, z = mk.z;
-        if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; }
+        if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead) continue; }
         if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
-        ctx.fillStyle = '#' + new THREE.Color(mk.color).getHexString(); ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(tx(x), tz(z), 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const col = '#' + new THREE.Color(mk.color).getHexString();
+        if (mk.blink || mk.story) {
+          const ph = (now % 1000) / 1000;
+          ctx.strokeStyle = col; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.arc(tx(x), tz(z), 18 + ph * 30, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+        }
+        if (mk.area) { ctx.fillStyle = col + '22'; ctx.strokeStyle = col + 'aa'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(tx(x), tz(z), mk.area * sc, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); }
+        if (mk.giver) ctx.drawImage(iconBitmap('pin_reis', '#d4af37', 48), tx(x) - 20, tz(z) - 20, 40, 40);
+        else if (mk.icon) ctx.drawImage(iconBitmap(mk.icon, col, 48), tx(x) - 18, tz(z) - 18, 36, 36);
+        else { ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(tx(x), tz(z), 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        if (mk.label) { ctx.font = 'bold 22px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = '#000'; ctx.strokeText(mk.label, tx(x), tz(z) - 26); ctx.fillStyle = col; ctx.fillText(mk.label, tx(x), tz(z) - 26); }
       }
       for (const v of g.vehicles.list) if (v.owned && !v.destroyed) ctx.drawImage(iconBitmap('car', '#6ab8ff', 48), tx(v.pos.x) - 14, tz(v.pos.z) - 14, 28, 28);
       if (g.waypoint) { ctx.fillStyle = '#c86aff'; ctx.beginPath(); ctx.moveTo(tx(g.waypoint.x), tz(g.waypoint.z)); ctx.lineTo(tx(g.waypoint.x) - 14, tz(g.waypoint.z) - 26); ctx.lineTo(tx(g.waypoint.x) + 14, tz(g.waypoint.z) - 26); ctx.fill(); }
@@ -1034,6 +1055,8 @@ export class UI {
     });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     draw();
+    // yanıp sönen hedefler için düşük hızda yeniden çiz (harita açıkken)
+    const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } if (!drag) draw(); }, 150);
     void m;
   }
 
@@ -1265,7 +1288,7 @@ export class UI {
   }
 }
 
-Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods);
+Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods, JournalMethods);
 
 const JOB_PATH = (id) => (['chop', 'robbery', 'protection', 'hit'].includes(id) ? 'crime' : 'legal');
 

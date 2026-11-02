@@ -32,6 +32,7 @@ import { Interiors, placeName } from './game/interiors.js';
 import { WEAPONS } from './game/weapons.js';
 import { BUSINESSES, GANGS, rollPrices, lifeStateDefaults, ensureLifeState, garageCapacity } from './game/economy.js';
 import { Life } from './game/life.js';
+import { Social } from './game/social.js';
 import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
@@ -199,6 +200,7 @@ class Game {
     this.interiors = new Interiors(this);
     this.missions = new Missions(this);
     this.life = new Life(this);
+    this.social = new Social(this); // sevgili, ödül avı, kapkaç, görev defteri (J)
     await step(0.9, 'Martılar ve sokak kedileri salınıyor...');
     this.animals = new Animals(this);
     this.audio = audio;
@@ -432,7 +434,7 @@ class Game {
     p.pos.set(sh.door.x, 0, sh.door.z + sh.door.nz * 3);
     p.heading = sh.door.nz > 0 ? 0 : Math.PI; p.camYaw = p.heading + Math.PI;
     this.ui.bigMessage('İSTANBUL', `${name} yedi yıl sonra özgür...`, 'gold', 4);
-    setTimeout(() => this.ui.notify('İpucu: ESC menü · M harita · Tab istatistik · E etkileşim · F araca bin', 'info'), 4500);
+    setTimeout(() => this.ui.notify('İpucu: ESC menü · M harita · J görev defteri · Tab istatistik · E etkileşim · F araca bin', 'info'), 4500);
     // başlangıç aracı
     const v = this.vehicles.spawnParked(p.pos.x, p.pos.z);
     void v;
@@ -449,6 +451,7 @@ class Game {
     this.combat.reset();
     this.wanted.reset();
     this.missions.cleanup();
+    if (this.social) this.social.reset();
     if (this.player) this.scene.remove(this.player.model.root);
     this.player = new Player(this, state.look);
     this.scene.add(this.player.model.root);
@@ -536,6 +539,7 @@ class Game {
     if (!s.prices) s.prices = rollPrices(s.day);
     ensureLifeState(s);
     this.startWorld(s);
+    this.missions.syncStoryIndex(); // hikâyeye eklenen görevler için eski kayıt uyumu
     const p = this.player;
     if (s.pos) { p.pos.set(s.pos.x, s.pos.y || 0, s.pos.z); p.heading = s.heading || 0; p.camYaw = p.heading; }
     this.ui.notify('Oyun yüklendi', 'good');
@@ -876,6 +880,8 @@ class Game {
     const p = this.player;
     if (p.vehicle || p.dead) return null;
     if (this.missions.pendingPrompt) return this.missions.pendingPrompt;
+    const sp = this.social && this.social.prompt();
+    if (sp) return sp;
     let best = null, bd = 1e9;
     if (p.inInterior) {
       for (const it of p.inInterior.interact) {
@@ -1035,6 +1041,7 @@ class Game {
     this.pickups.update(dt);
     this.wanted.update(dt);
     this.missions.update(dt);
+    this.social.update(dt);
     // yakalanırsa kaçak mallar
     if (this.wanted.level > 0 && goodsCount(s) > 0 && !this._goodsWarn) { this._goodsWarn = true; this.ui.notify('Dikkat: Üzerinde kaçak mal var. Yakalanırsan el konur!', 'warn'); }
     if (this.wanted.level === 0) this._goodsWarn = false;

@@ -29,9 +29,25 @@ const CSS = `
 .dialog .dlg-choice small { display: block; margin: 3px 0 0 40px; font: 12px var(--sans); color: #8a7e68; }
 .dialog .dlg-choice.on { border-color: var(--gold); background: rgba(212,175,55,0.16); color: #fff; transform: translateX(4px); }
 .dialog .dlg-choice.off { opacity: 0.38; pointer-events: none; }
-.story-phone { position: fixed; left: 26px; top: 46%; padding: 12px 18px; background: rgba(12,10,8,0.9); border-left: 3px solid #5ad1ff; font: 14px var(--sans); color: var(--paper); z-index: 25; animation: phoneRing 0.6s ease-in-out infinite alternate; }
-.story-phone b { display: block; font: 900 12px var(--serif); letter-spacing: 0.25em; color: #5ad1ff; margin-bottom: 4px; }
-@keyframes phoneRing { from { transform: translateX(0); } to { transform: translateX(6px); } }
+.call-card { position: fixed; right: 34px; top: 22vh; width: 250px; padding: 18px 16px 14px; border-radius: 30px; background: linear-gradient(170deg, rgba(34,26,22,0.97), rgba(10,8,8,0.97)); box-shadow: 0 0 0 2px #4a3e2a, 0 0 0 4px #0a0806, 0 24px 60px rgba(0,0,0,0.8); z-index: 26; text-align: center; font: 13px var(--sans); color: var(--paper); animation: callIn 0.35s cubic-bezier(.2,.9,.3,1.2); }
+.call-card .cc-top { font: bold 10px var(--sans); letter-spacing: 0.3em; color: #a89a7e; }
+.call-card .cc-av { width: 82px; height: 82px; margin: 12px auto 8px; border-radius: 50%; position: relative; display: flex; align-items: center; justify-content: center; font: 900 30px var(--serif); color: #120c06; }
+.call-card .cc-av::before, .call-card .cc-av::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--c); opacity: 0; animation: callPulse 1.6s ease-out infinite; }
+.call-card .cc-av::after { animation-delay: 0.8s; }
+.call-card b { display: block; font: bold 19px var(--sans); color: #fff; }
+.call-card small { display: block; color: #a89a7e; margin-top: 2px; }
+.call-card .cc-btns { display: flex; justify-content: space-around; margin-top: 14px; }
+.call-card .cc-btns div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: #c9b88e; }
+.call-card .cc-btns i { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: bold 13px var(--sans); color: #fff; font-style: normal; }
+.call-card .cc-ok i { background: linear-gradient(180deg, #2fbf5a, #137a30); animation: callShake 0.9s ease-in-out infinite; }
+.call-card .cc-no i { background: linear-gradient(180deg, #d83a3a, #7a1010); }
+.call-card.missed { animation: callOut 0.4s ease-in forwards; }
+@keyframes callIn { from { transform: translateX(120%) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes callOut { to { transform: translateX(120%); opacity: 0; } }
+@keyframes callPulse { 0% { transform: scale(0.9); opacity: 0.9; } 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes callShake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } }
+.dialog.oncall { border-left: 3px solid #2fbf5a; }
+.dialog .dlg-call { position: absolute; top: -24px; right: 0; font: bold 11px var(--sans); letter-spacing: 0.2em; color: #2fbf5a; }
 .story-meter { position: fixed; left: 50%; top: 17vh; transform: translateX(-50%); width: 260px; text-align: center; font: bold 12px var(--sans); letter-spacing: 0.18em; color: var(--paper); text-shadow: 0 2px 6px #000; z-index: 15; }
 .story-meter i { display: block; height: 6px; margin-top: 5px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.25); }
 .story-meter i b { display: block; height: 100%; width: 0; background: var(--c, #d4af37); transition: width 0.1s; }
@@ -65,7 +81,8 @@ export class Dialogue {
     this.call = null;
     this.meterEl = null;
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyT' && this.call && !this.open && this.g.mode === 'playing' && !this.g.ui.blocking()) { e.preventDefault(); this.answer(); }
+      if (!this.call || this.open || this.g.mode !== 'playing' || this.g.ui.blocking()) return;
+      if (e.code === 'KeyT') { e.preventDefault(); this.answer(); } else if (e.code === 'KeyG') { e.preventDefault(); this.decline(); }
     });
   }
 
@@ -84,11 +101,17 @@ export class Dialogue {
     let choices = null;
     let shownAt = 0;
     let typer = null;
+    // açık bir diyalog varken yenisi gelirse öncekini düzgünce kapat (dinleyiciler üst üste binmesin)
+    if (this.open && this._finish) this._finish();
     this.open = true;
     g.input.unlock();
+    let ended = false;
     const finish = () => {
+      if (ended) return;
+      ended = true;
+      if (this._finish === finish) this._finish = null;
       clearInterval(typer);
-      d.classList.add('hidden'); ui.root.classList.remove('cinema');
+      d.classList.add('hidden'); d.classList.remove('oncall'); ui.root.classList.remove('cinema');
       window.removeEventListener('keydown', key); d.removeEventListener('click', onClick);
       this.open = false;
       g.cutsceneCam = null;
@@ -104,7 +127,8 @@ export class Dialogue {
       choices = L.choice ? L.choice.map((c) => ({ ...c, off: typeof c.disabled === 'function' ? c.disabled() : !!c.disabled })) : null;
       choiceIdx = choices ? Math.max(0, choices.findIndex((c) => !c.off)) : 0;
       const act = L.act || opts.act;
-      d.innerHTML = `${act ? `<div class="dlg-act">${esc(act)}</div>` : ''}<div class="who spk" style="color:${spk.color}">${esc(this.displayName(L.who || ''))}</div><div class="txt"></div>${choices ? '<div class="dlg-choices"></div>' : '<div class="next">Devam <kbd>Enter</kbd></div>'}`;
+      d.classList.toggle('oncall', !!opts.phone);
+      d.innerHTML = `${opts.phone ? `<div class="dlg-call">TELEFON · ${esc(opts.phone)}</div>` : ''}${act ? `<div class="dlg-act">${esc(act)}</div>` : ''}<div class="who spk" style="color:${spk.color}">${esc(this.displayName(L.who || ''))}</div><div class="txt"></div>${choices ? '<div class="dlg-choices"></div>' : '<div class="next">Devam <kbd>Enter</kbd></div>'}`;
       const t = d.querySelector('.txt');
       const text = L.text || '';
       let k = 0;
@@ -169,39 +193,61 @@ export class Dialogue {
       }
       if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); advance(); }
     };
+    this._finish = finish;
     d.classList.remove('hidden');
     ui.root.classList.add('cinema');
-    setTimeout(() => window.addEventListener('keydown', key), 150);
+    setTimeout(() => { if (!ended) window.addEventListener('keydown', key); }, 150);
     d.addEventListener('click', onClick);
     show();
   }
 
   // ---------------- telefon ----------------
-  ring(caller, onAnswer, timeout = 40) {
+  // Gelen arama kartı: arayanın portresi (baş harf + konuşmacı rengi), zil sesi (WebAudio), T aç · G reddet.
+  // opts: {lines, ring:'reis'|'kalp'|'normal', sub, onDecline, onMiss}
+  ring(caller, onAnswer, timeout = 40, opts = {}) {
     this.hangup();
-    this.call = { caller, onAnswer, t: timeout };
+    const spk = this.speaker(caller);
+    this.call = { caller, onAnswer, t: timeout, opts };
+    this.ringT = 0;
     const e = document.createElement('div');
-    e.className = 'story-phone';
-    e.innerHTML = `<b>TELEFON</b>${esc(caller)} arıyor... <kbd>T</kbd> Aç`;
+    e.className = 'call-card story-phone';
+    const ini = esc(String(caller).split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase());
+    e.innerHTML = `<div class="cc-top">GELEN ARAMA</div><div class="cc-av" style="--c:${spk.color};background:radial-gradient(circle at 35% 30%, #fff8, transparent 55%), ${spk.color}">${ini}</div><b>${esc(caller)}</b><small>${esc(opts.sub || 'Cep · arıyor...')}</small>
+      <div class="cc-btns"><div class="cc-no"><i>G</i>Reddet</div><div class="cc-ok"><i>T</i>Aç</div></div>`;
+    e.querySelector('.cc-ok').onclick = () => this.answer();
+    e.querySelector('.cc-no').onclick = () => this.decline();
     this.g.ui.root.appendChild(e);
     this.phoneEl = e;
-    if (this.g.audio && this.g.audio.tone) { this.g.audio.tone({ freq: 880, dur: 0.15, type: 'sine', gain: 0.12 }); setTimeout(() => this.g.audio.tone({ freq: 660, dur: 0.15, type: 'sine', gain: 0.12 }), 200); }
   }
   answer() {
     const c = this.call;
     this.hangup();
-    if (c && c.onAnswer) c.onAnswer();
+    if (!c) return;
+    if (this.g.audio && this.g.audio.phoneBeep) this.g.audio.phoneBeep(1);
+    if (c.opts && c.opts.lines) this.play(c.opts.lines, () => { if (c.onAnswer) c.onAnswer(); }, { phone: c.caller });
+    else if (c.onAnswer) c.onAnswer();
+  }
+  decline() {
+    const c = this.call;
+    this.hangup();
+    if (this.g.audio && this.g.audio.phoneBeep) this.g.audio.phoneBeep(2);
+    if (c && c.opts && c.opts.onDecline) c.opts.onDecline();
   }
   hangup() {
     this.call = null;
-    if (this.phoneEl) { this.phoneEl.remove(); this.phoneEl = null; }
+    if (this.phoneEl) { const e = this.phoneEl; e.classList.add('missed'); setTimeout(() => e.remove(), 400); this.phoneEl = null; }
   }
   update(dt) {
     if (this.call) {
       this.call.t -= dt;
       this.ringT = (this.ringT || 0) - dt;
-      if (this.ringT <= 0 && this.g.audio && this.g.audio.tone) { this.ringT = 2.5; this.g.audio.tone({ freq: 880, dur: 0.12, type: 'sine', gain: 0.08 }); }
-      if (this.call.t <= 0) { this.hangup(); this.g.ui.notify('Cevapsız arama. Konakta da konuşabilirsin.', 'info'); }
+      if (this.ringT <= 0 && this.g.audio && this.g.audio.ringtone) { this.ringT = 2.6; this.g.audio.ringtone(this.call.opts.ring || 'normal'); }
+      if (this.call.t <= 0) {
+        const c = this.call;
+        this.hangup();
+        this.g.ui.notify(`Cevapsız arama: ${c.caller}. ${c.opts.missText || 'Konakta da konuşabilirsin.'}`, 'info');
+        if (c.opts.onMiss) c.opts.onMiss();
+      }
     }
   }
 

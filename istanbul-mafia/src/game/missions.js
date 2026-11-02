@@ -7,7 +7,7 @@ import { randomLook } from '../entities/character.js';
 import { copLook, soldierLook } from '../entities/npc.js';
 import { GANGS } from './economy.js';
 import { WEAPONS } from './weapons.js';
-import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK } from './story_data.js';
+import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK, summonCall } from './story_data.js';
 import { Dialogue, shotBetween, shotOver, shotWide } from './dialogue.js';
 import { SideContent, MarkerSet } from './side_missions.js';
 import { Military, PoliceStations } from './military.js';
@@ -45,12 +45,24 @@ export class Missions {
     this.offerT = 0;
     this.camPos = new THREE.Vector3();
     this.STORY = STORY; // test/hata ayıklama erişimi
+    this.extraSets = []; // diğer sistemlerin (sevgili, ödül avı, kapkaç) işaretçileri — mini harita/harita için
+    this.blinkUntil = 0; // konaktan çıkınca sıradaki hedef işaretçisi bir süre güçlü yanıp söner
+    this.summonT = 0;
+  }
+  addMarkerSet(ms) { this.extraSets.push(ms); return ms; }
+  // Eski kayıtlarla uyum: hikâyeye görev eklenince storyIndex'i tamamlanan görevlerden yeniden hesapla
+  syncStoryIndex() {
+    const s = this.g.state;
+    if (!s || !s.completed) return;
+    const i = STORY.findIndex((d) => !s.completed.includes(d.id));
+    s.storyIndex = i < 0 ? STORY.length : i;
   }
 
   // ui (mini harita) tüm işaretçileri buradan okur
   get markers() {
-    const v = this.story.version * 1000 + this.side.markers.version;
-    if (v !== this._mv) { this._mv = v; this._markers = this.story.list.concat(this.side.markers.list); }
+    let v = this.story.version * 1000 + this.side.markers.version;
+    for (let i = 0; i < this.extraSets.length; i++) v += this.extraSets[i].version * (1e6 * (i + 1));
+    if (v !== this._mv) { this._mv = v; let L = this.story.list.concat(this.side.markers.list); for (const e of this.extraSets) L = L.concat(e.list); this._markers = L; }
     return this._markers;
   }
   get index() { return this.g.state.storyIndex; }
@@ -95,7 +107,7 @@ export class Missions {
     if (text) this.objective(text);
     this.g.setGps(x, z);
   }
-  setMarkers(list) { this.story.set(list); this.markerMeshes = this.story.meshes; }
+  setMarkers(list) { for (const m of list) m.story = true; this.story.set(list); this.markerMeshes = this.story.meshes; }
   prompt(label, action) { this.pendingPrompt = { label, action }; }
   reached(x, z, r = 4) { const p = this.g.player.pos; return Math.hypot(p.x - x, p.z - z) < r; }
   inside(type, b) { const i = this.g.player.inInterior; return !!i && i.type === type && (!b || i.building === b); }
@@ -403,6 +415,8 @@ export class Missions {
       const prevAct = def.act;
       if (nd && nd.act !== prevAct) setTimeout(() => g.ui.bigMessage(ACTS[nd.act].toUpperCase(), 'Yeni perde başlıyor', 'gold', 4), 4600);
       if (nd && nd.call) this.offerT = 9; else this.offerT = 0;
+      // çağrı alanı olmayan görevlerde Reis (veya Leyla/Kenan) arayıp konağa çağırır
+      this.summonT = nd && !nd.call ? 11 : 0;
       if (def.credits) setTimeout(() => g.ui.credits(), 6000);
     }
   }
@@ -485,7 +499,26 @@ export class Missions {
     if (this.step && this.step.populate) this.step.populate(this, ctx, I);
     else if (this.active && this.active.populate) this.active.populate(this, ctx, I);
   }
-  onExit() {}
+  onExit(ctx) {
+    // konaktan çıkınca sıradaki hedef mini haritada/haritada yanıp söner
+    if (ctx && ctx.type === 'konak') {
+      this.blinkUntil = performance.now() + 12000;
+      if (this.active && this.objText) this.g.ui.notify('Sıradaki hedef haritada işaretlendi (J: görev defteri)', 'info');
+    }
+  }
+  // Reis'in "konağa gel" çağrısı: cevap verilse de verilmese de konak işaretçisi yanıp söner, GPS konağa kurulur
+  summon(nd) {
+    const g = this.g;
+    const c = summonCall(nd, this);
+    const mark = () => {
+      const k = g.map.nearestOfType('konak', 0, 0);
+      if (!k || this.active) return;
+      this.blinkUntil = performance.now() + 15000;
+      this.objective(`${c.who === 'Reis Baba' ? 'Reis Baba' : c.who} seni konağa çağırıyor`);
+      g.setGps(k.door.x, k.door.z + k.door.nz * 1.5);
+    };
+    this.dialogue.ring(c.who, mark, 35, { ring: c.who === 'Reis Baba' ? 'reis' : 'normal', lines: c.lines, onMiss: mark, onDecline: mark, missText: 'Konakta seni bekliyorlar.' });
+  }
   onTrade(good, qty, action, district) {
     const st = this.step;
     if (st && st.onTrade) st.onTrade(this, good, qty, action, district);
@@ -618,7 +651,7 @@ export class Missions {
       }
       const konak = this.g.map.nearestOfType('konak', 0, 0);
       if (STORY[this.index] && konak && !this.story.list.length && !g.player.inInterior) {
-        this.setMarkers([{ x: konak.door.x, z: konak.door.z + konak.door.nz, color: 0xffcc00, r: 2, giver: true }]);
+        this.setMarkers([{ x: konak.door.x, z: konak.door.z + konak.door.nz, color: 0xffcc00, r: 2, giver: true, blink: true }]);
         if (!this.objText) this.objective(this.index === 0 ? 'Reis Baba\'nın konağına git' : 'Yeni iş için Reis Baba\'ya uğra (sarı R)');
       }
       if (this.index === 0 && !this.retry) this.start(STORY[0]);
@@ -626,7 +659,16 @@ export class Missions {
       if (this.offerT > 0) {
         this.offerT -= dt;
         const nd = STORY[this.index];
-        if (this.offerT <= 0 && nd && nd.call && !g.ui.blocking() && g.mode === 'playing') this.dialogue.ring(nd.call, () => this.offer(nd, nd.call));
+        if (this.offerT <= 0 && nd && nd.call && !g.ui.blocking() && g.mode === 'playing') this.dialogue.ring(nd.call, () => this.offer(nd, nd.call), 40, { ring: nd.call === 'Reis Baba' ? 'reis' : 'normal', sub: 'Cep · arıyor...' });
+        else if (this.offerT <= 0 && nd && nd.call) this.offerT = 2;
+      }
+      if (this.summonT > 0) {
+        this.summonT -= dt;
+        const nd = STORY[this.index];
+        if (this.summonT <= 0) {
+          if (!nd || this.dialogue.call) { /* çağrı yok */ } else if (g.ui.blocking() || g.mode !== 'playing' || g.player.inInterior) this.summonT = 3;
+          else this.summon(nd);
+        }
       }
     } else {
       if (this.timer > 0) { this.timer -= dt; g.ui.setTimer(this.timer); if (this.timer <= 0 && this.step && this.step.time) { this.fail(this.step.timeFail || 'Süre doldu!'); return this.post(dt); } } else g.ui.setTimer(0);
