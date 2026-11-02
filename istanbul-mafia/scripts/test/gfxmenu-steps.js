@@ -13,7 +13,6 @@ module.exports = async (p, out) => {
     return res;
   });
   console.log('gfxmenu', JSON.stringify(r));
-  if (out) await p.screenshot({ path: out + '-settings.png' });
   if (r.cards.length !== 4 || r.afterHigh.quality !== 'high' || (r.before !== 'high' && !r.afterHigh.restartShown) || r.back.quality !== r.before) throw new Error('gfxmenu FAIL');
   console.log('gfxmenu OK');
 };
