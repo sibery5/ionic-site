@@ -641,6 +641,27 @@ export class Missions {
     }
     this.post(dt);
   }
+  // Sinematik kamerayı duvarların/tavanın önüne çek. Çekim yardımcıları (shotOver/shotBetween) odayı bilmez;
+  // konakta oyuncu kapının dibindeyken kamera 2-9 m geri/yana atılıp duvarın arkasına düşüyor ve ekran
+  // duvarın ışık almayan dış yüzüyle kararıyordu. Bakış noktasından kameraya ışın atılır, çarpışmada öne alınır;
+  // iç mekânda ayrıca oda sınırına kırpılır.
+  clampCam(pos, look) {
+    const g = this.g;
+    const dx = pos.x - look.x, dy = pos.y - look.y, dz = pos.z - look.z;
+    let d = Math.hypot(dx, dy, dz);
+    if (d < 0.05) return;
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const hit = g.physics.raycastShared(look.x, look.y, look.z, ux, uy, uz, d + 0.3);
+    if (hit && hit.t < d + 0.3) d = Math.max(0.6, hit.t - 0.35);
+    const ctx = g.player.inInterior;
+    if (ctx && ctx.w) {
+      const hw = ctx.w / 2 - 0.35, hd = ctx.d / 2 - 0.35, top = Math.min(ctx.h || 3, 3.4) - 0.3;
+      const lim = (o, u, a, b) => (u > 1e-4 ? (b - o) / u : u < -1e-4 ? (a - o) / u : 1e9);
+      d = Math.min(d, lim(look.x, ux, -hw, hw), lim(look.z, uz, -hd, hd), lim(look.y, uy, 0.3, top));
+      d = Math.max(0.6, d);
+    }
+    pos.set(look.x + ux * d, look.y + uy * d, look.z + uz * d);
+  }
   post(dt) {
     const g = this.g;
     this.side.update(dt);
@@ -652,6 +673,7 @@ export class Missions {
     if (cc && cc.pos) {
       if (!this.camOn) { this.camPos.copy(cc.pos); this.camOn = true; }
       this.camPos.lerp(cc.pos, 1 - Math.exp(-4 * dt));
+      this.clampCam(this.camPos, cc.look);
       g.camera.position.copy(this.camPos);
       g.camera.lookAt(cc.look);
     } else this.camOn = false;
