@@ -11,3 +11,11 @@
 Hikâye/YZ testi (ilk 3 görev, 1→5 yıldız, barikat, SWAT, 3★ hayatta kalma, kışla, sokak olayı):
 
     node scripts/test/play.js file://$PWD/app/index.html /tmp/out $PWD/scripts/test/story-steps.js
+
+Hikâye dalgası (görev defteri, Reis çağrısı, kovalamaca görevi, sevgili, ödül avı, kapkaç, silahçı, hayvanlar):
+
+    node scripts/test/play.js file://$PWD/app/index.html .testout/sw $PWD/scripts/test/storywave-steps.js
+
+Yürüme geçişlerinde ayak kayması (başla/yürü/koş/dur/dönüş/çömel/zıpla):
+
+    node scripts/test/play.js file://$PWD/app/index.html .testout/g $PWD/scripts/test/gait-steps.js

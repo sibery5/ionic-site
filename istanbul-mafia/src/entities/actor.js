@@ -106,6 +106,7 @@ export class Actor {
       return true;
     }
     this.game.audio.gunshot(def.sound, this.pos.x, this.pos.z);
+    if (this.game.animals && this.game.animals.onNoise) this.game.animals.onNoise(this.pos.x, this.pos.z, def.sound === 'pistol' ? 35 : 55); // sokak hayvanları ürker
     // [savaş entegrasyonu] yıldız namlu alevi, ışık, duman ve kovan atma
     this.game.combat.muzzleFlash(this, muzzle, dir, def);
     // [savaş entegrasyonu] oyuncu için silaha özgü kamera geri tepmesi
@@ -185,6 +186,7 @@ export class Actor {
     // NPC davranış bayrakları (YZ bunları ayarlayabilir; yoksa model kişiliğe göre kendi seçer)
     st.cower = this.state === 'cower'; st.phone = !!this.onPhone; st.smoke = !!this.smoking; st.isPlayer = !!this.isPlayer;
     st.vault = this.vaultT || 0; st.roll = this.rollT || 0;
+    st.couple = this.couple || null; // [sevgili] el ele / sarılma / öpüşme pozu
     // kulüp dansçıları (interiors.js ctx.dancers)
     const ii = this.inInterior;
     st.dance = !!(this.dancing || (ii && ii.dancers && ii.dancers.includes(this)));

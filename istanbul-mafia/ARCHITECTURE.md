@@ -17,6 +17,13 @@ Masaüstü: `npx electron .` · Windows kurulum: `npm run dist:win`.
 - `entities/` character (insan modeli + animasyon), actor (can/silah), player, npc (+NPCManager), vehicles (+VehicleManager, trafik AI)
 - Araçlar: `entities/vehicles.js` (şablon/gövde, sürüş, süspansiyon, cam, hasar, patlama), `two_wheelers.js` (bisiklet/motosiklet), `military_vehicles.js` (tank, zırhlı, kamyon + `spawnWorldVehicles`), `aircraft.js` (helikopter, taarruz helikopteri, jet), `boats.js`. Yolcu API: `v.seats`, `v.addPassenger(actor)`, `v.removePassenger(actor)` (actor.passengerOf iken NPC YZ'si atlanmalı); `v.riderPose`.
 - `game/` weapons, combat, pickups, wanted, missions, interiors, economy, save
+- Hikâye dalgası: `game/social.js` (sevgili + ödül avı + J kısayolu; main yalnız `social.update/prompt` çağırır),
+  `game/romance.js` (Defne/Selin: flört, kalp ölçeri, randevu sahnesi, el ele/sarılma/öpüşme, yolcu koltuğu),
+  `game/bounties.js` (aranan suçlular), `ui/journal.js` (J: telefon görünümlü görev defteri).
+  Kapkaç: `side_missions.js` ('mugging' olayı + `prompt()`). Telefon çağrısı: `dialogue.ring(caller, onAnswer, t, {lines, ring})`.
+  Ek harita işaretçileri: `missions.addMarkerSet({list, version})`; işaretçi alanları `blink, icon, label, area, mmHide`.
+- Çift pozu: `actor.couple = {kind:'hand'|'hug'|'kiss', side:±1}` (character.js katman 5b). Ayak kilidi: duruştaki ayak
+  dünyada sabit; animasyon hızı kökün gerçek hareketinden ölçülür (duvara yürürken yerinde koşmaz).
 - `ui/` ui (HUD, menüler, dükkânlar), icons (SVG)
 - `main.js` Game sınıfı: tüm sistemleri bağlar; `game.updateGame(dt,t)` her kare.
 

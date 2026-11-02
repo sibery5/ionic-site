@@ -288,8 +288,9 @@ export function faceTexture(look) {
   // göz küresi: sklera, iris lifleri, göz bebeği, limbus, parlama
   {
     const cx = EYE_UV.cx * W, cy = (1 - EYE_UV.cy) * H, R = EYE_UV.r * W;
-    g.fillStyle = '#d8d0c8'; g.fillRect(cx - R - 3, cy - R - 3, R * 2 + 6, R * 2 + 6);
-    const sg = g.createRadialGradient(cx, cy, 0, cx, cy, R); sg.addColorStop(0, '#f6f2ec'); sg.addColorStop(0.7, '#ece4dc'); sg.addColorStop(1, '#d4b8b0');
+    // geniş dolgu: mip seviyelerinde komşu yüz dokusu (dudak/ten) göz köşelerine kırmızı leke olarak sızıyordu
+    g.fillStyle = '#ddd5cc'; g.fillRect(cx - R - 8, cy - R - 8, R * 2 + 16, R * 2 + 16);
+    const sg = g.createRadialGradient(cx, cy, 0, cx, cy, R); sg.addColorStop(0, '#f6f2ec'); sg.addColorStop(0.72, '#ece5dd'); sg.addColorStop(1, '#ddd0c8');
     g.fillStyle = sg; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill();
     const ir = R * 0.46, ec = new THREE.Color(eye);
     const ig = g.createRadialGradient(cx, cy, ir * 0.25, cx, cy, ir);

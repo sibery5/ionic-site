@@ -374,6 +374,130 @@ export const STORY = [
     ],
   },
   {
+    id: 'tahsildar', act: 0, title: 'Kaçan Tahsildar', reward: 12000, respect: 110, short: 'Haraç parasıyla kaçan Ferhat\'ı Beşiktaş sokaklarında kovala.',
+    brief: 'Topladığın haraçları kasaya Tahsildar Ferhat taşırdı. Bu sabah çantayla birlikte kayboldu. Yirmi yıllık adamım... Cin Ali onu Beşiktaş\'ta görmüş. Bul onu evlat. Çantayı getir; Ferhat\'ı da... gözüne bakarak ne yapacağına sen karar ver.',
+    check(M) { if (M.data.ali && M.data.ali.dead) return 'fail:Cin Ali öldü!'; return null; },
+    steps: [
+      goTo((M) => spawnAt(M, M.special('cafe', -400, -650), 3), 'Beşiktaş\'taki çay ocağında Cin Ali ile buluş', {
+        r: 4,
+        onStart(M) {
+          const p = spawnAt(M, M.special('cafe', -400, -650), 2.4);
+          M.data.ali = M.ally(p.x + 1, p.z, { name: 'Cin Ali', look: ALI_LOOK(), state: 'idle', baseState: 'idle', weapon: 'pistol', hp: 400 });
+        },
+      }),
+      talk((M) => [
+        ['Cin Ali', 'Abi, Ferhat yarım saat önce buradaydı. Elinde siyah çanta, gözleri fıldır fıldır. Telefonla konuşuyordu: "Köprüde buluşalım, Kurtlar parayı sayacak."', { cam: M.camBetween(P(M), M.data.ali, 1) }],
+        ['Sen', 'Kurtlar mı? Ferhat Reis\'in ekmeğini yirmi yıl yedi.'],
+        ['Cin Ali', 'Yirmi yıl ekmek yiyen, bir gecede dişini satar abi. İşin acı tarafı bu... Arabası gri bir sedan, sahile doğru gitti. Benim GT köşede, atla!'],
+      ], {
+        after(M) {
+          const n = M.node(P(M).pos.x, P(M).pos.z);
+          const e = n.edges[0], o = M.g.map.other(e, n);
+          const dx = o.x - n.x, dz = o.z - n.z, l = Math.hypot(dx, dz);
+          M.data.car = M.car('gt', n.x + dx / l * 12 - dz / l * 2.7, n.z + dz / l * 12 + dx / l * 2.7, Math.atan2(dx, dz), '#1b1b1b');
+          M.escort(M.data.ali);
+        },
+      }),
+      step({
+        start(M) { M.setMarkers([{ vehicle: M.data.car, color: 0x3080ff }]); M.objective('Cin Ali\'nin GT\'sine bin'); },
+        update(M) { return P(M).vehicle && M.escortsIn(P(M).vehicle) ? 'next' : null; },
+      }),
+      step({
+        cp: 'Kovalamaca',
+        place(M) {
+          const s = M.roadSpot(-420, -560, 0, 50);
+          M.place(s.x, s.z, s.h);
+          const v = M.car('gt', s.x, s.z, s.h, '#1b1b1b'); M.data.car = v; M.g.enterVehicle(v, true);
+          const a = M.ally(s.x + 2, s.z, { name: 'Cin Ali', look: ALI_LOOK(), weapon: 'pistol', hp: 400 }); M.data.ali = a; M.escort(a); a.vehicle = v; a.model.root.visible = false;
+        },
+        start(M) {
+          const g = M.g, p = P(M).pos;
+          const rs = g.map.randomEdgeNear(p.x, p.z, 70, 110) || { x: p.x + 80, z: p.z };
+          const fc = M.car('sedan', rs.x, rs.z, 0, '#7a7a7a');
+          const t = M.npc('civilian', rs.x, rs.z, { name: 'Ferhat', hp: 200, lookOver: { top: 'coat', topColor: '#3a3226', hair: 'kel', beard: 'mustache', glasses: false } });
+          t.brave = false; t.scriptKill = true;
+          board(M, t, fc); fleeCar(M, fc); fc.ai.cruise = 27;
+          M.data.t = t; M.data.fcar = fc; M.s.far = 0; M.s.t = 0;
+          M.setMarkers([{ vehicle: fc, color: 0xff3030 }]);
+          M.objective('Ferhat\'ın gri sedanını kovala ve durdur');
+          M.dialog([['Cin Ali', 'İşte orada! Gri sedan! Bas abi, bas!'], ['Sen', 'Tutun Ali.']]);
+        },
+        update(M, dt) {
+          const g = M.g, t = M.data.t, fc = M.data.fcar;
+          M.s.t += dt;
+          // Kurtlar iki araçla Ferhat'ı korumaya gelir
+          if (!M.s.esc && M.s.t > 14) {
+            M.s.esc = true;
+            M.gangCar('kurtlar', 2, { cruise: 25, min: 70, max: 120, weapons: ['uzi', 'ak'], color: '#2a2a30' });
+            M.say(M.data.ali, 'Abi arkada iki araba! Kurtlar Ferhat\'ı koruyor!');
+            g.ui.notify('Kurtlar devrede: takipçileri ya at ya da yok et!', 'warn');
+          }
+          if (M.s.esc) M.updateGangCars();
+          if (t.vehicle === fc) {
+            const d = Math.hypot(P(M).pos.x - fc.pos.x, P(M).pos.z - fc.pos.z);
+            M.dialogue.meter(d < 60 ? 'YAKINSIN — ARACI HASARLA' : d < 150 ? 'MESAFE' : 'KAYBEDİYORSUN!', 1 - Math.min(1, d / 260), d < 150 ? '#ffb347' : '#ff3b3b');
+            M.s.far = d > 230 ? M.s.far + dt : 0;
+            if (M.s.far > 9) { M.dialogue.meter(null); return 'fail:Ferhat gözden kayboldu!'; }
+            if (!M.s.bark && d < 40) { M.s.bark = true; M.say(M.data.ali, 'Çarp abi! Arabasını hurdaya çevir, insin!'); }
+          } else M.dialogue.meter(null);
+          const r = chaseTarget(M, t, fc, dt, { footText: 'Ferhat arabadan fırladı! Yaya kovala, yakala', lose: 400, loseFoot: 150 });
+          if (r === 'dead') { M.dialogue.meter(null); M.setFlag('ferhat', 'olu'); return 'next'; }
+          if (r === 'lost') { M.dialogue.meter(null); return 'fail:Ferhat kaçtı!'; }
+          if (r === 'caught') { M.dialogue.meter(null); return 'next'; }
+          return null;
+        },
+        cleanup(M) { M.dialogue.meter(null); },
+      }),
+      step({
+        start(M) {
+          const t = M.data.t;
+          if (t.dead) {
+            M.dialog([['Cin Ali', 'Gitti abi... Konuşamadan gitti. Çantayı al, bari para yerine dönsün.']], () => { M.s.done = true; });
+            return;
+          }
+          M.dialog([
+            ['Ferhat', 'Vurma! Vurma... Çanta burada, al! Bir kuruşuna dokunmadım!', { cam: M.camBetween(P(M), t, 1) }],
+            ['Sen', 'Yirmi yıl Ferhat. Reis seni oğlu gibi sevdi.'],
+            ['Ferhat', 'Oğlu gibi mi? Oğlu beni satarken o neredeydi?! Bana bu yolu gösteren... konaktan biri. "Para kaybolursa suç tahsildarın olur" dedi. Başka çıkış bırakmadılar!'],
+            ['Cin Ali', 'Abi, adam "konaktan biri" diyor. Sinan da aynı şeyi demişti...'],
+            {
+              who: 'Sen', text: 'Ferhat\'ın kaderi?', key: 'ferhat',
+              choice: [
+                { label: '"Çantayı bırak, bu şehri bu gece terk et."', value: 'kacti', hint: 'Bağışla. Ferhat bir gün yeniden ortaya çıkabilir.', lines: [['Ferhat', 'Sağ ol... Sağ ol. Reis\'e söyle, ben ona hiç ihanet etmedim. Ben sadece korktum.']] },
+                { label: '"Korkunun bedeli var Ferhat."', value: 'olu', hint: 'İnfaz et. Kurtlar ailenin hainlere acımadığını öğrenir.', lines: [['Ferhat', 'Ama ben... ben...']] },
+              ],
+            },
+          ], (r) => {
+            const v = r.ferhat || M.data.choice_ferhat;
+            if (v === 'olu') { t.god = false; t.takeDamage(999, null, 'bullet'); M.g.audio.gunshot('revolver', t.pos.x, t.pos.z); M.g.particles.blood({ x: t.pos.x, y: 1.2, z: t.pos.z }, 14); }
+            else { t.god = false; t.state = 'flee'; t.fleeFrom = P(M).pos.clone(); t.fleeT = 25; t.mission = false; }
+            M.s.done = true;
+          });
+        },
+        update(M) { return M.s.done ? 'next' : null; },
+      }),
+      enter('konak', 'Çantayı konağa, Reis Baba\'ya götür', { cp: 'Teslimat', pick: konakDoor, place(M) { const k = konakDoor(M); M.place(k.door.x, k.door.z + k.door.nz * 6, 0); } }),
+      talk((M) => {
+        const P0 = M.g.player.pos, reis = { x: 0, y: 0, z: -5.2 }, ken = { x: 4.2, y: 0, z: -3.2 };
+        const f = M.flag('ferhat');
+        return [
+          ['Reis Baba', 'Çanta... Ya Ferhat?', { cam: () => M.camOver(P0, reis)() }],
+          f === 'olu' ? ['Sen', 'Ferhat artık kimseye borçlu değil Reis.'] : ['Sen', 'Bıraktım gitsin Reis. Korkmuş. Biri onu Kurtlar\'ın kapısına itmiş.'],
+          ['Reis Baba', f === 'olu' ? 'Yirmi yıl... Sofrada bir tabak da onun için kaldıralım. Doğrusunu yaptın; ama ben bu gece uyuyamam.' : 'Merhamet... Babamdan kalma bir hastalık bu. Sende de var demek. İyi, iyi.'],
+          ['Kenan', 'Tahsildar kaçıyor, çanta geri geliyor, kahramanımız yine alkışlanıyor. Ne tesadüf.', { cam: () => M.camBetween(P0, ken, 1)() }],
+          ['Sen', 'Ferhat "konaktan biri" dedi Kenan. Senin bir fikrin var mı?'],
+          ['Kenan', 'Benim fikrim şu: bu evde fazla soru soran, fazla erken ölür.'],
+          ['Reis Baba', 'Yeter! İkiniz de çıkın gözümün önünden. ...Sen kal evlat. Limanda bir iş var; Çarşı Ailesi silah saklıyor. Hazır olunca gel.', { cam: () => M.camOver(P0, reis)() }],
+        ];
+      }),
+    ],
+    konak(M, ctx, I) {
+      if (M.stepIdx < 5) return;
+      const k = I.npc(ctx, 'boss', 4.2, -3.2, -2.2, { name: 'Kenan', look: KENAN_LOOK(), gang: 'family' });
+      k.god = true; M.data.kenan = k;
+    },
+  },
+  {
     id: 'liman', act: 0, title: 'Liman Baskını', reward: 15000, respect: 140, short: 'Çarşı Ailesi\'nin silah deposuna baskın.',
     brief: 'Çarşı Ailesi Eminönü\'ndeki depoda silah sevkiyatı saklıyor. Depoya gir, bekçileri temizle, sandığı al ve güvenli eve dön.',
     steps: [
@@ -1448,3 +1572,32 @@ export const STORY = [
     onComplete(M) { const e = M.data.ending || 'SON'; setTimeout(() => M.g.ui.bigMessage(e, 'İstanbul Mafya · Hikâye tamamlandı', 'gold', 6), 4200); },
   },
 ];
+
+// Görev bitince arayan kişinin "konağa gel" çağrısı (call alanı olmayan görevler için).
+// Her çağrı hikâyede bir sonraki adımın havasını verir.
+const SUMMON = {
+  harac: ['Reis Baba', 'Evlat, Cin Ali\'yi eve bıraktığını duydum. Aferin. Mahallede işler karışık; konağa gel, esnafın derdini konuşalım.'],
+  karabasan: ['Kenan', 'Babam senden övgüyle bahsediyor. Bakalım direksiyonda da o kadar iyi misin? Konağa gel, bir işim var.'],
+  tahsildar: ['Reis Baba', 'Evlat... Kötü haber. Kasa eksik, tahsildar kayıp. Hemen konağa gel. Telefonda konuşulmaz bu.'],
+  liman: ['Reis Baba', 'Eminönü\'nde bir depo var, Çarşı Ailesi\'nin. Senin gibi sessiz birine ihtiyacım var. Konağa uğra.'],
+  kuyumcu: ['Leyla', 'Hacı Rüstem\'in kasası doluymuş. Babama söylemeden önce seninle konuşmak istiyorum. Konakta bekliyorum.'],
+  galata: ['Leyla', 'Galata\'da gözcü lazım. Babam "o gider" dedi. Gel, ayrıntıları anlatayım.'],
+  kara_yilan: ['Reis Baba', 'Kara Yılan Beyoğlu çatılarında saklanıyormuş. Bu iş bugün biter. Konağa gel.'],
+  ittifak: ['Reis Baba', 'Dolmabahçe\'de masa kuruldu. Kiminle el sıkışacağımıza beraber karar vereceğiz. Gel evlat.'],
+  carsi: ['Reis Baba', 'Çarşı Ailesi\'nin sonu geldi. Fatih bizim olacak. Konağa gel, adamları topla.'],
+  hastane: ['Leyla', 'Babam hastanede... Kurtlar yarım bıraktıkları işi bitirmeye gelecek. Konağa gel, hemen!'],
+  defter: ['Leyla', 'Kenan\'ın defterini buldum sanırım. Telefonda olmaz. Konağa gel.'],
+  sorgu: ['Leyla', 'Topal Kemal her şeyi biliyor. Onu konuşturmamız lazım. Konakta bekliyorum.'],
+  kisla: ['Leyla', 'Savaş kapıda. Silah lazım, çok silah. Gel, planı anlatayım.'],
+  banka: ['Leyla', 'Savaş kasası boş. Bir banka... büyük bir banka. Konağa gel.'],
+  nevzat: ['Leyla', 'Nevzat\'ın konvoyu yarın yola çıkıyor. Bu hesap artık kapanmalı. Gel.'],
+  savas: ['Reis Baba', 'Evlat, ayağa kalktım. Son savaş için konakta seni bekliyorum.'],
+  son: ['Reis Baba', 'Bitti evlat... Bir çay içelim. Konağa gel.'],
+};
+export function summonCall(def, M) {
+  const s = SUMMON[def.id];
+  const giver = def.giver || (M.flag('reisWounded') && !M.flag('reisBack') ? 'Leyla' : 'Reis Baba');
+  const who = s ? s[0] : giver;
+  const text = s ? s[1] : 'Konağa uğra, konuşacaklarımız var.';
+  return { who, lines: [[who, text], ['Sen', 'Geliyorum.']] };
+}

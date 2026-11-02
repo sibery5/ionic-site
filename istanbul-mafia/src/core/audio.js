@@ -496,6 +496,21 @@ export class AudioEngine {
   error() { this.tone({ freq: 220, dur: 0.18, type: 'square', gain: 0.18 }); this.tone({ freq: 180, dur: 0.22, type: 'square', gain: 0.18, delay: 0.12 }); }
   success() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ freq: f, dur: 0.35, type: 'triangle', gain: 0.25, delay: i * 0.12 })); }
   fail() { [392, 349, 311, 261].forEach((f, i) => this.tone({ freq: f, dur: 0.4, type: 'sawtooth', gain: 0.12, delay: i * 0.16 })); }
+  // Telefon zil sesi: marimba tınılı kısa motif (bir çağrıda her ~2,6 sn'de bir çalınır). kind: 'reis' | 'kalp' | 'normal'
+  ringtone(kind = 'normal') {
+    if (!this.ctx) return;
+    const M = {
+      reis: [[659, 0], [494, 0.14], [587, 0.28], [659, 0.42], [784, 0.7], [740, 0.84], [659, 0.98]],
+      kalp: [[880, 0], [1047, 0.16], [1319, 0.32], [1175, 0.56], [1047, 0.72], [880, 0.88]],
+      normal: [[1319, 0], [988, 0.12], [1319, 0.24], [988, 0.36], [1319, 0.66], [988, 0.78], [1319, 0.9], [988, 1.02]],
+    }[kind] || [];
+    for (const [f, d] of M) {
+      this.tone({ freq: f, dur: 0.22, type: 'sine', gain: 0.11, delay: d });
+      this.tone({ freq: f * 4, dur: 0.05, type: 'triangle', gain: 0.025, delay: d }); // tokmak vuruşu
+      this.tone({ freq: f * 2.01, dur: 0.12, type: 'sine', gain: 0.03, delay: d });
+    }
+  }
+  phoneBeep(n = 1) { for (let i = 0; i < n; i++) this.tone({ freq: 425, dur: 0.18, type: 'sine', gain: 0.12, delay: i * 0.32 }); }
   meow(x, z) { this.tone({ freq: 700, freq2: 1100, dur: 0.15, type: 'sawtooth', gain: 0.08, x, z, range: 25 }); this.tone({ freq: 1100, freq2: 500, dur: 0.35, type: 'sawtooth', gain: 0.08, x, z, range: 25, delay: 0.15 }); }
   bark(x, z) { this.noiseBurst({ dur: 0.12, freq: 700, type: 'bandpass', q: 3, gain: 0.5, x, z, range: 60 }); this.tone({ freq: 300, freq2: 180, dur: 0.12, type: 'sawtooth', gain: 0.15, x, z, range: 60 }); }
   seagull(x, z, k = 1) {

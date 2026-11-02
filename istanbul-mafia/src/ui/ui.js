@@ -12,6 +12,7 @@ import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES, BEARDS, defaultLook } from '../en
 import { Life } from '../game/life.js';
 import { ShopMethods } from './shops.js';
 import { PhoneMethods } from './phone.js';
+import { JournalMethods } from './journal.js';
 import { SettingsMethods, applyExtendedSettings, withDefaults } from './settings.js';
 import { districtAt, DISTRICTS } from '../world/map.js';
 import { SLOTS, listSaves, latestSave } from '../game/save.js';
@@ -434,14 +435,24 @@ export class UI {
       }
     }
     c.restore();
-    // görev işaretçileri (kenara sabitlenir)
+    // görev işaretçileri (kenara sabitlenir). Sıradaki hikâye hedefi nabız gibi atar; konaktan yeni çıkınca güçlü yanıp söner.
+    const strong = now < g.missions.blinkUntil;
     for (const mk of g.missions.markers) {
       let x = mk.x, z = mk.z;
-      if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead) continue; }
+      if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead || mk.actor.passengerOf) continue; }
       if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
+      if (mk.mmHide) continue;
       this._mmTo(x, z); this._mmClamp(R, 18);
       const sx = this._sx, sy = this._sy;
+      if (mk.blink || (mk.story && strong)) {
+        const ph = (now % 900) / 900;
+        c.strokeStyle = hexOf(mk.color); c.globalAlpha = (1 - ph) * (strong ? 1 : 0.6); c.lineWidth = strong ? 5 : 3;
+        c.beginPath(); c.arc(sx, sy, 12 + ph * (strong ? 22 : 14), 0, Math.PI * 2); c.stroke();
+        c.globalAlpha = 1;
+        if (strong && Math.floor(now / 300) % 2) continue; // yanıp sön
+      }
       if (mk.giver) c.drawImage(iconBitmap('pin_reis', '#d4af37'), sx - 16, sy - 16, 32, 32);
+      else if (mk.icon) c.drawImage(iconBitmap(mk.icon, hexOf(mk.color)), sx - 14, sy - 14, 28, 28);
       else { c.fillStyle = hexOf(mk.color); c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fill(); c.stroke(); }
     }
     // iş işaretçileri (kenara sabitlenir, elmas biçimli)
@@ -991,12 +1002,22 @@ export class UI {
           ctx.beginPath(); ctx.moveTo(tx(pos.x), tz(pos.z) - 16); ctx.lineTo(tx(pos.x) + 13, tz(pos.z)); ctx.lineTo(tx(pos.x), tz(pos.z) + 16); ctx.lineTo(tx(pos.x) - 13, tz(pos.z)); ctx.closePath(); ctx.fill(); ctx.stroke();
         }
       }
+      const now = performance.now();
       for (const mk of g.missions.markers) {
         let x = mk.x, z = mk.z;
-        if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; }
+        if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead) continue; }
         if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
-        ctx.fillStyle = '#' + new THREE.Color(mk.color).getHexString(); ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(tx(x), tz(z), 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const col = '#' + new THREE.Color(mk.color).getHexString();
+        if (mk.blink || mk.story) {
+          const ph = (now % 1000) / 1000;
+          ctx.strokeStyle = col; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.arc(tx(x), tz(z), 18 + ph * 30, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+        }
+        if (mk.area) { ctx.fillStyle = col + '22'; ctx.strokeStyle = col + 'aa'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(tx(x), tz(z), mk.area * sc, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); }
+        if (mk.giver) ctx.drawImage(iconBitmap('pin_reis', '#d4af37', 48), tx(x) - 20, tz(z) - 20, 40, 40);
+        else if (mk.icon) ctx.drawImage(iconBitmap(mk.icon, col, 48), tx(x) - 18, tz(z) - 18, 36, 36);
+        else { ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(tx(x), tz(z), 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        if (mk.label) { ctx.font = 'bold 22px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = '#000'; ctx.strokeText(mk.label, tx(x), tz(z) - 26); ctx.fillStyle = col; ctx.fillText(mk.label, tx(x), tz(z) - 26); }
       }
       for (const v of g.vehicles.list) if (v.owned && !v.destroyed) ctx.drawImage(iconBitmap('car', '#6ab8ff', 48), tx(v.pos.x) - 14, tz(v.pos.z) - 14, 28, 28);
       if (g.waypoint) { ctx.fillStyle = '#c86aff'; ctx.beginPath(); ctx.moveTo(tx(g.waypoint.x), tz(g.waypoint.z)); ctx.lineTo(tx(g.waypoint.x) - 14, tz(g.waypoint.z) - 26); ctx.lineTo(tx(g.waypoint.x) + 14, tz(g.waypoint.z) - 26); ctx.fill(); }
@@ -1034,6 +1055,8 @@ export class UI {
     });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     draw();
+    // yanıp sönen hedefler için düşük hızda yeniden çiz (harita açıkken)
+    const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } if (!drag) draw(); }, 150);
     void m;
   }
 
@@ -1071,17 +1094,27 @@ export class UI {
     if (fn) fn.call(this);
   }
 
-  shop_gun() {
+  // cat: null (hepsi) | 'pistol' | 'long' | 'side' (yakın dövüş + ağır) | 'ammo' (sahip olunanların mermisi + yelek)
+  shop_gun(cat = null) {
     const g = this.game, s = g.state, pl = g.player;
-    const p = this.panel('SİLAHÇI CEMAL', 'Parayı veren düdüğü çalar.');
+    const sub = { pistol: 'Vitrin: tabancalar', long: 'Pano: tüfekler ve makineliler', side: 'Yakın dövüş ve ağır silahlar', ammo: 'Cephane ve çelik yelek' }[cat] || 'Parayı veren düdüğü çalar.';
+    const inCat = (id) => {
+      const d = WEAPONS[id];
+      if (!cat) return true;
+      if (cat === 'ammo') return !!pl.weapons[id] && d.type !== 'melee';
+      if (cat === 'pistol') return d.type === 'gun' && d.slot === 2;
+      if (cat === 'long') return d.type === 'gun' && d.slot >= 3;
+      return d.type === 'melee' || d.type === 'launcher' || d.type === 'throw';
+    };
+    const p = this.panel('SİLAHÇI CEMAL', sub);
     const m = this.openModal(p, { cls: 'right' });
     $('.x', p).onclick = () => this.closeModal(m);
     const body = $('.panel-body', p);
     const render = () => {
       body.innerHTML = '';
-      const req = { m4: 300, sniper: 300, rpg: 700, grenade: 100, ak: 100 };
+      const req = { m4: 300, sniper: 300, rpg: 700, grenade: 100, ak: 100, akrep: 100, kartal: 150, tufan: 350, bozkurt: 350, simsek: 800 };
       for (const id of WEAPON_ORDER) {
-        if (id === 'fists') continue;
+        if (id === 'fists' || !inCat(id)) continue;
         const d = WEAPONS[id];
         const owned = !!pl.weapons[id];
         const locked = (req[id] || 0) > s.respect;
@@ -1102,6 +1135,7 @@ export class UI {
         row.appendChild(act);
         body.appendChild(row);
       }
+      if (cat && cat !== 'ammo') return;
       const ar = el('div', 'item');
       ar.innerHTML = `<div class="ii">${svgImg('shield', '#6ab8ff', 54)}</div><div class="in"><b>Çelik Yelek</b><small>Zırhı 100'e tamamlar (şu an ${Math.round(pl.armor)})</small></div>`;
       const a = el('div', 'ia'); a.appendChild(this.btn(formatMoney(2000), () => { if (pl.armor >= 100) return this.notify('Zırhın zaten tam', 'warn'); this.buy(2000, () => { pl.armor = 100; render(); }); }, 'gold')); ar.appendChild(a);
@@ -1265,7 +1299,7 @@ export class UI {
   }
 }
 
-Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods);
+Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods, JournalMethods);
 
 const JOB_PATH = (id) => (['chop', 'robbery', 'protection', 'hit'].includes(id) ? 'crime' : 'legal');
 

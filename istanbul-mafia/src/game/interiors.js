@@ -4,7 +4,7 @@ import { Colliders } from '../world/physics.js';
 import { carpetTexture, woodTexture, tileTexture, wallpaperTexture, marbleTexture, iznikTexture, signTexture, makeCanvas } from '../core/textures.js';
 import { RNG, formatMoney } from '../core/util.js';
 import { randomLook } from '../entities/character.js';
-import { buildWeaponModel } from './weapons.js';
+import { buildWeaponModel, WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { buildCarModel } from '../entities/vehicles.js';
 import { GANGS } from './economy.js';
 
@@ -332,19 +332,96 @@ const BUILDERS = {
     if (g.missions.populateKonak) g.missions.populateKonak(ctx, this, reis);
   },
 
+  // Silahçı: cam vitrinli tezgâh (tabancalar), arka duvarda delikli pano (tüfek/makineli), yan duvarda
+  // yakın dövüş ve ağır silahlar, cephane rafları ve camla ayrılmış küçük atış poligonu. Her bölümün kendi
+  // etkileşimi dükkânı o kategoriye süzülmüş açar. Silah listesi weapons.js (WEAPON_ORDER) ile aynıdır.
   gun(ctx) {
     const g = this.game;
-    this.room(ctx, 10, 8, 3.2, new THREE.MeshStandardMaterial({ map: tileTexture('#3a3a3a', '#2a2a2a') }), new THREE.MeshStandardMaterial({ color: 0x4a4a44 }));
-    this.counter(ctx, 0, -1.5, 5, 0, new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 }));
-    this.box(ctx, 9, 2.4, 0.2, 0, 0.3, -3.85, new THREE.MeshStandardMaterial({ map: woodTexture('#3a2412') }), false);
-    ['pistol', 'revolver', 'uzi', 'shotgun', 'ak', 'm4', 'sniper', 'rpg'].forEach((id, i) => {
-      const m = buildWeaponModel(id); m.scale.setScalar(2.2);
-      m.position.set(-3.8 + i * 1.08, 1.8 + (i % 2) * 0.6, -3.65); m.rotation.y = Math.PI / 2; ctx.scene.add(m);
+    const W = 14, D = 11;
+    this.room(ctx, W, D, 3.4, new THREE.MeshStandardMaterial({ map: tileTexture('#34322e', '#262422'), roughness: 0.85 }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#6a6256', '#7a7064'), roughness: 0.95 }), 0x5a5650);
+    const steel = new THREE.MeshStandardMaterial({ color: 0x2a2c2e, metalness: 0.6, roughness: 0.4 });
+    const wood = new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c16'), roughness: 0.6 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfd8e0, transparent: true, opacity: 0.18, roughness: 0.05, metalness: 0.1, depthWrite: false });
+    const peg = new THREE.MeshStandardMaterial({ map: (() => { const c = makeCanvas(256, 256), x = c.getContext('2d'); x.fillStyle = '#b89a6a'; x.fillRect(0, 0, 256, 256); x.fillStyle = '#5a4630'; for (let i = 8; i < 256; i += 16) for (let j = 8; j < 256; j += 16) { x.beginPath(); x.arc(i, j, 2.4, 0, 6.3); x.fill(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 2); t.colorSpace = THREE.SRGBColorSpace; return t; })(), roughness: 0.9 });
+    const tag = (txt, price, x, y, z, rotY) => {
+      const c = makeCanvas(256, 80), k = c.getContext('2d');
+      k.fillStyle = '#f4ecd8'; k.fillRect(0, 0, 256, 80); k.fillStyle = '#c8102e'; k.fillRect(0, 0, 256, 8);
+      k.fillStyle = '#1a1410'; k.font = 'bold 26px Georgia'; k.textAlign = 'center'; k.fillText(txt, 128, 40);
+      k.font = 'bold 24px Arial'; k.fillStyle = '#8a1a10'; k.fillText(price, 128, 70);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.13), new THREE.MeshBasicMaterial({ map: t }));
+      m.position.set(x, y, z); m.rotation.y = rotY; ctx.scene.add(m);
+    };
+    const showGun = (id, x, y, z, rotY, sc = 2.0, flat = false) => {
+      const m = buildWeaponModel(id); if (!m) return;
+      m.scale.setScalar(sc); m.position.set(x, y, z); m.rotation.y = rotY; if (flat) m.rotation.z = Math.PI / 2;
+      ctx.scene.add(m);
+      ctx.weaponRacks = (ctx.weaponRacks || 0) + 1;
+    };
+    const cats = (id) => { const d = WEAPONS[id]; if (!d || id === 'fists') return null; if (d.type === 'melee') return 'melee'; if (d.type === 'launcher' || d.type === 'throw') return 'heavy'; if (d.slot === 2) return 'pistol'; return 'long'; };
+    // --- arka duvar: delikli pano + uzun silahlar (iki sıra)
+    this.box(ctx, 9.6, 2.3, 0.08, -0.6, 0.6, -D / 2 + 0.06, peg, false);
+    const longs = WEAPON_ORDER.filter((id) => cats(id) === 'long');
+    longs.forEach((id, i) => {
+      const row = i % 2, col = Math.floor(i / 2), n = Math.ceil(longs.length / 2);
+      const x = -5 + (col + 0.5) * (8.8 / n), y = 2.35 - row * 0.95, z = -D / 2 + 0.2;
+      showGun(id, x, y, z, Math.PI / 2, 2.1);
+      tag(WEAPONS[id].name, formatMoney(WEAPONS[id].price), x, y - 0.42, z + 0.02, 0);
     });
-    this.sign(ctx, 'SİLAH - MÜHİMMAT', 0, 2.9, -3.72, 0, '#2b2b2b', '#ff4a3d', 3.5);
-    this.light(ctx, 0, 2.9, 0, 0xfff0e0, 9);
-    this.npc(ctx, 'shopkeeper', 0, -2.4, 0, { name: 'Silahçı Cemal', weapon: 'shotgun' });
-    ctx.interact.push({ x: 0, z: -0.8, r: 1.6, label: 'Silah satın al', action: () => g.ui.openShop('gun') });
+    this.sign(ctx, 'TÜFEKLER · MAKİNELİLER', -0.6, 3.05, -D / 2 + 0.1, 0, '#1a1a1a', '#ff4a3d', 3.2);
+    // --- tezgâh: ahşap gövde + cam vitrin, içinde tabancalar
+    const cz = -1.0;
+    this.box(ctx, 6, 0.85, 0.8, -1.2, 0, cz, wood, true);
+    this.box(ctx, 6, 0.04, 0.8, -1.2, 0.85, cz, steel, false);
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 0.8), glass); gl.position.set(-1.2, 1.04, cz); ctx.scene.add(gl);
+    ctx.cols.add(-4.2, cz - 0.4, 1.8, cz + 0.4, 0, 1.2, 'counter');
+    const lampV = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.02, 0.05), new THREE.MeshBasicMaterial({ color: 0xfff4d8 })); lampV.position.set(-1.2, 1.18, cz - 0.3); ctx.scene.add(lampV);
+    const pistols = WEAPON_ORDER.filter((id) => cats(id) === 'pistol');
+    pistols.forEach((id, i) => {
+      const x = -3.6 + i * (5 / Math.max(1, pistols.length - 1));
+      const m = buildWeaponModel(id); m.scale.setScalar(1.8); m.position.set(x, 0.93, cz); m.rotation.set(0, 0.4, Math.PI / 2); ctx.scene.add(m);
+      ctx.weaponRacks = (ctx.weaponRacks || 0) + 1;
+      tag(WEAPONS[id].name, formatMoney(WEAPONS[id].price), x, 0.95, cz + 0.41, 0);
+    });
+    this.npc(ctx, 'shopkeeper', -1.2, cz - 1.0, 0, { name: 'Silahçı Cemal', weapon: 'shotgun' });
+    // --- sol duvar: yakın dövüş ve ağır silahlar
+    this.box(ctx, 0.08, 2.0, 5.5, -W / 2 + 0.06, 0.7, -1.2, peg, false);
+    const side = WEAPON_ORDER.filter((id) => cats(id) === 'melee' || cats(id) === 'heavy');
+    side.forEach((id, i) => {
+      const z = -3.6 + i * (5 / Math.max(1, side.length - 1)), x = -W / 2 + 0.22, y = id === 'grenade' ? 1.05 : 1.7;
+      showGun(id, x, y, z, 0, id === 'rpg' || id === 'simsek' ? 1.6 : 2.0);
+      tag(WEAPONS[id].name, formatMoney(WEAPONS[id].price), x + 0.03, 1.12, z, Math.PI / 2);
+    });
+    this.box(ctx, 0.9, 0.6, 0.6, -W / 2 + 0.7, 0, 2.2, new THREE.MeshStandardMaterial({ color: 0x3a4a26, roughness: 0.8 })); // cephane sandığı
+    this.sign(ctx, 'YAKIN DÖVÜŞ · AĞIR SİLAH', -W / 2 + 0.1, 2.95, -1.2, Math.PI / 2, '#1a1a1a', '#f5d76e', 3);
+    // --- sağ: camla ayrılmış atış poligonu (hedefler gerçek çarpışma kutusu; mermi izi bırakır)
+    const rx0 = 3.2;
+    this.box(ctx, 0.06, 2.6, 6.2, rx0, 0, -2.4, glass, false);
+    ctx.cols.add(rx0 - 0.04, -5.5, rx0 + 0.04, 0.7, 0, 2.6, 'glass');
+    this.box(ctx, 3.6, 1.0, 0.5, rx0 + 1.8, 0, 1.0, steel, true); // atış tezgâhı
+    const tgt = new THREE.MeshStandardMaterial({ map: (() => { const c = makeCanvas(128, 256), x = c.getContext('2d'); x.fillStyle = '#efe6cf'; x.fillRect(0, 0, 128, 256); x.fillStyle = '#1a1a1a'; x.beginPath(); x.arc(64, 52, 30, 0, 6.3); x.fill(); x.fillRect(18, 86, 92, 170); x.strokeStyle = '#efe6cf'; x.lineWidth = 3; for (const r of [12, 28, 44]) { x.beginPath(); x.arc(64, 150, r, 0, 6.3); x.stroke(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() });
+    for (let i = 0; i < 2; i++) {
+      const x = rx0 + 1.0 + i * 1.6;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.2), tgt); m.position.set(x, 1.35, -D / 2 + 0.6); ctx.scene.add(m);
+      ctx.cols.add(x - 0.3, -D / 2 + 0.55, x + 0.3, -D / 2 + 0.65, 0.75, 1.95, 'target');
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 5.6), steel); rail.position.set(x, 2.1, -2.6); ctx.scene.add(rail);
+    }
+    this.light(ctx, rx0 + 1.8, 3.1, -3.5, 0xffffff, 6, 9);
+    // --- cephane rafları (sağ ön)
+    this.shelf(ctx, 5.6, 3.6, 2.2, -Math.PI / 2, ['#3a4a26', '#5a3a1a', '#7a6a2a', '#2a2a2a', '#8a2a1a']);
+    this.sign(ctx, 'SİLAH - MÜHİMMAT', -1.2, 2.55, cz - 1.6, 0, '#2b2b2b', '#ff4a3d', 3);
+    this.light(ctx, -1.2, 3.1, 0, 0xfff0e0, 16, 14);
+    this.light(ctx, -4.5, 3.1, -3, 0xffe8c8, 10, 10);
+    this.light(ctx, -0.6, 3.1, -4.2, 0xfff4e0, 10, 9); // pano aydınlatması
+    this.light(ctx, 2.5, 3.1, 3.2, 0xffe8c8, 8, 10);
+    // --- etkileşimler: bölüm bölüm
+    ctx.interact.push({ x: -1.2, z: cz + 0.95, r: 1.4, label: 'Silah satın al (tüm katalog)', action: () => g.ui.shop_gun(null) });
+    ctx.interact.push({ x: -3.4, z: cz + 0.95, r: 1.1, label: 'Vitrin: tabancalar', action: () => g.ui.shop_gun('pistol') });
+    ctx.interact.push({ x: -0.6, z: -D / 2 + 1.3, r: 1.8, label: 'Pano: tüfekler ve makineliler', action: () => g.ui.shop_gun('long') });
+    ctx.interact.push({ x: -W / 2 + 1.2, z: -1.2, r: 1.8, label: 'Yakın dövüş ve ağır silahlar', action: () => g.ui.shop_gun('side') });
+    ctx.interact.push({ x: 4.6, z: 3.2, r: 1.4, label: 'Cephane ve çelik yelek', action: () => g.ui.shop_gun('ammo') });
+    ctx.interact.push({ x: rx0 + 1.8, z: 1.7, r: 1.4, label: 'Atış poligonu: deneme atışı', action: () => { const p = g.player; p.pos.set(rx0 + 1.8, 0, 1.7); p.heading = Math.PI; p.camYaw = Math.PI; g.ui.notify('Poligon: hedeflere ateş et. Mermi bedava değil, sayıyor!', 'info'); } });
+    return { x: 0, z: D / 2 - 1.6 };
   },
 
   clothes(ctx) {
