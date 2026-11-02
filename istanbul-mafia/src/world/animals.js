@@ -203,6 +203,24 @@ export class Animals {
       this.scare(a, x, z, 3 + Math.random() * 3);
     }
   }
+  // [mekanik tepki] mermi hayvanın yanından geçti / sıyırdı: ateş yönünden uzağa kaçar; sıyrılan inler, kanar, topallar
+  onBullet(o, dir, t) {
+    for (const L of [this.cats, this.dogs]) for (const a of L) {
+      const lx = a.x - o.x, ly = 0.35 - o.y, lz = a.z - o.z;
+      const s = lx * dir.x + ly * dir.y + lz * dir.z;
+      if (s < 0 || s > t + 0.5) continue;
+      const cx = lx - dir.x * s, cy = ly - dir.y * s, cz = lz - dir.z * s, d = Math.sqrt(cx * cx + cy * cy + cz * cz);
+      if (d > 3) continue;
+      if (d < (a.dog ? 0.32 : 0.22)) {
+        a.hurtT = 25;
+        if (!this.game.combat.voice || this.game.combat.voice()) audio.yelp(a.x, a.z, a.dog);
+        const gp = this.game.particles;
+        if (gp && gp.blood) gp.blood({ x: a.x, y: 0.35, z: a.z }, 3, null, 0.005);
+      }
+      // ateş eden yönden uzağa (merminin gidiş yönüne değil, yana ve geriye)
+      this.scare(a, o.x, o.z, 3 + Math.random() * 3);
+    }
+  }
   scare(a, x, z, t) { a.state = 'flee'; a.fleeT = t; a.follow = 0; a.heading = Math.atan2(a.x - x, a.z - z) + (Math.random() - 0.5) * 0.8; a.t = t; }
 
   updateStreet(dt, t) {
@@ -260,7 +278,8 @@ export class Animals {
     }
   }
   move(a, dt, g) {
-    const target = a.state === 'walk' ? (a.dog ? 1.1 : 0.55) : a.state === 'run' ? (a.dog ? 3.2 : 2.2) : a.state === 'flee' ? (a.dog ? 6.5 : 5.5) : 0;
+    let target = a.state === 'walk' ? (a.dog ? 1.1 : 0.55) : a.state === 'run' ? (a.dog ? 3.2 : 2.2) : a.state === 'flee' ? (a.dog ? 6.5 : 5.5) : 0;
+    if (a.hurtT > 0) { a.hurtT -= dt; target *= 0.55; } // yaralı: topallayarak yavaş
     // hız yumuşak değişir: duruş/kalkış geçişi
     a.sp += (target - a.sp) * Math.min(1, dt * (target > a.sp ? 3 : 5));
     if (a.sp < 0.02) { a.sp = 0; }

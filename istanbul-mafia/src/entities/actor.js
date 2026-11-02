@@ -122,6 +122,7 @@ export class Actor {
       if (this.isPlayer) {
         const base = this.aiming ? def.spread * (def.adsMul || 0.6) : (def.hipSpread || def.spread);
         spread = (base + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
+        if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
       } else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
       this.bloom = Math.min(def.bloomMax || 0, this.bloom + (def.bloom || 0));
       for (let i = 0; i < n; i++) {
@@ -157,6 +158,17 @@ export class Actor {
     return dmg;
   }
 
+  // [mekanik tepki] yere savrulma (patlama, araç çarpması, ağır darbe): dx/dz savrulma yönü, dur: yerde kalma + kalkış süresi
+  knockdown(dx, dz, dur = 2.2) {
+    if (this.dead || this.downed || this.vehicle || this.passengerOf || this.swimming) return false;
+    if (this.vault) { this.vault = null; this.vaultT = 0; }
+    if (this.sitting) { this.sitting = false; if (this.state === 'sit') this.state = 'idle'; } // bankta oturan da savrulur
+    this.kdT = Math.max(this.kdT || 0, dur);
+    this.aiming = false; this.crouch = false; this.handsUp = false; this.talking = false; this.rollT = 0;
+    if (this.model.knockdown) this.model.knockdown(dx, dz, this.kdT);
+    return true;
+  }
+
   die(attacker, kind) {
     this.dead = true;
     // [savaş] yerde sürünürken ölen: yüzüstü pozdan devam (yeniden düşme animasyonu oynatma)
@@ -165,7 +177,7 @@ export class Actor {
       if (attacker && attacker !== this && attacker.pos) this.model.die(this.pos.x - attacker.pos.x, this.pos.z - attacker.pos.z);
       else this.model.die();
     }
-    this.deadT = 0;
+    this.deadT = 0; this.kdT = 0;
     this.onDeath && this.onDeath(attacker, kind);
   }
 
