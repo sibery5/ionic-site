@@ -191,7 +191,7 @@ class Game {
     this.particles = new Particles(this.scene);
     this.combat = new Combat(this);
     this.vehicles = new VehicleManager(this);
-    this.nightLights = new NightLights(this, q); // [dünya/ışık] sabit sayıda lamba/far/projektör ışığı
+    this.nightLights = new NightLights(this, this.settings.preset === 'ultra' ? 'ultra' : q); // [dünya/ışık] sabit sayıda lamba/far/projektör ışığı
     this.traffic = new TrafficLights(this);
     this.boats = new BoatManager(this);
     this.aircraft = new AircraftManager(this);
@@ -236,7 +236,10 @@ class Game {
     this.player = new Player(this, defaultLook());
     this.player.model.root.visible = false;
     this.setupCreatorScene();
+    this.bootGfx = { quality: this.settings.quality, antialias: this.settings.antialias, textureQuality: this.settings.textureQuality };
     this.ui.mainMenu();
+    // ayar değişikliği için yeniden başlatıldıysa kaldığı kayıttan devam et
+    try { if (sessionStorage.getItem('istanbul-mafia-resume')) { sessionStorage.removeItem('istanbul-mafia-resume'); this.loadGame('latest'); } } catch (e) { /* yok say */ }
     const startAudio = () => { audio.init(); this.applySettings(); audio.startMusic('menu'); };
     window.addEventListener('pointerdown', startAudio, { once: true });
     window.addEventListener('keydown', startAudio, { once: true });

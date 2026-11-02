@@ -46,6 +46,14 @@ export function applyExtendedSettings(game) {
   }
 }
 
+// hazır ayar kartları (Grafik sekmesinin başında)
+const PRESET_CARDS = {
+  low: { name: 'Düşük', fps: 'En yüksek FPS · zayıf kart / dizüstü', lines: ['Gölgeler kapalı', 'Işıma ve AO kapalı', '4 gece lambası ışığı', 'Az yaya ve trafik', '600 m görüş'] },
+  medium: { name: 'Orta', fps: 'Dengeli · çoğu sistem', lines: ['Gölgeler (1024)', 'Işıma açık', '8 gece lambası ışığı', 'Çimen ve tam kalabalık', '1200 m görüş'] },
+  high: { name: 'Yüksek', fps: 'Güçlü ekran kartı', lines: ['Yumuşak keskin gölgeler (2048)', 'Ortam kapatma (AO)', '12 gece ışığı, dalga yansıması', 'Yoğun kalabalık', '1600 m görüş'] },
+  ultra: { name: 'Ultra', fps: 'En iyi görüntü', lines: ['En keskin gölgeler (4096)', 'Tam çözünürlüklü ışıma', '16 gece ışığı', 'En yoğun kalabalık', '2000 m görüş'] },
+};
+
 const KEYS = [
   ['W A S D', 'Yürü / Araç sür'], ['Shift', 'Koş'], ['Space', 'Zıpla / El freni'], ['C', 'Çömel / Araç kamerası'], ['Fare', 'Etrafa bak'],
   ['Sağ tık', 'Nişan al'], ['Sol tık', 'Ateş et / Yumruk'], ['R', 'Şarjör değiştir'], ['1-9 / Teker / Q', 'Silah değiştir'], ['F', 'Araca bin / in'],
@@ -86,6 +94,8 @@ export const SettingsMethods = {
     const p = this.panel('AYARLAR', 'Değişiklikler anında uygulanır ve kaydedilir');
     p.classList.add('settings');
     const apply = () => { g.applySettings(true); applyExtendedSettings(g); };
+    const boot = g.bootGfx || {};
+    const needsRestart = () => ['quality', 'antialias', 'textureQuality'].some((k) => boot[k] !== undefined && boot[k] !== s[k]);
     const m = this.openModal(p, { onClose: () => apply(), cls: 'sheet' });
     m.kind = 'settings';
     $('.x', p).onclick = () => this.closeModal(m);
@@ -118,6 +128,7 @@ export const SettingsMethods = {
           if (key !== 'preset' && PRESETS.low[key] !== undefined) { s.preset = 'custom'; markPreset(); }
           if (after) after(v);
           apply();
+          if (['quality', 'antialias', 'textureQuality'].includes(key)) render();
         };
         d.appendChild(b);
       }
@@ -148,7 +159,27 @@ export const SettingsMethods = {
       host.innerHTML = '';
       host.classList.remove('in'); void host.offsetWidth; host.classList.add('in');
       if (tab === 'gfx') {
-        row('Hazır ayar', select('preset', [['low', 'Düşük'], ['medium', 'Orta'], ['high', 'Yüksek'], ['ultra', 'Ultra'], ['custom', 'Özel']], (v) => { if (PRESETS[v]) Object.assign(s, PRESETS[v]); render(); }), null, 'preset');
+        // hazır ayar kartları: her kademenin neyi değiştirdiği açıkça yazılır
+        const cards = el('div', 'qcards');
+        for (const [k, c] of Object.entries(PRESET_CARDS)) {
+          const b = el('button', 'qcard' + (s.preset === k ? ' on' : ''), `<b>${c.name}</b><em>${c.fps}</em><ul>${c.lines.map((l) => `<li>${l}</li>`).join('')}</ul>`);
+          b.dataset.v = k;
+          b.onclick = () => { audio.click(); s.preset = k; Object.assign(s, PRESETS[k]); apply(); render(); };
+          b.addEventListener('pointerenter', () => showInfo('preset'));
+          cards.appendChild(b);
+        }
+        host.appendChild(cards);
+        if (s.preset === 'custom') host.appendChild(el('p', 'hint', 'Özel ayar: aşağıdaki ayarları tek tek değiştirdin.'));
+        if (needsRestart()) {
+          const r = el('div', 'qrestart', '<span>Grafik kalitesi, doku ve kenar yumuşatma değişikliklerinin tamamı yeniden başlatınca uygulanır.</span>');
+          const btn = el('button', 'btn primary', 'Şimdi uygula (yeniden başlat)');
+          btn.onclick = async () => {
+            btn.disabled = true; apply();
+            try { if (g.inSession()) { await g.saveOnQuit(); sessionStorage.setItem('istanbul-mafia-resume', '1'); } } catch (e) { console.error(e); }
+            location.reload();
+          };
+          r.appendChild(btn); host.appendChild(r);
+        }
         section('Görüntü');
         if (window.desktop) row('Ekran modu', select('fullscreen', [[true, 'Tam ekran'], [false, 'Pencere']]), null, 'fullscreen');
         row('Görüş açısı (FOV)', slider('fov', 55, 90, 1, (v) => v + '°'), null, 'fov');

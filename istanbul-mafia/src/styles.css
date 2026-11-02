@@ -626,3 +626,14 @@ table.trade .cheap { color: var(--good); } table.trade .dear { color: var(--red2
 .set-rail .btn.set-tab { padding: 13px 22px; font-size: 13px; background: none; border: 0; border-left: 2px solid transparent; color: var(--mute); }
 .set-rail .btn.set-tab:hover, .set-rail .btn.set-tab.hot { color: var(--paper); background: rgba(255,255,255,0.03); }
 .set-rail .btn.set-tab.on { color: var(--paper); border-left-color: var(--gold); background: rgba(201,165,74,0.08); }
+
+/* grafik hazır ayar kartları */
+.qcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 6px; }
+.qcard { text-align: left; background: rgba(255,255,255,0.03); border: 1px solid var(--line); color: var(--paper); padding: 14px 14px 10px; cursor: var(--cursor); transition: border-color 0.12s, background-color 0.12s; }
+.qcard:hover, .qcard.hot { border-color: var(--gold); }
+.qcard.on { border-color: var(--gold); background: rgba(201,165,74,0.12); }
+.qcard b { display: block; font: 700 18px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold2); }
+.qcard em { display: block; font: 500 11px var(--sans); font-style: normal; color: var(--mute); margin: 2px 0 8px; }
+.qcard ul { margin: 0; padding-left: 16px; font: 12px var(--sans); color: #c9bea6; line-height: 1.55; }
+.qrestart { display: flex; align-items: center; gap: 14px; justify-content: space-between; margin: 10px 0; padding: 10px 14px; border: 1px solid var(--gold3); background: rgba(201,165,74,0.07); font: 13px var(--sans); color: #d9cdb2; }
+@media (max-width: 900px) { .qcards { grid-template-columns: repeat(2, 1fr); } }
