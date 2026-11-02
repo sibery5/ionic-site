@@ -58,7 +58,7 @@ module.exports = async (p, out) => {
   for (let k = 2; k <= 5; k++) { await key(k); await p.waitForTimeout(120); tabs.push(await p.evaluate(() => document.querySelectorAll('.phone.journal .ph-body > *').length)); }
   check(tabs.every((n) => n > 0), 'Defter sekmeleri dolu ' + JSON.stringify(tabs));
   await shot('journal.png');
-  await p.keyboard.press('KeyJ'); await p.waitForTimeout(200);
+  await p.keyboard.press('KeyJ'); await p.waitForTimeout(500);
   check(!(await p.evaluate(() => !!document.querySelector('.phone.journal'))), 'J ile kapandı');
 
   // ---------------- 2) Görev 1 → konaktan çıkınca yanıp sönen hedef; Görev 3 sonrası Reis çağrısı ----------------
@@ -247,7 +247,7 @@ module.exports = async (p, out) => {
   check(gs.rows >= 15, 'Silahçı: dükkânda silah listesi (' + gs.rows + ' satır) ' + JSON.stringify(gs.its));
 
   // ---------------- 8) Kedi ve köpekler ----------------
-  const an = await p.evaluate(() => { sim(25); const A = game.animals; return { cats: A.cats.length, dogs: A.dogs.length, states: [...new Set(A.cats.concat(A.dogs).map((a) => a.state))] }; });
+  const an = await p.evaluate(() => { sim(25); const A = game.animals; const P = game.player; return { cats: A.cats.length, dogs: A.dogs.length, states: [...new Set(A.cats.concat(A.dogs).map((a) => a.state))], inside: !!P.inInterior, pos: [Math.round(P.pos.x), Math.round(P.pos.z)], mode: game.mode, veh: !!P.vehicle }; });
   check(an.cats + an.dogs >= 4, 'Sokak hayvanları ' + JSON.stringify(an));
 
   console.log(fails.length ? `\n${fails.length} KONTROL BAŞARISIZ` : '\nTÜM KONTROLLER GEÇTİ');
