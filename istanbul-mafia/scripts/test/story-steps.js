@@ -82,7 +82,9 @@ module.exports = async (p, out) => {
   check(i.story === 2, 'Görev 2 tamamlandı (storyIndex=' + i.story + ')');
 
   // ---------------- Görev 3: Haraç Turu ----------------
-  await p.evaluate(() => { if (game.player.vehicle) game.vehicles.ejectDriver(game.player.vehicle); game.wanted.reset(); });
+  // Görev 2'den kalan polisler/yaralar Görev 3'te oyuncuyu öldürüp görevi iptal ettirebiliyordu: görev verisi
+  // sıfırlanınca data.thugs yok olur ("not iterable"). Temiz başla ve tetikçi adımına gerçekten gelindiğini doğrula.
+  await p.evaluate(() => { if (game.player.vehicle) game.vehicles.ejectDriver(game.player.vehicle); game.wanted.reset(); game.npcs.calmPolice(); for (const n of game.npcs.list.slice()) if (n.faction === 'police') game.npcs.remove(n); game.player.hp = game.player.maxHp; game.player.armor = 100; });
   await takeJob();
   check(await p.evaluate(() => game.missions.active && game.missions.active.id === 'harac'), 'Görev 3 başladı');
   await exitInt();
@@ -97,10 +99,10 @@ module.exports = async (p, out) => {
     await advance();
   }
   await p.evaluate(() => sim(0.5));
-  const thugs = await p.evaluate(() => (game.missions.data.thugs || []).length);
-  check(thugs === 3, 'Yılanlar tetikçileri çıktı (' + thugs + ')');
+  const th = await p.evaluate(() => { const M = game.missions; return { n: (M.data.thugs || []).length, active: M.active && M.active.id, step: M.stepIdx, done: M.data.done, retry: M.retry && M.retry.reason, dead: game.player.dead }; });
+  check(th.n === 3, 'Yılanlar tetikçileri çıktı ' + JSON.stringify(th));
   await p.evaluate(() => sim(2));
-  await p.evaluate(() => { for (const n of game.missions.data.thugs) n.takeDamage(999, game.player, 'bullet'); sim(0.5); });
+  await p.evaluate(() => { for (const n of game.missions.data.thugs || []) n.takeDamage(999, game.player, 'bullet'); sim(0.5); });
   await advance();
   await p.evaluate(() => sim(0.5));
   i = await info();
