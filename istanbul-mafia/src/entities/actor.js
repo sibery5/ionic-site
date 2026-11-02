@@ -185,6 +185,7 @@ export class Actor {
     // NPC davranış bayrakları (YZ bunları ayarlayabilir; yoksa model kişiliğe göre kendi seçer)
     st.cower = this.state === 'cower'; st.phone = !!this.onPhone; st.smoke = !!this.smoking; st.isPlayer = !!this.isPlayer;
     st.vault = this.vaultT || 0; st.roll = this.rollT || 0;
+    st.couple = this.couple || null; // [sevgili] el ele / sarılma / öpüşme pozu
     // kulüp dansçıları (interiors.js ctx.dancers)
     const ii = this.inInterior;
     st.dance = !!(this.dancing || (ii && ii.dancers && ii.dancers.includes(this)));

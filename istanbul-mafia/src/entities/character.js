@@ -717,6 +717,30 @@ export class CharacterModel {
       hipsY += (-0.55 * (1 - mv) + (0.12 - RIG.hips + 0.95) * mv - 0.95 + RIG.hips) * W.swim;
     }
 
+    // ---- 5b) çift pozları (sevgili): el ele, sarılma, öpüşme. st.couple = {kind:'hand'|'hug'|'kiss', side:±1}
+    const cpl = st.couple;
+    if (cpl) { this._cpK = cpl.kind; this._cpS = cpl.side || 1; }
+    W.couple = dmp(W.couple || 0, cpl ? 1 : 0, cpl && cpl.kind !== 'hand' ? 3.2 : 6, dt);
+    if (W.couple > 0.01 && this._cpK) {
+      Q.set(P);
+      const k = this._cpK, sd = this._cpS, br2 = Math.sin(t * 1.4 + this.seed) * 0.03;
+      if (k === 'hand') {
+        // partnere yakın kol hafif yana ve öne uzanır, el gevşek kapanır; yürürken salınım azalır
+        const [sh2, el2, wr2] = sd > 0 ? ARM_R : ARM_L;
+        setJ(Q, sh2, P[sh2 * 3] * 0.25 - 0.12, 0, 0.3); setJ(Q, el2, -0.22, 0, 0); setJ(Q, wr2, 0.05, 0, -0.15);
+        mixJ(P, Q, W.couple, sd > 0 ? ARM_R : ARM_L);
+        fistW[sd > 0 ? 1 : 0] = Math.max(fistW[sd > 0 ? 1 : 0], 0.45 * W.couple);
+      } else {
+        // sarılma: iki kol öne ve içe, dirsekler bükük; öpüşmede kollar biraz daha aşağıda (bele), gövde öne
+        const low = k === 'kiss' ? 0.25 : 0;
+        setJ(Q, J.shL, -1.15 + low + br2, 0.55, 0.12); setJ(Q, J.shR, -1.15 + low - br2, 0.55, 0.12);
+        setJ(Q, J.elL, -1.25 - low, 0.2, 0); setJ(Q, J.elR, -1.25 - low, 0.2, 0);
+        setJ(Q, J.wrL, 0.1, 0, 0.2); setJ(Q, J.wrR, 0.1, 0, 0.2);
+        mixJ(P, Q, W.couple, ARMS);
+        addJ(P, J.spine, 0.06 * W.couple, 0, 0); addJ(P, J.chest, 0.05 * W.couple, 0, 0);
+      }
+    }
+
     // ---- 6) yakın dövüş ----
     let meleeW = 0;
     if (this.punchT > 0) {
@@ -804,6 +828,11 @@ export class CharacterModel {
       if (age > 0.3) hp -= 0.08 * smR(0.3, 1, age); // kamburda yüz öne
       if (st.roll > 0) hp += 0.6 * Math.sin(Math.PI * st.roll);
       const hb = W.dance > 0.01 ? P[J.head * 3] : 0;
+      if (W.couple > 0.01 && this._cpK !== 'hand') {
+        // sarılırken baş yana yaslanır, öpüşürken öne eğilip karşı tarafa yatar
+        const kk = W.couple;
+        if (this._cpK === 'kiss') { hp += 0.2 * kk; hr += 0.28 * this._cpS * kk; hyaw += 0.08 * this._cpS * kk; } else { hr += 0.22 * this._cpS * kk; hyaw += 0.35 * this._cpS * kk; hp += 0.08 * kk; }
+      }
       setJ(P, J.neck, hp * 0.4, hyaw * 0.45, hr * 0.4);
       setJ(P, J.head, hp * 0.6 + hb, hyaw * 0.55, hr * 0.6);
     }

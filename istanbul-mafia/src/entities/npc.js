@@ -757,6 +757,8 @@ export class NPC extends Actor {
         break;
       }
       case 'idle': case 'guard': {
+        // [sevgili] el ele yürürken konumu romance.js taşır; yürüme döngüsü oyuncunun hızıyla oynar
+        if (this.handSpeed) { speed = this.handSpeed; this.handSpeed = 0; break; }
         if (this.home && Math.hypot(this.home.x - this.pos.x, this.home.z - this.pos.z) > 1.5) { this.navTo(this.home.x, this.home.z, 1.5, dt, true); speed = this.speed; }
         else if (this.faceYaw !== undefined) this.heading = dampAngle(this.heading, this.faceYaw, 4, dt);
         this.talking = this.kind === 'gang' && Math.sin(performance.now() * 0.0005 + this.id) > 0.6;
