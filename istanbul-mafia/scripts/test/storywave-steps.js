@@ -86,7 +86,14 @@ module.exports = async (p, out) => {
     const M = game.missions; const i = M.STORY.findIndex((d) => d.id === 'tahsildar');
     game.state.storyIndex = i; M.start(M.STORY[i], { fromStep: 3 }); sim(1);
     const r = { step: M.stepIdx, fcar: !!(M.data.fcar), inCar: !!game.player.vehicle, flee: M.data.fcar && M.data.fcar.ai && M.data.fcar.ai.mode };
-    sim(16);
+    // oyuncu kovalıyormuş gibi: her saniye aracını kaçanın 25 m arkasına taşı (yoksa Ferhat kaçar ve görev biter)
+    for (let k = 0; k < 16; k++) {
+      const f = M.data.fcar, pv = game.player.vehicle;
+      if (f && pv) { const h = f.heading || 0; pv.pos.set(f.pos.x - Math.sin(h) * 25, f.pos.y, f.pos.z - Math.cos(h) * 25); pv.heading = h; }
+      sim(1);
+    }
+    r.alive = !!M.data.fcar;
+    if (!r.alive) return r;
     r.esc = (M.data.gangCars || []).length;
     // aracı hurdaya çevir: Ferhat iner, yaklaşınca teslim olur
     const fc = M.data.fcar; fc.hp = fc.def.hp * 0.2; sim(0.5);
