@@ -25,6 +25,24 @@ const GUN = {
 // [savaş: telsiz/megafon sesi] Türkçe ünlülerin yaklaşık formantları (F1, F2)
 const VOWELS = { a: [780, 1250], e: [520, 1900], ı: [380, 1450], i: [300, 2300], o: [520, 880], ö: [460, 1650], u: [340, 820], ü: [300, 1750] };
 const HISS = 'sşzcçfhj', STOP = 'tkpgdbq';
+// Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
+// trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
+const ENGINE_KINDS = {
+  car: { base: 38, span: 120, h2: 0.5, fire: 0.5, trem: 0.25, nf: 4, grit: 0.12, lp: 350, lpSpan: 1700, sq: 0.35, bright: 1, motor: 1, vol: 1 },
+  small: { base: 46, span: 150, h2: 0.5, fire: 0.5, trem: 0.3, nf: 5, grit: 0.16, lp: 420, lpSpan: 2000, sq: 0.45, bright: 1.2, motor: 1, vol: 0.85 },
+  old: { base: 34, span: 100, h2: 0.5, fire: 0.5, trem: 0.4, nf: 3.5, grit: 0.18, lp: 300, lpSpan: 1300, sq: 0.5, bright: 0.8, motor: 1, vol: 0.95 },
+  sport: { base: 52, span: 200, h2: 0.5, fire: 0.75, trem: 0.18, nf: 6, grit: 0.1, lp: 500, lpSpan: 2600, sq: 0.25, bright: 1.6, motor: 1, vol: 1.15 },
+  v8: { base: 30, span: 100, h2: 0.5, fire: 0.5, trem: 0.45, nf: 3, grit: 0.1, lp: 280, lpSpan: 1400, sq: 0.55, bright: 1.1, motor: 1, vol: 1.2 },
+  diesel: { base: 27, span: 72, h2: 0.5, fire: 1, trem: 0.4, nf: 9, grit: 0.32, lp: 300, lpSpan: 1100, sq: 0.5, bright: 0.7, motor: 1, vol: 1.05 },
+  truck: { base: 21, span: 55, h2: 0.5, fire: 1, trem: 0.45, nf: 10, grit: 0.35, lp: 220, lpSpan: 800, sq: 0.6, bright: 0.6, motor: 1, vol: 1.25 },
+  tank: { base: 19, span: 42, h2: 0.5, fire: 1, trem: 0.5, nf: 8, grit: 0.3, lp: 200, lpSpan: 600, sq: 0.6, bright: 0.5, motor: 1, vol: 1.4 },
+  moto: { base: 62, span: 270, h2: 0.5, fire: 0.5, trem: 0.35, nf: 4, grit: 0.12, lp: 600, lpSpan: 3000, sq: 0.3, bright: 1.5, motor: 1, vol: 0.95 },
+  bike: { base: 40, span: 10, h2: 0.5, fire: 0.5, trem: 0, nf: 4, grit: 0, lp: 200, lpSpan: 0, sq: 0, bright: 0, motor: 0, vol: 0.5 },
+  boat: { base: 40, span: 140, h2: 0.5, fire: 0.5, trem: 0.3, nf: 5, grit: 0.2, lp: 380, lpSpan: 1600, sq: 0.4, bright: 1.1, motor: 0.9, vol: 1 },
+  prop: { base: 44, span: 110, h2: 0.5, fire: 0.5, trem: 0.35, nf: 4, grit: 0.15, lp: 400, lpSpan: 1400, sq: 0.4, bright: 1, motor: 1, vol: 1 },
+  heli: { base: 40, span: 60, h2: 0.5, fire: 0.5, trem: 0.1, nf: 6, grit: 0.08, lp: 250, lpSpan: 500, sq: 0.2, bright: 0.5, motor: 0.35, vol: 1.3 },
+  jet: { base: 40, span: 60, h2: 0.5, fire: 0.5, trem: 0.05, nf: 8, grit: 0.1, lp: 250, lpSpan: 400, sq: 0.1, bright: 0.3, motor: 0.15, vol: 1.4 },
+};
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 export class AudioEngine {
@@ -431,13 +449,17 @@ export class AudioEngine {
     this.osc(o.node, t, { freq: 1370, dur: 0.08, gain: 0.07 * k });
     this.nz(o.node, t, { dur: 0.03, freq: 2000, type: 'bandpass', gain: 0.3 * k });
   }
+  // çarpışma: alçak gümleme + metal ezilmesi + saçılan parçalar (her seferinde biraz farklı)
   crash(x, z, k = 1) {
     const o = this.spatial(x, z, 140, 0.3);
     if (!o) return;
-    const t = this.ctx.currentTime;
-    this.nz(o.node, t, { dur: 0.45, freq: 900, gain: 0.9 * k });
-    this.osc(o.node, t, { freq: 90, freq2: 40, dur: 0.3, type: 'square', gain: 0.22 * k });
-    for (let i = 0; i < 5; i++) this.nz(o.node, t + 0.05 + Math.random() * 0.4, { dur: 0.03, freq: 3000 + Math.random() * 3000, q: 2, type: 'bandpass', gain: 0.25 * k }); // cam/parça
+    const t = this.ctx.currentTime, v = Math.random();
+    this.osc(o.node, t, { freq: 75 + v * 30, freq2: 32, dur: 0.35, type: 'sine', gain: 0.5 * k });
+    this.nz(o.node, t, { dur: 0.35 + v * 0.2, freq: 700 + v * 600, gain: 0.8 * k });
+    this.nz(o.node, t + 0.01, { dur: 0.25, freq: 1600 + v * 1400, q: 3, type: 'bandpass', gain: 0.35 * k, sweep: 900 });
+    this.osc(o.node, t, { freq: 90, freq2: 40, dur: 0.3, type: 'square', gain: 0.12 * k });
+    const n = 3 + Math.floor(k * 4);
+    for (let i = 0; i < n; i++) this.nz(o.node, t + 0.05 + Math.random() * 0.45, { dur: 0.03, freq: 2500 + Math.random() * 3500, q: 2, type: 'bandpass', gain: 0.2 * k }); // parça/cam
   }
   empty() { this.tone({ freq: 1800, dur: 0.03, type: 'square', gain: 0.15 }); }
   // şarjör değiştirme dizisi: kind = silah kimliği, time = toplam süre
@@ -474,7 +496,6 @@ export class AudioEngine {
   error() { this.tone({ freq: 220, dur: 0.18, type: 'square', gain: 0.18 }); this.tone({ freq: 180, dur: 0.22, type: 'square', gain: 0.18, delay: 0.12 }); }
   success() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ freq: f, dur: 0.35, type: 'triangle', gain: 0.25, delay: i * 0.12 })); }
   fail() { [392, 349, 311, 261].forEach((f, i) => this.tone({ freq: f, dur: 0.4, type: 'sawtooth', gain: 0.12, delay: i * 0.16 })); }
-  horn(x, z) { this.tone({ freq: 392, dur: 0.4, type: 'square', gain: 0.18, x, z, range: 100 }); this.tone({ freq: 466, dur: 0.4, type: 'square', gain: 0.14, x, z, range: 100 }); }
   meow(x, z) { this.tone({ freq: 700, freq2: 1100, dur: 0.15, type: 'sawtooth', gain: 0.08, x, z, range: 25 }); this.tone({ freq: 1100, freq2: 500, dur: 0.35, type: 'sawtooth', gain: 0.08, x, z, range: 25, delay: 0.15 }); }
   bark(x, z) { this.noiseBurst({ dur: 0.12, freq: 700, type: 'bandpass', q: 3, gain: 0.5, x, z, range: 60 }); this.tone({ freq: 300, freq2: 180, dur: 0.12, type: 'sawtooth', gain: 0.15, x, z, range: 60 }); }
   seagull(x, z, k = 1) {
@@ -504,18 +525,32 @@ export class AudioEngine {
 
   // ---------------- sürekli döngüler ----------------
   // Çok osilatörlü motor: rpm 0..1+, gain ses düzeyi, load (isteğe bağlı) 0..1 gaz yükü
-  setEngine(on, rpm = 0, gain = 0.15, load) {
+  // ===================== ARAÇ / MOTOR SESLERİ (araç mühendisi) =====================
+  // setEngine(on, rpm, gain, load, opts): rpm ~0.15..1.4. opts (isteğe bağlı) = { kind, throttle, speed, gear, surface, boost, rotor, big }
+  // kind: car | small | sport | v8 | old | diesel | truck | moto | bike | tank | boat | heli | jet | prop
+  // opts'lu çağrı (araç kendi sınıfını bildirir) 0.25 sn boyunca opts'suz genel çağrıları bastırır.
+  setEngine(on, rpm = 0, gain = 0.15, load, opts) {
     if (!this.ctx) return;
     const c = this.ctx;
+    if (on && !opts && this._engOptsT && c.currentTime - this._engOptsT < 0.25) return;
+    if (opts) this._engOptsT = c.currentTime;
     if (on && !this.engineNode) {
       const mk = (type) => { const o = c.createOscillator(); o.type = type; return o; };
-      const o1 = mk('sawtooth'), o2 = mk('square'), o3 = mk('sawtooth'), o4 = mk('sine');
+      const o1 = mk('sawtooth'), o2 = mk('square'), o3 = mk('sawtooth'), o4 = mk('sine'), ow = mk('sine');
       o3.detune.value = 9;
-      const g1 = c.createGain(), g2 = c.createGain(), g3 = c.createGain(), g4 = c.createGain();
-      g1.gain.value = 0.5; g2.gain.value = 0.35; g3.gain.value = 0.2; g4.gain.value = 0.6;
+      const g1 = c.createGain(), g2 = c.createGain(), g3 = c.createGain(), g4 = c.createGain(), gw = c.createGain();
+      g1.gain.value = 0.5; g2.gain.value = 0.35; g3.gain.value = 0.2; g4.gain.value = 0.6; gw.gain.value = 0;
       const nsrc = c.createBufferSource(); nsrc.buffer = this.noiseBuf; nsrc.loop = true;
       const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 2; nf.frequency.value = 300;
       const ng = c.createGain(); ng.gain.value = 0.15;
+      // ikinci katman: kahverengi gürültü uğultusu (jet/rotor/su), genlik modülasyonlu (rotor "çat-çat")
+      const bsrc = c.createBufferSource(); bsrc.buffer = this.brownBuf || this.noiseBuf; bsrc.loop = true;
+      const rf = c.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 400; rf.Q.value = 0.7;
+      const am = c.createGain(); am.gain.value = 1;
+      const amL = mk('sine'); amL.frequency.value = 18; const amG = c.createGain(); amG.gain.value = 0;
+      amL.connect(amG); amG.connect(am.gain);
+      const rg = c.createGain(); rg.gain.value = 0;
+      bsrc.connect(rf); rf.connect(am); am.connect(rg);
       const mix = c.createGain();
       o1.connect(g1); o2.connect(g2); o3.connect(g3); o4.connect(g4); nsrc.connect(nf); nf.connect(ng);
       for (const n of [g1, g2, g3, g4, ng]) n.connect(mix);
@@ -526,44 +561,77 @@ export class AudioEngine {
       const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.Q.value = 1.2;
       // silindir ateşlemelerinin titreşimi
       const trem = c.createGain(); trem.gain.value = 0.8;
-      const lfo = c.createOscillator(); lfo.frequency.value = 12;
+      const lfo = mk('sine'); lfo.frequency.value = 12;
       const lfoG = c.createGain(); lfoG.gain.value = 0.2;
       lfo.connect(lfoG); lfoG.connect(trem.gain);
+      const mg = c.createGain(); mg.gain.value = 1; // motor (osilatör) yolu
       const g = c.createGain(); g.gain.value = 0;
-      mix.connect(shaper); shaper.connect(f); f.connect(trem); trem.connect(g); g.connect(this.sfx);
-      for (const o of [o1, o2, o3, o4, lfo]) o.start();
-      nsrc.start();
-      this.engineNode = { o1, o2, o3, o4, nsrc, nf, ng, g3, f, lfo, lfoG, g, stop: [o1, o2, o3, o4, lfo, nsrc] };
+      mix.connect(shaper); shaper.connect(f); f.connect(trem); trem.connect(mg); mg.connect(g);
+      ow.connect(gw); gw.connect(g); rg.connect(g);
+      g.connect(this.sfx);
+      for (const o of [o1, o2, o3, o4, ow, lfo, amL]) o.start();
+      nsrc.start(); bsrc.start(0, Math.random() * 2);
+      this.engineNode = { o1, o2, o3, o4, ow, gw, nsrc, nf, ng, g2, g3, f, lfo, lfoG, mg, rf, rg, amL, amG, g, stop: [o1, o2, o3, o4, ow, lfo, amL, nsrc, bsrc] };
     }
     if (!on && this.engineNode) {
       const n = this.engineNode; this.engineNode = null;
       n.g.gain.setTargetAtTime(0, c.currentTime, 0.05);
       setTimeout(() => { for (const s of n.stop) { try { s.stop(); } catch (e) { /* zaten durdu */ } } }, 300);
+      for (const l of ['gravel', 'roadwind', 'water', 'freewheel']) this.loopGain(l, 0, 0.1);
       return;
     }
-    if (this.engineNode) {
-      const t = c.currentTime, n = this.engineNode;
-      if (load === undefined) {
-        // yük tahmini: devir artıyorsa gaz veriliyor
-        const want = rpm > this.rpmPrev + 0.0005 ? 1 : rpm < this.rpmPrev - 0.0005 ? 0 : this.load;
-        this.load += (want - this.load) * 0.08;
-        load = this.load;
-      }
-      this.rpmPrev = rpm;
-      const r = clamp(rpm, 0, 1.4);
-      const base = 38 + r * 120;
-      n.o1.frequency.setTargetAtTime(base, t, 0.05);
-      n.o2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
-      n.o3.frequency.setTargetAtTime(base * 2, t, 0.05);
-      n.o4.frequency.setTargetAtTime(base * 0.25, t, 0.05);
-      n.lfo.frequency.setTargetAtTime(base * 0.5, t, 0.05);
-      n.lfoG.gain.setTargetAtTime(0.25 - r * 0.12, t, 0.1);
-      n.nf.frequency.setTargetAtTime(base * 4, t, 0.05);
-      n.ng.gain.setTargetAtTime(0.08 + load * 0.25, t, 0.1);
-      n.g3.gain.setTargetAtTime(0.12 + load * 0.3, t, 0.1);
-      n.f.frequency.setTargetAtTime(350 + r * 1700 + load * 900, t, 0.06);
-      n.g.gain.setTargetAtTime(gain * (0.8 + load * 0.35), t, 0.1);
+    if (!this.engineNode) return;
+    const t = c.currentTime, n = this.engineNode, o = opts || {};
+    if (load === undefined) {
+      // yük tahmini: devir artıyorsa gaz veriliyor
+      const want = o.throttle !== undefined ? Math.max(0, o.throttle) : rpm > this.rpmPrev + 0.0005 ? 1 : rpm < this.rpmPrev - 0.0005 ? 0 : this.load;
+      this.load += (want - this.load) * 0.08;
+      load = this.load;
     }
+    this.rpmPrev = rpm;
+    const r = clamp(rpm, 0, 1.4);
+    const K = ENGINE_KINDS[o.kind] || ENGINE_KINDS.car;
+    const S = (p, v, tc = 0.05) => p.setTargetAtTime(v, t, tc);
+    const base = K.base + r * K.span;
+    S(n.o1.frequency, base); S(n.o2.frequency, base * K.h2); S(n.o3.frequency, base * 2); S(n.o4.frequency, base * 0.25);
+    S(n.lfo.frequency, base * K.fire); S(n.lfoG.gain, K.trem - r * K.trem * 0.5, 0.1);
+    S(n.nf.frequency, base * K.nf); S(n.ng.gain, K.grit * (0.5 + load * 1.2), 0.1);
+    S(n.g2.gain, K.sq, 0.2);
+    S(n.g3.gain, (0.12 + load * 0.3) * K.bright, 0.1);
+    S(n.f.frequency, K.lp + r * K.lpSpan + load * 900, 0.06);
+    S(n.mg.gain, K.motor, 0.1);
+    // uğultu katmanı: rotor çırpması / jet gürlemesi / dalga
+    const sp = o.speed || 0;
+    if (o.kind === 'heli') {
+      const rot = o.rotor !== undefined ? o.rotor : r;
+      S(n.amL.frequency, 4 + rot * 15, 0.3); S(n.amG.gain, 0.85 * rot, 0.2);
+      S(n.rf.frequency, 250 + rot * 500 + load * 300, 0.1); S(n.rg.gain, rot * (0.9 + load * 0.5), 0.2);
+      S(n.ow.frequency, 1700 + rot * 900, 0.3); S(n.gw.gain, rot * 0.035, 0.3);
+    } else if (o.kind === 'jet') {
+      const th = o.throttle || 0, b = o.boost || 0;
+      S(n.amG.gain, b * 0.25, 0.2); S(n.amL.frequency, 31, 0.2);
+      S(n.rf.frequency, 300 + th * 1500 + b * 1200, 0.15); S(n.rg.gain, 0.35 + th * 0.9 + b * 1.1, 0.2);
+      S(n.ow.frequency, 1500 + th * 4200, 0.4); S(n.gw.gain, 0.03 + th * 0.06, 0.3);
+    } else if (o.kind === 'tank') {
+      S(n.amG.gain, 0.6, 0.2); S(n.amL.frequency, 2 + sp * 1.6, 0.1); // palet şakırtısı
+      S(n.rf.frequency, 600 + sp * 60, 0.1); S(n.rg.gain, Math.min(0.9, sp * 0.12), 0.15); S(n.gw.gain, 0.012 + r * 0.02, 0.2); S(n.ow.frequency, 900 + r * 700, 0.2);
+    } else {
+      S(n.amG.gain, 0, 0.2); S(n.rg.gain, 0, 0.2); S(n.gw.gain, o.kind === 'sport' || o.kind === 'v8' ? load * r * 0.02 : 0, 0.15); S(n.ow.frequency, 2400 + r * 3000, 0.1); // turbo ıslığı
+    }
+    S(n.g.gain, gain * (0.8 + load * 0.35) * K.vol, 0.1);
+    // zemin ve hız katmanları
+    const ground = o.kind !== 'heli' && o.kind !== 'jet' && o.kind !== 'boat' && o.kind !== 'prop';
+    const dirt = ground && (o.surface === 'grass' || o.surface === 'dirt');
+    const gl = this.loop('gravel', { type: 'bandpass', freq: 1100, q: 0.9, lfoRate: 9, lfoDepth: 500 });
+    gl.f.frequency.setTargetAtTime(700 + Math.min(1500, sp * 60), t, 0.2);
+    this.loopGain('gravel', dirt ? Math.min(0.2, sp * 0.012) : 0, 0.15);
+    this.loop('roadwind', { buf: this.brownBuf, type: 'bandpass', freq: 500, q: 0.6, lfoRate: 0.3, lfoDepth: 150 });
+    this.loopGain('roadwind', ground ? Math.min(0.14, Math.max(0, sp - 8) * 0.004) * (o.kind === 'moto' || o.kind === 'bike' ? 1.8 : 1) : 0, 0.3);
+    this.loop('water', { buf: this.brownBuf, type: 'lowpass', freq: 700, q: 0.8, lfoRate: 0.7, lfoDepth: 300 });
+    this.loopGain('water', o.kind === 'boat' ? 0.05 + Math.min(0.25, sp * 0.012) : 0, 0.3);
+    const fw = this.loop('freewheel', { type: 'highpass', freq: 3500, q: 0.7, lfoRate: 8, lfoDepth: 0 });
+    if (o.kind === 'bike') { fw.f.frequency.setTargetAtTime(3000 + sp * 200, t, 0.2); this.loopGain('freewheel', (o.throttle > 0 ? 0.004 : 0.018) * Math.min(1, sp / 4), 0.1); }
+    else this.loopGain('freewheel', 0, 0.1);
   }
 
   // genel döngü kaynağı (gürültü -> süzgeç -> kazanç), lazy oluşturulur
@@ -586,9 +654,70 @@ export class AudioEngine {
     if (!this.ctx) return;
     const l = this.loop('screech', { type: 'bandpass', freq: 2900, q: 7, lfoRate: 7, lfoDepth: 260 });
     const a = clamp(amount, 0, 1);
+    // aynı karede araç skid() çağırdıysa genel güncelleme (audio.update) onu ezmesin
+    if (this._skidT && this.ctx.currentTime - this._skidT < 0.1 && amount < this.screechSet) return;
     this.screechSet = a;
     l.f.frequency.setTargetAtTime(2600 + a * 900, this.ctx.currentTime, 0.1);
     this.loopGain('screech', a * 0.11, 0.06);
+  }
+  // Kayma: asfaltta cızırtı, toprak/çimde çakıl hışırtısı
+  skid(amount = 0, surface = 'concrete', speed = 0) {
+    if (!this.ctx) return;
+    const dirt = surface === 'grass' || surface === 'dirt';
+    this.screech(dirt ? 0 : amount);
+    this._skidT = this.ctx.currentTime;
+    if (dirt) { this.loop('gravel', { type: 'bandpass', freq: 1100, q: 0.9, lfoRate: 9, lfoDepth: 500 }); this.loopGain('gravel', Math.min(0.3, amount * 0.25 + speed * 0.012), 0.08); }
+  }
+  // vites değişimi: debriyaj tıkırtısı + kısa emme
+  gearShift(up = true, kind = 'car') {
+    if (!this.ctx || kind === 'bike') return;
+    const o = this.spatial(undefined, undefined, 0, 0.05); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.osc(o.node, t, { freq: up ? 160 : 120, freq2: up ? 90 : 160, dur: 0.07, type: 'square', gain: 0.035 });
+    this.nz(o.node, t, { dur: 0.05, freq: 1800, q: 2, type: 'bandpass', gain: 0.06 });
+  }
+  // turbo boşaltma (gaz kesince "pışşt")
+  turbo(k = 1) {
+    if (!this.ctx) return;
+    const o = this.spatial(undefined, undefined, 0, 0.1); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.nz(o.node, t, { dur: 0.38, freq: 3200, q: 3, type: 'bandpass', gain: 0.22 * k, sweep: 1400 });
+    this.osc(o.node, t, { freq: 5200, freq2: 2600, dur: 0.3, type: 'sine', gain: 0.025 * k });
+  }
+  // korna: araç türüne göre (player.js horn(x,z) çağırır; tür araçta hornKind ile seçilir)
+  horn(x, z, kind) {
+    const k = kind || this.hornKind || 'car';
+    if (k === 'truck') { this.tone({ freq: 155, dur: 0.9, type: 'sawtooth', gain: 0.2, x, z, range: 260 }); this.tone({ freq: 185, dur: 0.9, type: 'sawtooth', gain: 0.16, x, z, range: 260 }); this.tone({ freq: 233, dur: 0.9, type: 'square', gain: 0.07, x, z, range: 260 }); }
+    else if (k === 'moto') { this.tone({ freq: 520, dur: 0.25, type: 'square', gain: 0.14, x, z, range: 90 }); this.tone({ freq: 620, dur: 0.25, type: 'square', gain: 0.1, x, z, range: 90 }); }
+    else if (k === 'bell') { for (const d of [0, 0.16]) { this.tone({ freq: 2650, dur: 0.5, type: 'sine', gain: 0.1, x, z, range: 50, delay: d }); this.tone({ freq: 3420, dur: 0.35, type: 'sine', gain: 0.06, x, z, range: 50, delay: d }); } }
+    else { this.tone({ freq: 392, dur: 0.4, type: 'square', gain: 0.18, x, z, range: 100 }); this.tone({ freq: 466, dur: 0.4, type: 'square', gain: 0.14, x, z, range: 100 }); }
+  }
+  // tank topu: derin gümleme + basınç dalgası
+  cannon(x, z) {
+    const o = this.spatial(x, z, 600, 0.8); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.osc(o.node, t, { freq: 70, freq2: 28, dur: 0.9, type: 'sine', gain: 0.8 });
+    this.nz(o.node, t, { dur: 0.7, freq: 380, gain: 1.0, buf: this.brownBuf });
+  }
+  // cam: isabette çatlama, kırılmada dökülen parçalar
+  glassCrack(x, z, k = 1) {
+    const o = this.spatial(x, z, 70, 0.2); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.nz(o.node, t, { dur: 0.04, freq: 4500, q: 3, type: 'bandpass', gain: 0.35 * k });
+    this.clickAt(o.node, t, 3200, 0.2 * k, 0.02);
+  }
+  glassBreak(x, z, k = 1) {
+    const o = this.spatial(x, z, 110, 0.3); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.nz(o.node, t, { dur: 0.25, freq: 5000, q: 0.8, type: 'highpass', gain: 0.6 * k });
+    for (let i = 0; i < 12; i++) this.nz(o.node, t + 0.03 + Math.random() * 0.6, { dur: 0.02 + Math.random() * 0.03, freq: 3500 + Math.random() * 5000, q: 6, type: 'bandpass', gain: 0.2 * k });
+  }
+  // metal ezilmesi / sürtünme (çarpışmada ek katman)
+  crashMetal(x, z, k = 1) {
+    const o = this.spatial(x, z, 150, 0.35); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.nz(o.node, t, { dur: 0.6 + Math.random() * 0.3, freq: 900 + Math.random() * 900, q: 4, type: 'bandpass', gain: 0.4 * k, sweep: 500 });
+    this.osc(o.node, t + 0.02, { freq: 220 + Math.random() * 180, freq2: 120, dur: 0.4, type: 'sawtooth', gain: 0.05 * k });
   }
   setWind(k = 0) {
     if (!this.ctx) return;

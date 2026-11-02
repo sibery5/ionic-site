@@ -682,7 +682,7 @@ export class NPC extends Actor {
       this.sync();
       return;
     }
-    if (this.vehicle) return;
+    if (this.vehicle || this.passengerOf) return; // yolcu koltuğundaysa konumu araç yönetir
     if (this.downed) { this.updateDowned(dt, full); return; } // [savaş]
     const player = g.player;
     this.thinkT -= dt;

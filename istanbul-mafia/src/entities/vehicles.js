@@ -13,6 +13,8 @@ import { integrateVehicle, collideAllVehicles } from './vehicle_physics.js';
 import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
 import { Debris } from '../world/debris.js';
 import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
+import { BIKE_BUILDERS } from './two_wheelers.js';
+import { MIL_BUILDERS } from './military_vehicles.js';
 
 // ======================================================================
 // Malzemeler
@@ -30,7 +32,7 @@ export function paintMat(c, matte) {
 export const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x18222a, metalness: 0.2, roughness: 0.05, transparent: true, opacity: 0.62, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.6 });
 export const darkMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.12 });
 export const chromeMat = new THREE.MeshStandardMaterial({ color: 0xdadada, metalness: 1, roughness: 0.14 });
-const burntMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1 });
+export const burntMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1 });
 let crackedGlass = null;
 function crackedGlassMat() {
   if (crackedGlass) return crackedGlass;
@@ -152,7 +154,7 @@ export function beam(ax, ay, az, bx2, by, bz, w, d, round) {
 }
 function smoothGeo(g) { g.deleteAttribute('uv'); g.deleteAttribute('normal'); const m = mergeVertices(g, 1e-4); m.computeVertexNormals(); return m; }
 // dışbükey çokgen (3B noktalar) → yelpaze üçgenleme
-function polyGeo(pts) {
+export function polyGeo(pts) {
   const pos = [], idx = [];
   for (const p of pts) pos.push(p[0], p[1], p[2]);
   for (let i = 1; i < pts.length - 1; i++) idx.push(0, i, i + 1);
@@ -196,7 +198,7 @@ function roundedShape(pts) {
   return s;
 }
 // yan profil (z,y) → x boyunca genişliğe kalıp çıkar, yumuşak normaller
-function extrudeSide(pts, W, bevel, curveSeg = 4) {
+export function extrudeSide(pts, W, bevel, curveSeg = 4) {
   const depth = Math.max(0.01, W - 2 * bevel);
   const g = new THREE.ExtrudeGeometry(roundedShape(pts), { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 3, curveSegments: curveSeg, steps: 1 });
   g.rotateY(-Math.PI / 2);
@@ -263,6 +265,8 @@ function liveryTex(kind) {
     g.fillStyle = '#c81414'; g.fillRect(0, 196, 1024, 14);
     g.fillStyle = '#fff'; g.font = 'bold 96px Arial'; g.fillText('POLİS', 470, 132);
     g.font = 'bold 44px Arial'; g.fillText('155', 860, 132);
+  } else if (kind === 'policeHood') {
+    g.fillStyle = '#1d3d8e'; g.font = 'bold 150px Arial'; g.fillText('POLİS', 512, 128);
   } else if (kind === 'swat') {
     g.fillStyle = '#e8e8e8'; g.font = 'bold 84px Arial'; g.fillText('ÖZEL HAREKAT', 512, 110);
     g.fillStyle = '#c8a000'; g.fillRect(40, 175, 944, 12); g.font = 'bold 48px Arial'; g.fillStyle = '#e8e8e8'; g.fillText('POLİS', 512, 225);
@@ -292,7 +296,7 @@ function taxiSign() {
 // Tekerlek geometrisi (lastik + diş + jant kolları + disk/kaliper)
 // ======================================================================
 const wheelCache = new Map();
-function wheelGeo(r, w, kind) {
+export function wheelGeo(r, w, kind) {
   const key = `${r}|${w}|${kind}`;
   if (wheelCache.has(key)) return wheelCache.get(key);
   const parts = [];
@@ -310,7 +314,7 @@ function wheelGeo(r, w, kind) {
   const nT = kind === 'moto' ? 16 : 20;
   for (let i = 0; i < nT; i++) {
     const a = (i / nT) * Math.PI * 2;
-    const t = new THREE.BoxGeometry(w * 0.78, 0.022, 0.05);
+    const t = kind === 'offroad' ? new THREE.BoxGeometry(w * 0.92, 0.045, 0.09) : new THREE.BoxGeometry(w * 0.78, 0.022, 0.05);
     t.translate(0, r + 0.004, 0); t.rotateX(a);
     parts.push(colorize(t, 0x0c0c0c));
   }
@@ -326,7 +330,7 @@ function wheelGeo(r, w, kind) {
     parts.push(colorize(cyl(r * 0.45, r * 0.45, 0.01, 18, 'x', face - 0.02, 0, 0), 0x8a8a8a));
   } else {
     parts.push(colorize(cyl(r * 0.16, r * 0.18, 0.06, 10, 'x', face - 0.01, 0, 0), silver));
-    const nS = kind === 'sport' ? 10 : kind === 'suv' ? 6 : kind === 'steel' || kind === 'bus' ? 0 : 5;
+    const nS = kind === 'sport' ? 10 : kind === 'suv' || kind === 'offroad' ? 6 : kind === 'steel' || kind === 'bus' ? 0 : 5;
     if (nS) {
       for (let i = 0; i < nS; i++) {
         const a = (i / nS) * Math.PI * 2;
@@ -403,6 +407,44 @@ function specFor(type, def) {
     S.rearGlass = false;
     S.pillars = [];
     S.doorSeams = [S.axles[0] - 0.55, -0.1];
+  } else if (st === 'hatch' || st === 'hatch3' || st === 'estate') {
+    const est = st === 'estate', h3 = st === 'hatch3';
+    Object.assign(S, { cl: 0.24, r: est ? 0.33 : 0.3, tw: 0.2, axles: [L * (h3 ? 0.33 : 0.32), -L * (est ? 0.31 : 0.3)], arch: 0.06, belt: 0.64 * H, hood: 0.6 * H, tumble: 0.18, taper: 0.08, interior: 0x26221e });
+    const b = S.belt, hd = S.hood, rz = -L / 2 + (est ? 0.07 : 0.1);
+    S.top = [[L / 2 - 0.05, S.cl, 0.08], [L / 2, S.cl + 0.17, 0.1], [L / 2, hd - 0.1, 0.13], [L / 2 - 0.16, hd, 0.17], [L * 0.29, b - 0.01, 0.13], [rz, b, 0.06], [-L / 2, b - 0.14, 0.08], [-L / 2, S.cl + 0.2, 0.1], [-L / 2 + 0.05, S.cl, 0.08]];
+    S.cab = { ws: [L * 0.29, b], rf: [L * 0.29 - 1.55 * (H - b), H], rr: [-L / 2 + (est ? 0.13 : 0.22), H - 0.01], rw: [rz + 0.01, b], roofR: 0.1 };
+    if (h3) {
+      S.windows = [[99, -L * 0.13], [-L * 0.13 - 0.08, -99]]; S.pillars = [-L * 0.13 - 0.04];
+      S.doorSeams = [S.axles[0] - 0.42, -L * 0.15]; S.handles = [-L * 0.11];
+    } else {
+      const q = est ? -L * 0.22 : -L * 0.27;
+      S.windows = [[99, -0.02], [-0.1, q + 0.03], [q - 0.05, -99]]; S.pillars = [-0.06, q];
+      S.doorSeams = [S.axles[0] - 0.42, -0.06, S.axles[1] + 0.42]; S.handles = [0.06, S.axles[1] + 0.55];
+    }
+  } else if (st === 'coupe' || st === 'cabrio') {
+    const open = st === 'cabrio';
+    Object.assign(S, { cl: 0.19, r: 0.33, tw: 0.24, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: (open ? 0.7 : 0.62) * H, hood: (open ? 0.64 : 0.54) * H, tumble: 0.26, cabW: 0.92, taper: 0.12, taperStart: 0.62, grille: 'sport', interior: open ? 0x6a3a22 : 0x1e1e1e });
+    const b = S.belt, hd = S.hood;
+    if (open) {
+      // açık kokpit: gövde üstünde iki kademeli çukur (ön koltuklar alçakta, arka koltuklar arka kavis üstünde)
+      const zW = L * 0.19, zM = -L * 0.2, zR = -L * 0.28, fy = S.cl + 0.2, fy2 = 2 * S.r + S.arch + 0.07;
+      S.open = { zW, zM, zR, fy, fy2 };
+      S.top = [[L / 2 - 0.06, S.cl, 0.08], [L / 2, S.cl + 0.14, 0.1], [L / 2 - 0.04, hd - 0.08, 0.14], [L / 2 - 0.3, hd, 0.25], [zW + 0.06, b - 0.03, 0.05], [zW, b - 0.03, 0], [zW, fy, 0], [zM, fy, 0], [zM, fy2, 0], [zR, fy2, 0], [zR, b + 0.03, 0.02], [-L * 0.36, b + 0.03, 0.1], [-L / 2 + 0.06, b + 0.01, 0.08], [-L / 2, b - 0.2, 0.1], [-L / 2, S.cl + 0.16, 0.08], [-L / 2 + 0.06, S.cl, 0.06]];
+      S.cab = { ws: [zW, b], rf: [zW - 0.5, H], rr: [zR + 0.3, H], rw: [zR, b], roofR: 0.04 };
+      S.windows = []; S.pillars = []; S.rearGlass = false;
+    } else {
+      S.top = [[L / 2 - 0.06, S.cl, 0.08], [L / 2, S.cl + 0.14, 0.1], [L / 2 - 0.04, hd - 0.08, 0.14], [L / 2 - 0.3, hd, 0.25], [L * 0.2, b - 0.02, 0.18], [-L * 0.36, b + 0.03, 0.1], [-L / 2 + 0.06, b + 0.01, 0.08], [-L / 2, b - 0.2, 0.1], [-L / 2, S.cl + 0.16, 0.08], [-L / 2 + 0.06, S.cl, 0.06]];
+      S.cab = { ws: [L * 0.2, b], rf: [L * 0.2 - 1.6 * (H - b), H], rr: [-L * 0.17, H - 0.02], rw: [-L * 0.36, b + 0.03], roofR: 0.16 };
+      S.windows = [[99, -L * 0.08], [-L * 0.08 - 0.06, -99]]; S.pillars = [-L * 0.08 - 0.03];
+    }
+    S.doorSeams = [S.axles[0] - 0.42, -L * 0.1]; S.handles = [-L * 0.07];
+  } else if (st === 'offroad') {
+    Object.assign(S, { cl: 0.42, r: 0.43, tw: 0.3, axles: [L * 0.31, -L * 0.29], arch: 0.11, belt: 0.6 * H, hood: 0.58 * H, tumble: 0.05, cabW: 0.97, taper: 0.03, bevel: 0.05, bumper: 'dark', grille: 'jeep', lights: 'old', interior: 0x2a2a22, wheelKind: 'offroad' });
+    const b = S.belt, hd = S.hood;
+    S.top = [[L / 2 - 0.04, S.cl, 0.05], [L / 2, S.cl + 0.12, 0.05], [L / 2, hd - 0.06, 0.06], [L / 2 - 0.06, hd, 0.06], [L * 0.22, hd + 0.03, 0.06], [L * 0.19, b, 0.04], [-L / 2 + 0.03, b, 0.05], [-L / 2, b - 0.06, 0.05], [-L / 2, S.cl + 0.12, 0.05], [-L / 2 + 0.04, S.cl, 0.05]];
+    S.cab = { ws: [L * 0.19, b], rf: [L * 0.19 - 0.32, H], rr: [-L / 2 + 0.06, H], rw: [-L / 2 + 0.03, b], roofR: 0.07 };
+    S.windows = [[99, -0.08], [-0.16, -L * 0.3 + 0.06], [-L * 0.3 - 0.04, -99]]; S.pillars = [-0.12, -L * 0.3];
+    S.doorSeams = [S.axles[0] - 0.55, -0.12, S.axles[1] + 0.55]; S.handles = [-0.02, S.axles[1] + 0.68];
   } else if (st === 'van' || st === 'swat' || st === 'ambulance') {
     Object.assign(S, { cl: 0.3, r: 0.36, tw: 0.24, axles: [L * 0.33, -L * 0.31], arch: 0.07, belt: 0.47 * H, tumble: 0.05, cabW: 0.98, taper: 0.05, bevel: 0.07, bumper: st === 'swat' ? 'dark' : 'paint', grille: 'van', interior: 0x2a2a2a, seats: 'van' });
     const b = S.belt;
@@ -478,13 +520,60 @@ function shapeX(g, S, cabin) {
   return g;
 }
 
-class Parts {
-  constructor() { this.paint = []; this.dark = []; this.chrome = []; this.glass = []; this.lights = []; this.decals = []; }
-  p(g) { this.paint.push(prep(g)); }
-  d(g, hex) { this.dark.push(colorize(g, hex)); }
-  c(g) { this.chrome.push(prep(g)); }
-  gl(g) { this.glass.push(prep(g)); }
+// Parça toplayıcı. tag verilirse birleşik geometrideki köşe/indeks aralığı kaydedilir: hasarda bu aralık
+// koparılıp (tampon, kaput, kapı, ayna) ayrı uçan parça olur; cam aralıkları pencere başına çatlar/kırılır.
+export class Parts {
+  constructor() {
+    this.paint = []; this.dark = []; this.chrome = []; this.glass = []; this.lights = []; this.decals = [];
+    this.tags = { paint: [], dark: [], chrome: [], glass: [] }; this.cnt = { paint: [0, 0], dark: [0, 0], chrome: [0, 0], glass: [0, 0] };
+  }
+  _t(kind, g, tag) {
+    const c = this.cnt[kind], nv = g.attributes.position.count, ni = g.index.count;
+    if (tag) this.tags[kind].push({ tag, v0: c[0], nv, i0: c[1], ni });
+    c[0] += nv; c[1] += ni; this[kind].push(g);
+  }
+  p(g, tag) { this._t('paint', prep(g), tag); }
+  d(g, hex, tag) { this._t('dark', colorize(g, hex), tag); }
+  c(g, tag) { this._t('chrome', prep(g), tag); }
+  gl(g, tag) { this._t('glass', prep(g), tag); }
   l(g, lens, emi, ch) { this.lights.push(lightize(g, lens, emi, ch)); }
+}
+// profil çokgeninde z'deki en yüksek üst yüzey (kaput paneli için)
+function topYAt(top, z) {
+  let best = -1;
+  for (let i = 0; i < top.length - 1; i++) {
+    const a = top[i], b = top[i + 1];
+    if ((a[0] - z) * (b[0] - z) > 0 || a[0] === b[0]) continue;
+    const y = a[1] + (b[1] - a[1]) * ((z - a[0]) / (b[0] - a[0]));
+    if (y > best) best = y;
+  }
+  return best;
+}
+// gövde yüzeyine oturan ızgara panel (kaput üstte, kapı yanda): hasarda kopan parça olarak etiketlenir
+function hoodPanel(S, z0, z1, off = 0.012) {
+  const NZ = 6, NX = 6, pos = [], idx = [];
+  for (let j = 0; j <= NZ; j++) {
+    const z = z0 + ((z1 - z0) * j) / NZ, y = topYAt(S.top, z) + off;
+    const hw = S.hw(Math.min(y, S.belt), z) * 0.88;
+    for (let i = 0; i <= NX; i++) { const u = (i / NX) * 2 - 1; pos.push(u * hw, y - u * u * 0.03, z); }
+  }
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + 1, c = a + NX + 1, d = c + 1; idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  if (g.attributes.normal.getY(0) < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
+  return g;
+}
+function doorPanel(S, s, z0, z1, y0, y1, off = 0.007) {
+  const NZ = 5, NY = 4, pos = [], idx = [];
+  for (let j = 0; j <= NY; j++) for (let i = 0; i <= NZ; i++) {
+    const y = y0 + ((y1 - y0) * j) / NY, z = z0 + ((z1 - z0) * i) / NZ;
+    pos.push(s * (S.hw(y, z) + off), y, z);
+  }
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NZ; i++) {
+    const a = j * (NZ + 1) + i, b = a + 1, c = a + NZ + 1, d = c + 1;
+    if (s > 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return g;
 }
 
 // yan yüzeye yapışık şerit (kapı çizgisi, cam çıtası)
@@ -518,7 +607,7 @@ function sideStripH(B, S, y, z0, z1, h, hex, chrome) {
   }
 }
 // yan yüzeye oturan dekal ızgarası (yazı okunur yönde)
-function sideDecal(S, z0, z1, y0, y1) {
+export function sideDecal(S, z0, z1, y0, y1) {
   const parts = [];
   for (const s of [1, -1]) {
     const NZ = 10, NY = 4, pos = [], uv = [], idx = [];
@@ -567,22 +656,47 @@ function buildGenericBody(B, S) {
   const ws = cab.ws, rf = cab.rf, rr = cab.rr, rw = cab.rw;
   const cabPoly = [[ws[0], b], [rf[0], rf[1]], [rr[0], rr[1]], [rw[0], b]];
   const T = 0.06;
-  const roofPts = [[rf[0] + 0.02, rf[1] - T, 0], [rf[0], rf[1], cab.roofR * 0.6], [(rf[0] + rr[0]) / 2, H + 0.02, 0], [rr[0], rr[1], cab.roofR * 0.6], [rr[0] + 0.02, rr[1] - T, 0]];
-  B.p(shapeX(extrudeSide(roofPts, W, 0.03, 3), S, true));
+  const open = S.open;
   const pw = S.pillar;
   const edgeAt = (a, c, y) => a[0] + (c[0] - a[0]) * ((y - a[1]) / (c[1] - a[1]));
-  // A ve C direkleri
+  if (!open) {
+    const roofPts = [[rf[0] + 0.02, rf[1] - T, 0], [rf[0], rf[1], cab.roofR * 0.6], [(rf[0] + rr[0]) / 2, H + 0.02, 0], [rr[0], rr[1], cab.roofR * 0.6], [rr[0] + 0.02, rr[1] - T, 0]];
+    B.p(shapeX(extrudeSide(roofPts, W, 0.03, 3), S, true));
+  }
+  // A ve C direkleri (açık kasada yalnız ön cam çerçevesi)
   for (const s of [1, -1]) {
     const yA0 = b, yA1 = rf[1] - 0.02;
     B.p(beam(s * (S.hw(yA0 + 0.01, ws[0]) - pw * 0.4), yA0, ws[0] - 0.02, s * (S.hw(yA1, rf[0]) - pw * 0.4), yA1, rf[0] - 0.02, pw, pw));
+    if (open) continue;
     B.p(beam(s * (S.hw(b + 0.01, rw[0]) - pw * 0.4), b, rw[0] + 0.02, s * (S.hw(rr[1] - 0.02, rr[0]) - pw * 0.4), rr[1] - 0.02, rr[0] + 0.02, pw * 1.3, pw));
     for (const zp of S.pillars) {
       const y1 = H - 0.03;
       B.p(beam(s * (S.hw(b + 0.01, zp) - pw * 0.4), b, zp, s * (S.hw(y1, zp) - pw * 0.4), y1, zp, pw * 1.2, pw));
     }
   }
+  if (open) {
+    // ön cam üst çıtası + kokpit yan duvarları (gövde kabuğu kokpitte çukur; kapılar ayrı ince duvar)
+    const yT = rf[1] - 0.02, hwT = S.hw(yT, rf[0]) - pw * 0.4;
+    B.d(beam(-hwT, yT, rf[0] - 0.02, hwT, yT, rf[0] - 0.02, 0.05, 0.05, true), 0x151515);
+    const wallPts = [[open.zW + 0.01, open.fy - 0.02, 0], [open.zW + 0.01, b - 0.03, 0.02], [open.zR - 0.01, b + 0.03, 0.02], [open.zR - 0.01, open.fy2 - 0.02, 0], [open.zM, open.fy2 - 0.02, 0], [open.zM, open.fy - 0.02, 0]];
+    for (const s of [1, -1]) {
+      const g = extrudeSide(wallPts, 0.09, 0.015, 2); g.translate(s * (W / 2 - 0.045), 0, 0);
+      B.p(shapeX(g, S, false));
+      B.d(bx(0.02, 0.16, Math.abs(open.zW - open.zR) - 0.3, s * (S.hw(b - 0.2, 0) - 0.1), b - 0.2, (open.zW + open.zR) / 2), 0x3a2418);
+    }
+    B.d(bx(W - 0.2, 0.012, open.zW - open.zM, 0, open.fy + 0.005, (open.zW + open.zM) / 2), 0x1a1a1a);
+    B.d(bx(W - 0.2, 0.012, open.zM - open.zR, 0, open.fy2 + 0.005, (open.zM + open.zR) / 2), 0x1a1a1a);
+    // katlanmış tente (arka güvertede) ve devrilme çemberleri
+    B.d(rbx(W * 0.78, 0.13, 0.42, 0.06, 0, b + 0.09, open.zR - 0.3), 0x181818);
+    for (const s of [1, -1]) {
+      const zh = open.zM + 0.05, x = s * W * 0.22;
+      B.c(beam(x - 0.2, b, zh, x - 0.17, b + 0.32, zh, 0.035, 0.035, true));
+      B.c(beam(x + 0.2, b, zh, x + 0.17, b + 0.32, zh, 0.035, 0.035, true));
+      B.c(beam(x - 0.17, b + 0.32, zh, x + 0.17, b + 0.32, zh, 0.035, 0.035, true));
+    }
+  }
   // kapalı (camsız) bölümler
-  for (const [zHi, zLo] of S.solid) {
+  if (!open) for (const [zHi, zLo] of S.solid) {
     const poly = clipZ(cabPoly, Math.max(zLo, -99), Math.min(zHi, 99)).map((p) => [p[0], p[1], 0]);
     if (poly.length < 3) continue;
     poly[0] = [poly[0][0], poly[0][1] - 0.02, 0];
@@ -601,34 +715,52 @@ function buildGenericBody(B, S) {
     }
     return polyGeo(pts3);
   };
-  if (S.windshield) B.gl(pane(ws, rf, pw * 0.9, 0.004));
-  if (S.rearGlass) B.gl(pane(rw, rr, pw * 1.1, 0.004));
-  // yan camlar
+  if (S.windshield) B.gl(pane(ws, rf, pw * 0.9, 0.004), 'g_ws');
+  if (S.rearGlass && !open) B.gl(pane(rw, rr, pw * 1.1, 0.004), 'g_rear');
+  // yan camlar (pencere başına etiket: g_L0, g_R0 ...)
   const y0 = b + 0.035, y1 = H - cab.roofR * 0.6 - 0.05;
   const trap = [[edgeAt([ws[0], b], rf, y0) - pw * 0.9, y0], [edgeAt([ws[0], b], rf, y1) - pw * 0.9, y1], [edgeAt([rw[0], b], rr, y1) + pw * 1.2, y1], [edgeAt([rw[0], b], rr, y0) + pw * 1.2, y0]];
-  for (const [zHi, zLo] of S.windows) {
+  if (!open) S.windows.forEach(([zHi, zLo], wi) => {
     const poly = clipZ(trap, zLo, zHi);
-    if (poly.length < 3) continue;
-    for (const s of [1, -1]) B.gl(polyGeo(poly.map((p) => [s * (S.hw(p[1], p[0]) + 0.003), p[1], p[0]])));
-  }
+    if (poly.length < 3) return;
+    for (const s of [1, -1]) B.gl(polyGeo(poly.map((p) => [s * (S.hw(p[1], p[0]) + 0.003), p[1], p[0]])), `g_${s > 0 ? 'L' : 'R'}${wi}`);
+  });
   // iç mekân zemini (bel çizgisinde koyu kaplama)
-  B.d(bx(W - 0.3, 0.012, Math.abs(ws[0] - rw[0]) - 0.1, 0, b + 0.006, (ws[0] + rw[0]) / 2), S.interior);
+  if (!open) B.d(bx(W - 0.3, 0.012, Math.abs(ws[0] - rw[0]) - 0.1, 0, b + 0.006, (ws[0] + rw[0]) / 2), S.interior);
   // cam çıtası ve kapı çizgileri
-  sideStripH(B, S, b + 0.012, rw[0] + 0.05, ws[0] - 0.05, 0.022, 0x111111, S.st === 'sedan' || S.st === 'wagon');
+  sideStripH(B, S, b + 0.012, rw[0] + 0.05, ws[0] - 0.05, 0.022, 0x111111, S.st === 'sedan' || S.st === 'wagon' || S.st === 'cabrio');
   for (const z of S.doorSeams) sideStripV(B, S, z, cl + 0.1, b - 0.01, 0.012, 0x0a0a0a);
   for (const z of S.handles) for (const s of [1, -1]) B.c(rbx(0.025, 0.035, 0.15, 0.012, s * (S.hw(b - 0.1, z) + 0.008), b - 0.1, z));
+  // kopabilir kapı panelleri (gövdeyle aynı renk, 7 mm dışarıda; kopunca altında koyu kapı boşluğu görünür)
+  S.doors = [];
+  const flat = S.st === 'bus' || S.st === 'truck';
+  if (!flat && S.doorSeams.length >= 2) {
+    for (let k = 0; k + 1 < S.doorSeams.length && k < 2; k++) {
+      const zA = Math.max(S.doorSeams[k], S.doorSeams[k + 1]) - 0.02, zB = Math.min(S.doorSeams[k], S.doorSeams[k + 1]) + 0.02;
+      if (zA - zB < 0.5) continue;
+      for (const s of [1, -1]) {
+        const tag = `door${s > 0 ? 'L' : 'R'}${k}`;
+        const ya = cl + 0.13, yb = b - 0.03;
+        const okArch = S.arches.every((az) => zB > az + S.archR + 0.02 || zA < az - S.archR - 0.02);
+        const y0d = okArch ? ya : Math.max(ya, S.archY + S.archR + 0.03);
+        B.p(doorPanel(S, s, zB, zA, y0d, yb), tag);
+        S.doors.push({ tag, s, z0: zB, z1: zA, y0: y0d, y1: yb });
+      }
+    }
+  }
   // aynalar
   if (S.mirrors) {
     const zm = ws[0] - 0.16, ym = b + 0.1;
     for (const s of [1, -1]) {
-      const xm = s * (S.hw(b, zm) + 0.13);
-      B.p(rbx(0.12, 0.12, 0.16, 0.04, xm, ym, zm));
-      B.d(bx(0.14, 0.04, 0.05, s * (S.hw(b, zm) + 0.05), ym - 0.03, zm), 0x111111);
-      B.c(bx(0.1, 0.1, 0.01, xm, ym, zm - 0.082));
+      const xm = s * (S.hw(b, zm) + 0.13), tag = s > 0 ? 'mirrorL' : 'mirrorR';
+      B.p(rbx(0.12, 0.12, 0.16, 0.04, xm, ym, zm), tag);
+      B.d(bx(0.14, 0.04, 0.05, s * (S.hw(b, zm) + 0.05), ym - 0.03, zm), 0x111111, tag);
+      B.c(bx(0.1, 0.1, 0.01, xm, ym, zm - 0.082), tag);
     }
   }
   return { cabPoly };
 }
+
 
 function buildFrontRear(B, S) {
   const { L, W, cl } = S;
@@ -674,15 +806,16 @@ function buildFrontRear(B, S) {
   const zFb = S.frontZ(cl + 0.15), zRb = S.st === 'truck' ? -L / 2 : S.rearZ(cl + 0.15);
   const bumpW = S.hw(cl + 0.15, zFb - 0.1) * 2 - 0.04;
   const bump = (z) => rbx(bumpW, bumpH, 0.16, 0.06, 0, cl + 0.13, z);
-  if (S.bumper === 'chrome') { B.c(bump(zFb - 0.04)); B.c(bump(zRb + 0.04)); }
-  else if (S.bumper === 'dark') { B.d(bump(zFb - 0.04), 0x1a1a1a); B.d(bump(zRb + 0.04), 0x1a1a1a); }
-  else { B.p(bump(zFb - 0.05)); B.p(bump(zRb + 0.05)); B.d(bx(bumpW * 0.6, 0.06, 0.04, 0, cl + 0.05, zFb - 0.04), 0x111111); }
+  if (S.bumper === 'chrome') { B.c(bump(zFb - 0.04), 'bumperF'); B.c(bump(zRb + 0.04), 'bumperR'); }
+  else if (S.bumper === 'dark') { B.d(bump(zFb - 0.04), 0x1a1a1a, 'bumperF'); B.d(bump(zRb + 0.04), 0x1a1a1a, 'bumperR'); }
+  else { B.p(bump(zFb - 0.05), 'bumperF'); B.p(bump(zRb + 0.05), 'bumperR'); B.d(bx(bumpW * 0.6, 0.06, 0.04, 0, cl + 0.05, zFb - 0.04), 0x111111, 'bumperF'); }
+  S.bumpers = { zF: zFb, zR: zRb, w: bumpW, y: cl + 0.13 };
   // ızgara
   const gy = isBox ? (S.st === 'bus' ? cl + 0.3 : cl + 0.42) : (yH + cl + 0.2) / 2;
   const gw = S.st === 'sport' ? W * 0.5 : S.st === 'bus' ? W * 0.5 : W * 0.42, gh = S.st === 'jeep' ? 0.36 : S.st === 'sport' ? 0.12 : isBox ? 0.22 : 0.15;
   const zG = S.frontZ(gy);
   B.d(rbx(gw, gh, 0.05, 0.02, 0, gy, zG - 0.015), 0x0b0b0b);
-  if (S.grille === 'jeep') for (let i = -3; i <= 3; i++) B.d(bx(0.035, gh * 0.9, 0.03, i * gw / 7.5, gy, zG + 0.01), 0x3b4128);
+  if (S.grille === 'jeep') for (let i = -3; i <= 3; i++) B.d(bx(0.035, gh * 0.9, 0.03, i * gw / 7.5, gy, zG + 0.01), S.solidColor || 0x2a2a2a);
   else if (S.grille !== 'sport') for (let i = 0; i < 3; i++) B.c(bx(gw * 0.94, 0.012, 0.02, 0, gy - gh * 0.3 + i * gh * 0.3, zG + 0.012));
   if (S.grille !== 'jeep' && S.grille !== 'bus') B.c(cyl(0.045, 0.045, 0.02, 14, 'z', 0, gy, zG + 0.02));
   if (S.st === 'sport') { B.d(bx(W * 0.8, 0.03, 0.2, 0, cl + 0.03, zFb + 0.02), 0x0a0a0a); B.d(bx(W * 0.6, 0.12, 0.12, 0, cl + 0.08, zRb - 0.02), 0x0a0a0a); }
@@ -697,19 +830,25 @@ function buildInterior(B, S, def) {
   const b = S.belt;
   const ws = S.cab.ws[0];
   const ic = S.interior;
-  const seatY = Math.max(cl + 0.25, b - 0.42);
+  const open = S.open;
+  const seatY = open ? open.fy + 0.1 : Math.max(cl + 0.25, b - 0.42);
   const dz = ws - 0.75;
-  const seat = (x, z, wide) => {
-    B.d(rbx(wide ? W * 0.62 : 0.48, 0.14, 0.48, 0.05, x, seatY, z), ic);
-    B.d(beam(x, seatY + 0.05, z - 0.25, x, seatY + 0.62, z - 0.34, 0.1, wide ? W * 0.62 : 0.46), ic);
-    if (!wide) B.d(rbx(0.24, 0.16, 0.08, 0.03, x, seatY + 0.72, z - 0.36), ic);
+  const seats = [];
+  // koltuk: minder + sırt + başlık. seats listesine oturma noktası (minder üstü, yerel) eklenir
+  const seat = (x, z, wide, y = seatY, n = 1) => {
+    B.d(rbx(wide ? W * 0.62 : 0.48, 0.14, 0.48, 0.05, x, y, z), ic);
+    B.d(beam(x, y + 0.05, z - 0.25, x, y + 0.62, z - 0.34, 0.1, wide ? W * 0.62 : 0.46), ic);
+    if (!wide) B.d(rbx(0.24, 0.16, 0.08, 0.03, x, y + 0.72, z - 0.36), ic);
+    if (wide && n > 1) for (let i = 0; i < n; i++) seats.push({ x: (i - (n - 1) / 2) * W * 0.26, y: y + 0.07, z });
+    else seats.push({ x, y: y + 0.07, z });
   };
   if (S.seats === 'bus') {
     for (let z = S.L / 2 - 2.6; z > -S.L / 2 + 1; z -= 1.3) for (const s of [1, -1]) seat(s * W * 0.27, z, false);
   } else {
     seat(W * 0.22, dz, false); seat(-W * 0.22, dz, false);
-    if (S.seats === 'car' && S.cab.rw[0] < dz - 1.0) seat(0, dz - 0.95, true);
-    if (S.seats === 'van' && S.st === 'van') for (let z = dz - 1.0; z > -S.L / 2 + 0.6; z -= 0.9) seat(0, z, true);
+    if (open) seat(0, (open.zM + open.zR) / 2 + 0.12, true, open.fy2 + 0.08, 2);
+    else if (S.seats === 'car' && S.cab.rw[0] < dz - 1.0) seat(0, dz - 0.95, true, seatY, 3);
+    if (S.seats === 'van' && S.st === 'van') for (let z = dz - 1.0; z > -S.L / 2 + 0.6; z -= 0.9) seat(0, z, true, seatY, 3);
   }
   // gösterge paneli ve direksiyon (sürücü solda: +x)
   B.d(rbx(W - 0.35, 0.16, 0.38, 0.05, 0, b + 0.04, ws - 0.2), 0x141414);
@@ -718,8 +857,14 @@ function buildInterior(B, S, def) {
   ring.rotateX(-0.45); ring.translate(dx, sy, sz);
   B.d(ring, 0x0e0e0e);
   B.d(beam(dx, sy, sz, dx, sy - 0.12, sz + 0.25, 0.05, 0.05, true), 0x111111);
+  if (open) {
+    // açık kasada görünen ayrıntılar: vites kolu, orta konsol, gösterge kadranları
+    B.d(rbx(0.22, 0.14, 0.9, 0.04, 0, open.fy + 0.08, dz + 0.15), 0x161616);
+    B.c(cyl(0.012, 0.012, 0.18, 6, 'y', 0, open.fy + 0.24, dz + 0.35));
+    for (const k of [-0.07, 0.07]) B.d(cyl(0.05, 0.05, 0.02, 12, 'z', dx + k, b + 0.1, ws - 0.39), 0x2a2a2a);
+  }
   void def;
-  return { driver: [dx, seatY + 0.07, dz] };
+  return { driver: [dx, seatY + 0.07, dz], seats };
 }
 
 // ---- özel donanımlar ----
@@ -730,18 +875,21 @@ function lightbar(B, x, y, z, w, kindA = 0xd01010, kindB = 0x1040e0) {
 }
 
 const templates = new Map();
+// Gövde stili → özel şablon kurucu (iki tekerlekliler ve askerî araçlar ayrı modüllerde; döngüsel içe aktarma
+// güvenli: kurucular yalnız ilk model isteğinde çağrılır)
 function getTemplate(type) {
   if (templates.has(type)) return templates.get(type);
   const def = CARS[type];
   const st = def.body || def.style;
   let T;
-  if (st === 'moto') T = buildMotoTemplate(def);
-  else if (st === 'tank') T = buildTankTemplate(def);
+  if (BIKE_BUILDERS[st]) T = BIKE_BUILDERS[st](def, type);
+  else if (MIL_BUILDERS[st]) T = MIL_BUILDERS[st](def, type);
   else T = buildCarTemplate(type, def);
   templates.set(type, T);
   return T;
 }
 
+const CAR_LIKE = new Set(['sedan', 'taxi', 'police', 'wagon', 'sport', 'suv', 'jeep', 'hatch', 'hatch3', 'estate', 'coupe', 'cabrio', 'offroad']);
 function buildCarTemplate(type, def) {
   const S = specFor(type, def);
   const B = new Parts();
@@ -749,33 +897,53 @@ function buildCarTemplate(type, def) {
   const fr = buildFrontRear(B, S);
   const inter = buildInterior(B, S, def);
   const { L, W, H, cl } = S;
-  const T = { S, decals: [], extras: [], plates: [], siren: false, wheelR: S.r, driver: inter.driver };
+  const T = { S, decals: [], extras: [], plates: [], siren: false, wheelR: S.r, driver: inter.driver, seats: inter.seats };
   const st = S.st;
+  const liv = def.livery || st;
   // plakalar
   if (S.plate) {
     T.plates.push([0, cl + 0.2, fr.zFb + 0.04, false]);
     const yP = st === 'truck' ? cl + 0.3 : st === 'bus' ? cl + 0.45 : (S.st === 'van' || st === 'swat' || st === 'ambulance') ? cl + 0.42 : (S.rearZ ? S.belt - 0.3 : cl + 0.3);
     T.plates.push([0, yP, (st === 'truck' ? -L / 2 : S.rearZ(yP)) - 0.012, true]);
-    T.plateSlot = st === 'taxi' ? [104, 119] : (st === 'police' || st === 'swat') ? [120, 127] : [0, 103];
+    T.plateSlot = liv === 'taxi' ? [104, 119] : (liv === 'police' || st === 'swat') ? [120, 127] : [0, 103];
   }
-  if (st === 'taxi') {
+  // kopabilir kaput paneli (+ kopunca görünen motor bölmesi)
+  if (CAR_LIKE.has(st)) {
+    const z0 = S.cab.ws[0] + 0.12, z1 = S.frontZ(S.hood - 0.02) - (st === 'sport' || st === 'coupe' || st === 'cabrio' ? 0.4 : 0.28);
+    if (z1 - z0 > 0.35) {
+      B.p(hoodPanel(S, z0, z1), 'hood');
+      T.hood = { z0, z1, y: topYAt(S.top, (z0 + z1) / 2) };
+      if (liv === 'police') T.decals.push({ geo: hoodDecalGeo(S, z0 + 0.05, z1 - 0.05), kind: 'policeHood', tag: 'hood' });
+    }
+  }
+  T.doors = S.doors; T.bumpers = S.bumpers;
+  if (liv === 'taxi') {
     T.extras.push({ geo: rbx(0.62, 0.2, 0.26, 0.05, 0, H + 0.1, S.cab.rf[0] - 0.35), mat: 'taxiSign' });
     B.d(bx(0.5, 0.03, 0.2, 0, H + 0.005, S.cab.rf[0] - 0.35), 0x111111);
     T.decals.push({ geo: sideDecal(S, S.axles[1] + 0.5, S.axles[0] - 0.5, S.belt - 0.28, S.belt - 0.12), kind: 'taxi' });
   }
-  if (st === 'police' || st === 'swat' || st === 'ambulance') {
+  if (liv === 'police' || st === 'swat' || st === 'ambulance') {
     T.siren = true;
-    const zl = st === 'police' ? (S.cab.rf[0] + S.cab.rr[0]) / 2 + 0.15 : S.cab.rf[0] - 0.15;
-    lightbar(B, 0, H, zl, st === 'police' ? 1.1 : 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
-    if (st === 'police') {
+    const zl = liv === 'police' ? (S.cab.rf[0] + S.cab.rr[0]) / 2 + 0.15 : S.cab.rf[0] - 0.15;
+    lightbar(B, 0, H, zl, liv === 'police' ? 1.1 : 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
+    if (liv === 'police') {
       T.decals.push({ geo: sideDecal(S, S.axles[1] + 0.2, S.axles[0] - 0.2, cl + 0.18, S.belt - 0.05), kind: 'police' });
       B.d(rbx(W * 0.7, 0.3, 0.08, 0.03, 0, cl + 0.3, fr.zFb + 0.1), 0x111111);
+      // ızgara içi flaşörler ve tavan numarası
+      for (const s of [1, -1]) B.l(rbx(0.12, 0.05, 0.04, 0.015, s * W * 0.2, cl + 0.42, fr.zFb + 0.12), 0x601010, s > 0 ? 0xff2020 : 0x2050ff, s > 0 ? 5 : 6);
+      B.d(bx(0.5, 0.005, 0.35, 0, H + 0.006, (S.cab.rf[0] + S.cab.rr[0]) / 2 - 0.45), 0x1d3d8e);
     } else if (st === 'swat') {
       T.decals.push({ geo: sideDecal(S, -L / 2 + 0.3, S.axles[0] - 0.5, S.belt + 0.1, S.H - 0.2), kind: 'swat' });
       B.d(rbx(W * 0.85, 0.5, 0.1, 0.03, 0, cl + 0.4, fr.zFb + 0.12), 0x0d0d0d);
       B.d(bx(W * 0.8, 0.05, L * 0.5, 0, H + 0.04, -L * 0.1), 0x222222);
-      // cam ızgaraları
+      // zırh: cam ızgaraları, yan basamaklar, tavan tareti kapağı, koçbaşı
       for (const s of [1, -1]) for (let i = 0; i < 4; i++) B.d(bx(0.02, 0.02, 0.7, s * (S.hw(S.belt + 0.2 + i * 0.12, 0) + 0.02), S.belt + 0.2 + i * 0.12, L / 2 - 1.2), 0x111111);
+      for (const s of [1, -1]) B.d(rbx(0.22, 0.05, L * 0.45, 0.02, s * (W / 2 + 0.05), cl + 0.05, -L * 0.05), 0x2a2a2a);
+      B.d(cyl(0.38, 0.42, 0.22, 14, 'y', 0, H + 0.15, -L * 0.15), 0x1e1e1e);
+      B.d(rbx(W * 0.95, 0.12, 0.12, 0.03, 0, cl + 0.12, fr.zFb + 0.22), 0x0a0a0a);
+      for (let k = -1; k <= 1; k++) B.d(rbx(0.1, 0.45, 0.1, 0.03, k * W * 0.35, cl + 0.35, fr.zFb + 0.25), 0x0a0a0a);
+      // kurşungeçirmez mazgallar
+      for (const s of [1, -1]) for (const z of [-0.6, -1.5]) B.d(cyl(0.05, 0.05, 0.03, 8, 'x', s * (S.hw(S.belt + 0.4, z) + 0.01), S.belt + 0.4, z), 0x050505);
     } else {
       T.decals.push({ geo: sideDecal(S, -L / 2 + 0.2, L / 2 - 1.7, S.belt - 0.2, S.belt + 0.45), kind: 'ambulance' });
       B.l(rbx(0.2, 0.12, 0.12, 0.03, W * 0.4, H + 0.06, -L / 2 + 0.2), 0x601010, 0xff2020, 5);
@@ -787,24 +955,47 @@ function buildCarTemplate(type, def) {
     B.p(rbx(W * 0.86, 0.035, 0.3, 0.015, 0, ys, zs));
     for (const s of [1, -1]) { B.d(bx(0.04, 0.2, 0.12, s * W * 0.3, ys - 0.1, zs), 0x111111); B.d(rbx(0.05, 0.12, 0.4, 0.02, s * (S.hw(S.belt - 0.2, -L * 0.12) + 0.01), S.belt - 0.2, -L * 0.16), 0x0a0a0a); }
   }
+  if (st === 'coupe') B.p(rbx(W * 0.7, 0.03, 0.12, 0.012, 0, S.belt + 0.04, -L / 2 + 0.12));
+  if (st === 'coupe' || st === 'cabrio') for (const s of [1, -1]) B.d(rbx(0.05, 0.06, L * 0.42, 0.02, s * (S.hw(cl + 0.08, 0) + 0.01), cl + 0.08, 0), 0x0c0c0c);
   if (st === 'suv') {
     for (const s of [1, -1]) B.c(bx(0.04, 0.04, L * 0.55, s * W * 0.36, H + 0.04, -L * 0.08));
     sideStripH(B, S, cl + 0.12, -L / 2 + 0.3, L / 2 - 0.3, 0.16, 0x161616);
   }
-  if (st === 'jeep') {
+  if (st === 'hatch' || st === 'hatch3') {
+    B.p(rbx(W * 0.8, 0.04, 0.16, 0.015, 0, S.cab.rr[1] - 0.01, S.cab.rr[0] - 0.02)); // tavan rüzgârlığı
+    sideStripH(B, S, cl + 0.14, S.axles[1] + 0.4, S.axles[0] - 0.4, 0.07, 0x161616);
+  }
+  if (st === 'estate') for (const s of [1, -1]) B.c(bx(0.035, 0.035, L * 0.5, s * W * 0.34, H + 0.035, -L * 0.1));
+  if (st === 'jeep' || st === 'offroad') {
+    const col = st === 'jeep' ? 0x3b4128 : 0x1a1a1a;
     B.d(cyl(0.4, 0.4, 0.25, 16, 'z', 0, S.belt + 0.05, -L / 2 - 0.14), 0x151515);
-    B.d(cyl(0.22, 0.22, 0.27, 12, 'z', 0, S.belt + 0.05, -L / 2 - 0.14), 0x3b4128);
-    for (const s of [1, -1]) B.d(rbx(0.14, 0.4, 0.3, 0.03, s * (W / 2 + 0.05), S.belt - 0.1, -L / 2 + 0.5), 0x3b4128);
-    B.d(beam(-W * 0.35, S.belt, -L / 2 + 0.3, -W * 0.38, S.belt + 2.2, -L / 2 + 0.35, 0.02, 0.02, true), 0x111111);
-    B.d(rbx(W * 0.85, 0.35, 0.08, 0.03, 0, cl + 0.3, S.frontZ(cl + 0.3) + 0.08), 0x252820);
-    T.decals.push({ geo: sideDecal(S, -0.3, 0.6, S.belt - 0.45, S.belt - 0.15), kind: 'army' });
+    B.d(cyl(0.22, 0.22, 0.27, 12, 'z', 0, S.belt + 0.05, -L / 2 - 0.14), st === 'jeep' ? 0x3b4128 : 0x8a8a8a);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; B.d(bx(0.06, 0.04, 0.27, Math.cos(a) * 0.4, S.belt + 0.05 + Math.sin(a) * 0.4, -L / 2 - 0.14), 0x0c0c0c); }
+    B.d(rbx(W * 0.85, 0.35, 0.08, 0.03, 0, cl + 0.3, S.frontZ(cl + 0.3) + 0.08), st === 'jeep' ? 0x252820 : 0x121212);
+    if (st === 'jeep') {
+      for (const s of [1, -1]) B.d(rbx(0.14, 0.4, 0.3, 0.03, s * (W / 2 + 0.05), S.belt - 0.1, -L / 2 + 0.5), 0x3b4128);
+      B.d(beam(-W * 0.35, S.belt, -L / 2 + 0.3, -W * 0.38, S.belt + 2.2, -L / 2 + 0.35, 0.02, 0.02, true), 0x111111);
+      T.decals.push({ geo: sideDecal(S, -0.3, 0.6, S.belt - 0.45, S.belt - 0.15), kind: 'army' });
+    } else {
+      // koruma demiri, tavan sepeti, çamurluk genişletici, şnorkel, sis farları
+      const zf = S.frontZ(cl + 0.3) + 0.14;
+      for (const s of [1, -1]) B.d(beam(s * W * 0.32, cl + 0.12, zf, s * W * 0.3, S.hood - 0.05, zf - 0.05, 0.05, 0.05, true), col);
+      B.d(beam(-W * 0.32, S.hood - 0.08, zf - 0.05, W * 0.32, S.hood - 0.08, zf - 0.05, 0.05, 0.05, true), col);
+      B.d(bx(W * 0.82, 0.04, L * 0.5, 0, H + 0.14, -L * 0.12), 0x111111);
+      for (const s of [1, -1]) { B.d(bx(0.04, 0.12, L * 0.5, s * W * 0.41, H + 0.08, -L * 0.12), 0x111111); for (const z of [-L * 0.3, L * 0.06]) B.d(bx(0.05, 0.12, 0.05, s * W * 0.41, H + 0.04, z), 0x111111); }
+      for (const az of S.axles) for (const s of [1, -1]) {
+        const g = new THREE.TorusGeometry(S.archR + 0.03, 0.05, 6, 14, Math.PI); g.rotateY(Math.PI / 2); g.translate(s * (S.hw(S.archY, az) + 0.02), S.archY, az);
+        B.d(g, 0x111111);
+      }
+      B.d(beam(W * 0.48, S.belt - 0.2, S.cab.ws[0] - 0.05, W * 0.46, H + 0.05, S.cab.ws[0] - 0.25, 0.08, 0.08, true), 0x111111);
+      for (const s of [1, -1]) B.l(cyl(0.07, 0.07, 0.05, 12, 'z', s * W * 0.26, cl + 0.22, zf + 0.01), 0xdfe6ea, 0xfff2d8, 0);
+    }
   }
   if (st === 'bus') {
     T.extras.push({ geo: new THREE.PlaneGeometry(1.8, 0.32).translate(0, H - 0.25, L / 2 - 0.08 + 0.0), mat: 'busDest' });
     T.decals.push({ geo: sideDecal(S, -L / 2 + 0.3, L / 2 - 0.3, S.belt - 0.55, S.belt - 0.02), kind: 'bus' });
     B.d(rbx(W * 0.7, 0.3, 2.6, 0.08, 0, H + 0.15, -L * 0.15), 0xdcdcdc);
-    // kapılar (sağ taraf: -x)
-    for (const zc of [L / 2 - 0.9, -0.3]) B.gl(polyGeo([[-(S.hw(0.4, zc) + 0.006), 0.4, zc - 0.55], [-(S.hw(0.4, zc) + 0.006), 0.4, zc + 0.55], [-(S.hw(S.belt, zc) + 0.006), S.belt, zc + 0.55], [-(S.hw(S.belt, zc) + 0.006), S.belt, zc - 0.55]]));
+    for (const zc of [L / 2 - 0.9, -0.3]) B.gl(polyGeo([[-(S.hw(0.4, zc) + 0.006), 0.4, zc - 0.55], [-(S.hw(0.4, zc) + 0.006), 0.4, zc + 0.55], [-(S.hw(S.belt, zc) + 0.006), S.belt, zc + 0.55], [-(S.hw(S.belt, zc) + 0.006), S.belt, zc - 0.55]]), 'g_door' + zc.toFixed(1));
     for (const zc of [L / 2 - 0.9, -0.3]) sideStripV(B, S, zc, 0.35, H - 0.2, 0.03, 0x111111);
   }
   if (st === 'van' && def.colors[0] === '#f2c200') T.extras.push({ geo: new THREE.PlaneGeometry(1.3, 0.22).rotateX(-0.6).translate(0, S.H - 0.25, S.cab.rf[0] + 0.2), mat: 'dolmusDest' });
@@ -820,113 +1011,52 @@ function buildCarTemplate(type, def) {
     }
     T.decals.push({ geo: new THREE.PlaneGeometry(boxL * 0.7, 0.9), kind: 'truckSide', truck: { W, z: boxZ, y: 2.1 } });
   }
-  // tekerlekler
+  // tekerlekler + süspansiyon bağlantı yüksekliği (amortisör üst noktası, tekerlek merkezine göre)
   T.wheels = [];
   const wx = S.wheelX || W / 2 - S.tw / 2 - 0.05;
-  const wk = S.wheelKind || (st === 'sport' ? 'sport' : st === 'suv' ? 'suv' : st === 'jeep' ? 'steel' : st === 'swat' ? 'black' : 'car');
+  const wk = S.wheelKind || (st === 'sport' || st === 'coupe' || st === 'cabrio' ? 'sport' : st === 'suv' || st === 'estate' ? 'suv' : st === 'jeep' ? 'steel' : st === 'swat' ? 'black' : 'car');
   T.wheelGeo = wheelGeo(S.r, S.tw, wk);
   for (let i = 0; i < S.axles.length; i++) for (const s of [1, -1]) T.wheels.push({ x: s * wx, z: S.axles[i], front: i === 0, side: s });
   T.wheelbase = S.axles[0] - S.axles[S.axles.length > 2 ? 2 : 1];
+  T.track = wx * 2;
+  T.strut = { up: S.arch + S.r * 0.55, inset: S.tw / 2 + 0.06 };
+  T.travel = st === 'offroad' || st === 'jeep' ? 0.16 : st === 'sport' || st === 'coupe' || st === 'cabrio' ? 0.07 : 0.1;
   T.pool = { w: W * 1.8, d: 9, z: L / 2 + 4.6 };
+  T.open = !!S.open;
   finishTemplate(T, B);
   return T;
 }
 
-function finishTemplate(T, B) {
+// kaputa POLİS yazısı (önden okunur)
+function hoodDecalGeo(S, z0, z1) {
+  const g = hoodPanel(S, z0, z1, 0.02);
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2);
+  let hx = 0; for (let i = 0; i < p.count; i++) hx = Math.max(hx, Math.abs(p.getX(i)));
+  for (let i = 0; i < p.count; i++) { uv[i * 2] = (p.getX(i) / hx + 1) / 2; uv[i * 2 + 1] = (z1 - p.getZ(i)) / (z1 - z0); }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+// Birleştir + etiket aralıklarından pencere kutuları (mermi isabetinde hangi camın vurulduğu)
+export function finishTemplate(T, B) {
   T.paint = B.paint.length ? mergeGeometries(B.paint) : null;
   T.dark = B.dark.length ? mergeGeometries(B.dark) : null;
   T.chrome = B.chrome.length ? mergeGeometries(B.chrome) : null;
   T.glass = B.glass.length ? mergeGeometries(B.glass) : null;
   T.lights = B.lights.length ? mergeGeometries(B.lights) : null;
   if (T.paint) T.paint.computeBoundingSphere();
-}
-
-// ---- motosiklet ----
-function buildMotoTemplate(def) {
-  const B = new Parts();
-  const r = 0.31, zf = 0.7, zr = -0.68;
-  // gövde, depo, sele
-  const tank = rbx(0.3, 0.22, 0.52, 0.1, 0, 0.92, 0.2); B.p(tank);
-  B.p(rbx(0.22, 0.12, 0.5, 0.05, 0, 0.86, -0.55));
-  B.p(rbx(0.26, 0.35, 0.3, 0.1, 0, 0.9, 0.58));
-  B.d(rbx(0.27, 0.09, 0.55, 0.04, 0, 0.9, -0.22), 0x111111);
-  // çerçeve
-  B.d(beam(0, 1.0, 0.5, 0, 0.55, -0.05, 0.05, 0.05, true), 0x222222);
-  B.d(beam(0, 0.55, -0.05, 0, r, zr, 0.05, 0.05, true), 0x222222);
-  B.d(beam(0, 0.85, -0.2, 0, r + 0.05, zr, 0.04, 0.04, true), 0x222222);
-  // motor bloğu
-  B.c(rbx(0.3, 0.3, 0.38, 0.06, 0, 0.5, 0.05));
-  B.d(rbx(0.32, 0.12, 0.3, 0.04, 0, 0.36, 0.05), 0x2a2a2a);
-  // egzoz
-  B.c(beam(-0.16, 0.38, 0.1, -0.16, 0.42, -0.75, 0.08, 0.08, true));
-  // çatal ve gidon
-  for (const s of [1, -1]) B.c(beam(s * 0.08, 1.05, 0.55, s * 0.08, r, zf, 0.04, 0.04, true));
-  B.c(beam(-0.36, 1.12, 0.48, 0.36, 1.12, 0.48, 0.03, 0.03, true));
-  for (const s of [1, -1]) B.d(cyl(0.022, 0.022, 0.12, 8, 'x', s * 0.36, 1.12, 0.48), 0x111111);
-  for (const s of [1, -1]) { B.d(beam(s * 0.3, 1.12, 0.48, s * 0.36, 1.32, 0.46, 0.012, 0.012, true), 0x111111); B.c(cyl(0.05, 0.05, 0.015, 10, 'z', s * 0.36, 1.34, 0.45)); }
-  // çamurluk
-  B.p(rbx(0.14, 0.03, 0.5, 0.012, 0, r + 0.1, zf + 0.02));
-  // ışıklar
-  B.c(cyl(0.1, 0.1, 0.06, 14, 'z', 0, 1.0, 0.76));
-  B.l(cyl(0.085, 0.085, 0.03, 14, 'z', 0, 1.0, 0.8), 0xdfe6ea, 0xfff2d8, 0);
-  B.l(rbx(0.14, 0.06, 0.04, 0.015, 0, 0.88, -0.82), 0x5a0808, 0xff1a0a, 1);
-  for (const s of [1, -1]) { B.l(rbx(0.05, 0.04, 0.05, 0.012, s * 0.16, 0.98, 0.7), 0xb06a10, 0xff8a10, s > 0 ? 3 : 4); B.l(rbx(0.05, 0.04, 0.05, 0.012, s * 0.14, 0.86, -0.78), 0xb06a10, 0xff8a10, s > 0 ? 3 : 4); }
-  // ön cam
-  B.gl(polyGeo([[-0.16, 1.12, 0.66], [0.16, 1.12, 0.66], [0.12, 1.32, 0.58], [-0.12, 1.32, 0.58]]));
-  const T = { S: { st: 'moto', L: def.len, W: def.wid, H: def.hei }, decals: [], extras: [], plates: [[0, 0.7, -0.84, true]], plateSlot: [0, 103], plateSize: [0.24, 0.12], siren: false, wheelR: r, moto: true };
-  T.wheelGeo = wheelGeo(r, 0.13, 'moto');
-  T.wheels = [{ x: 0, z: zf, front: true, side: 1 }, { x: 0, z: zr, front: false, side: 1 }];
-  T.wheelbase = zf - zr;
-  T.driver = [0, 0.82, -0.25];
-  T.pool = { w: 2.5, d: 8, z: 4.5 };
-  finishTemplate(T, B);
-  return T;
-}
-
-// ---- tank ----
-function buildTankTemplate(def) {
-  const B = new Parts();
-  const L = def.len, W = def.wid;
-  const hull = [[L / 2, 0.95, 0.06], [L / 2 - 1.0, 1.5, 0.05], [-L / 2 + 0.25, 1.5, 0.05], [-L / 2, 1.15, 0.05], [-L / 2 + 0.35, 0.55, 0.05], [L / 2 - 0.5, 0.55, 0.05]];
-  B.p(extrudeSide(hull, W - 1.1, 0.04, 2));
-  for (const s of [1, -1]) {
-    B.p(rbx(0.62, 0.06, L - 0.2, 0.02, s * (W / 2 - 0.31), 1.12, 0));
-    B.d(rbx(0.56, 0.18, L - 0.5, 0.06, s * (W / 2 - 0.31), 0.98, 0), 0x2a2a24);
-    B.d(rbx(0.56, 0.18, L - 0.8, 0.06, s * (W / 2 - 0.31), 0.09, 0), 0x2a2a24);
-    B.d(cyl(0.38, 0.38, 0.56, 14, 'x', s * (W / 2 - 0.31), 0.6, L / 2 - 0.45), 0x2a2a24);
-    B.d(cyl(0.38, 0.38, 0.56, 14, 'x', s * (W / 2 - 0.31), 0.6, -L / 2 + 0.45), 0x2a2a24);
-    for (let i = 0; i < 26; i++) B.d(bx(0.58, 0.05, 0.08, s * (W / 2 - 0.31), 1.08, -L / 2 + 0.5 + i * (L - 1) / 25), 0x1a1a16);
-    // çamurluk kutuları
-    B.d(rbx(0.5, 0.3, 0.8, 0.04, s * (W / 2 - 0.35), 1.3, -L / 2 + 1.2), 0x3d4429);
+  T.tags = B.tags || null;
+  T.panes = [];
+  if (T.glass && B.tags) {
+    const n = T.glass.attributes.position.count;
+    T.glass.setAttribute('aCrack', new THREE.BufferAttribute(new Float32Array(n), 1));
+    const p = T.glass.attributes.position;
+    for (const r of B.tags.glass) {
+      const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+      for (let i = r.v0; i < r.v0 + r.nv; i++) { const v = [p.getX(i), p.getY(i), p.getZ(i)]; for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], v[k]); mx[k] = Math.max(mx[k], v[k]); } }
+      T.panes.push({ tag: r.tag, r, mn, mx, c: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2], hp: r.tag === 'g_ws' ? 5 : 3 });
+    }
   }
-  B.l(rbx(0.14, 0.1, 0.05, 0.02, W / 2 - 0.4, 1.2, L / 2 - 0.05), 0xdfe6ea, 0xfff2d8, 0);
-  B.l(rbx(0.14, 0.1, 0.05, 0.02, -W / 2 + 0.4, 1.2, L / 2 - 0.05), 0xdfe6ea, 0xfff2d8, 0);
-  B.l(rbx(0.12, 0.08, 0.05, 0.02, W / 2 - 0.4, 1.2, -L / 2 + 0.05), 0x5a0808, 0xff1a0a, 1);
-  B.l(rbx(0.12, 0.08, 0.05, 0.02, -W / 2 + 0.4, 1.2, -L / 2 + 0.05), 0x5a0808, 0xff1a0a, 1);
-  const T = { S: { st: 'tank', L, W, H: def.hei }, decals: [], extras: [], plates: [], siren: false, wheelR: 0.33, tank: true };
-  finishTemplate(T, B);
-  // taret (ayrı grup)
-  const TB = new Parts();
-  const tur = [[1.35, 0.0, 0.05], [0.9, 0.62, 0.08], [-1.3, 0.62, 0.08], [-1.75, 0.3, 0.05], [-1.5, 0.0, 0.05]];
-  TB.p(extrudeSide(tur, 2.3, 0.08, 2));
-  TB.p(cyl(0.45, 0.45, 0.15, 14, 'y', 0.5, 0.7, -0.5));
-  TB.d(cyl(0.035, 0.035, 2.4, 6, 'y', -0.8, 1.8, -1.2), 0x111111);
-  TB.d(rbx(0.6, 0.4, 0.5, 0.04, 0, 0.35, -1.7), 0x2e3320);
-  TB.d(beam(0.5, 0.95, -0.5, 0.5, 0.95, 0.4, 0.05, 0.05, true), 0x151515);
-  T.turretParts = TB;
-  const BB = new Parts();
-  BB.p(cyl(0.16, 0.16, 0.5, 12, 'z', 0, 0, 0.25));
-  BB.p(cyl(0.09, 0.08, 4.4, 12, 'z', 0, 0, 2.6));
-  BB.d(cyl(0.12, 0.12, 0.35, 12, 'z', 0, 0, 4.75), 0x2a2a24);
-  T.barrelParts = BB;
-  finishTemplate(TB, TB); finishTemplate(BB, BB);
-  T.wheelGeo = wheelGeo(0.33, 0.5, 'steel');
-  T.wheels = [];
-  for (let i = 0; i < 6; i++) for (const s of [1, -1]) T.wheels.push({ x: s * (W / 2 - 0.31), z: -L / 2 + 1.0 + i * (L - 2.0) / 5, front: false, side: s, y: 0.36 });
-  T.wheelbase = 4;
-  T.driver = [0.6, 1.2, 1.5];
-  T.pool = { w: 4, d: 10, z: L / 2 + 5 };
-  return T;
 }
 
 // ======================================================================
@@ -987,11 +1117,58 @@ function dummyGeo(moto) {
   return g;
 }
 
+// Pencere başına çatlak dokusu: r kanalı = ilk isabet yıldızı, g kanalı = yoğun örümcek ağı
+let crackTex = null;
+function crackTexture() {
+  if (crackTex) return crackTex;
+  const c = makeCanvas(256, 256); const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
+  const r = new RNG(11);
+  const star = (cx, cy, n, len, col, w) => {
+    g.strokeStyle = col; g.lineWidth = w;
+    for (let i = 0; i < n; i++) {
+      let x = cx, y = cy; const a0 = (i / n) * Math.PI * 2 + r.float(-0.2, 0.2);
+      g.beginPath(); g.moveTo(x, y);
+      for (let s = 0; s < 7; s++) { const a = a0 + r.float(-0.35, 0.35); x += Math.cos(a) * len; y += Math.sin(a) * len; g.lineTo(x, y); }
+      g.stroke();
+    }
+    for (let ring = 1; ring < 4; ring++) { g.beginPath(); for (let k = 0; k <= n; k++) { const a = (k / n) * Math.PI * 2, rr = ring * len * 0.9 * r.float(0.8, 1.2); if (k === 0) g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); else g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.stroke(); }
+  };
+  g.globalCompositeOperation = 'lighter';
+  star(128, 128, 11, 16, 'rgb(255,0,0)', 1.6);
+  star(60, 70, 9, 12, 'rgb(0,255,0)', 1.3); star(190, 60, 9, 12, 'rgb(0,255,0)', 1.3); star(80, 200, 9, 13, 'rgb(0,255,0)', 1.3); star(200, 190, 9, 12, 'rgb(0,255,0)', 1.3);
+  for (let i = 0; i < 60; i++) { g.strokeStyle = 'rgb(0,200,0)'; g.lineWidth = 0.8; g.beginPath(); const x = r.float(0, 256), y = r.float(0, 256); g.moveTo(x, y); g.lineTo(x + r.float(-30, 30), y + r.float(-30, 30)); g.stroke(); }
+  crackTex = new THREE.CanvasTexture(c); crackTex.wrapS = crackTex.wrapT = THREE.RepeatWrapping;
+  return crackTex;
+}
+// Araç camı: glassMat + köşe başı çatlak özniteliği
+export const carGlassMat = glassMat.clone();
+carGlassMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uCrack = { value: crackTexture() };
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aCrack; varying float vCrack; varying vec2 vCrUv;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCrack = aCrack; vCrUv = vec2(position.x + position.z, position.y) * 1.25;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uCrack; varying float vCrack; varying vec2 vCrUv;')
+    .replace('#include <color_fragment>', `#include <color_fragment>
+    if (vCrack > 0.01) { vec4 ct = texture2D(uCrack, vCrUv); float ck = clamp(ct.r + (vCrack > 1.5 ? ct.g : 0.0), 0.0, 1.0);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.93), ck * 0.9); diffuseColor.a = max(diffuseColor.a, 0.6 + ck * 0.38); }`);
+};
+carGlassMat.customProgramCacheKey = () => 'aracCam1';
+
+// Amortisör + helezon yay (birim yükseklik; ölçek y = boy)
+let strutG = null;
+function strutGeo() {
+  if (strutG) return strutG;
+  const parts = [colorize(cyl(0.022, 0.022, 1, 8, 'y', 0, 0.5, 0), 0x8c8c8c), colorize(cyl(0.035, 0.035, 0.45, 8, 'y', 0, 0.75, 0), 0x202020)];
+  for (let i = 0; i < 7; i++) parts.push(colorize(new THREE.TorusGeometry(0.06, 0.009, 4, 12).rotateX(Math.PI / 2).translate(0, 0.25 + i * 0.1, 0), 0xb01818));
+  strutG = mergeGeometries(parts);
+  return strutG;
+}
+
 export function buildCarModel(type, color) {
   const def = CARS[type];
   const T = getTemplate(type);
   const st = T.S.st;
-  const matte = st === 'jeep' || st === 'tank';
+  const matte = !!T.matte || st === 'jeep' || st === 'tank';
   const color0 = color || def.colors[0];
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';
@@ -1000,12 +1177,14 @@ export function buildCarModel(type, color) {
   const bodyM = new THREE.Mesh(T.paint, paintMat(color0, matte));
   bodyM.castShadow = true;
   chassis.add(bodyM);
-  if (T.dark) { const m = new THREE.Mesh(T.dark, darkMat); m.castShadow = true; chassis.add(m); }
-  if (T.chrome) chassis.add(new THREE.Mesh(T.chrome, chromeMat));
+  let darkM = null, chromeM = null;
+  if (T.dark) { darkM = new THREE.Mesh(T.dark, darkMat); darkM.castShadow = true; chassis.add(darkM); }
+  if (T.chrome) { chromeM = new THREE.Mesh(T.chrome, chromeMat); chassis.add(chromeM); }
   let glassM = null;
-  if (T.glass) { glassM = new THREE.Mesh(T.glass, glassMat); glassM.renderOrder = 2; chassis.add(glassM); }
+  if (T.glass) { glassM = new THREE.Mesh(T.glass, T.panes && T.panes.length ? carGlassMat : glassMat); glassM.renderOrder = 2; chassis.add(glassM); }
   const lightsMat = makeLightsMat();
   if (T.lights) chassis.add(new THREE.Mesh(T.lights, lightsMat));
+  const decalMeshes = [];
   for (const d of T.decals) {
     const m = new THREE.Mesh(d.geo, decalMat(d.kind));
     if (d.truck) {
@@ -1013,6 +1192,7 @@ export function buildCarModel(type, color) {
       continue;
     }
     chassis.add(m);
+    decalMeshes.push({ m, tag: d.tag });
   }
   for (const e of T.extras) chassis.add(new THREE.Mesh(e.geo, extraMat(e.mat)));
   let plateGeo = null;
@@ -1023,16 +1203,19 @@ export function buildCarModel(type, color) {
     plateGeo = mergeGeometries(T.plates.map(([x, y, z, back]) => plateQuad(slot, pw, ph, x, y, z, back)));
     chassis.add(new THREE.Mesh(plateGeo, plateMaterial()));
   }
+  // taret (tank, zırhlı): yatay dönen grup + dikey dönen namlu grubu
   let turret = null, barrel = null;
-  if (T.tank) {
-    turret = new THREE.Group(); turret.position.set(0, 1.5, -0.3); chassis.add(turret);
-    turret.add(new THREE.Mesh(T.turretParts.paint, paintMat(color0, true)));
-    turret.add(new THREE.Mesh(T.turretParts.dark, darkMat));
-    barrel = new THREE.Group(); barrel.position.set(0, 0.32, 1.25); turret.add(barrel);
-    barrel.add(new THREE.Mesh(T.barrelParts.paint, paintMat(color0, true)));
-    barrel.add(new THREE.Mesh(T.barrelParts.dark, darkMat));
+  if (T.turretParts) {
+    const tp = T.turretPos || [0, 1.5, -0.3], bp = T.barrelPos || [0, 0.32, 1.25];
+    turret = new THREE.Group(); turret.position.set(tp[0], tp[1], tp[2]); chassis.add(turret);
+    if (T.turretParts.paint) turret.add(new THREE.Mesh(T.turretParts.paint, paintMat(color0, true)));
+    if (T.turretParts.dark) turret.add(new THREE.Mesh(T.turretParts.dark, darkMat));
+    if (T.turretParts.chrome) turret.add(new THREE.Mesh(T.turretParts.chrome, chromeMat));
+    barrel = new THREE.Group(); barrel.position.set(bp[0], bp[1], bp[2]); turret.add(barrel);
+    if (T.barrelParts.paint) barrel.add(new THREE.Mesh(T.barrelParts.paint, paintMat(color0, true)));
+    if (T.barrelParts.dark) barrel.add(new THREE.Mesh(T.barrelParts.dark, darkMat));
   }
-  // tekerlekler (kasadan bağımsız: süspansiyon/yalpa yalnız kasayı etkiler)
+  // tekerlekler (kasadan bağımsız: süspansiyon/yalpa yalnız kasayı etkiler) + amortisörler
   const wheels = [];
   for (const w of T.wheels) {
     const piv = new THREE.Group(); piv.position.set(w.x, w.y || T.wheelR, w.z);
@@ -1040,11 +1223,17 @@ export function buildCarModel(type, color) {
     const spin = new THREE.Group();
     piv.add(flip); flip.add(spin);
     spin.add(new THREE.Mesh(T.wheelGeo, wheelMat));
+    let strut = null;
+    if (T.strut && !T.moto) {
+      strut = new THREE.Mesh(strutGeo(), darkMat);
+      strut.position.set(-Math.sign(w.x || 1) * T.strut.inset, 0, 0); strut.scale.y = T.strut.up; strut.visible = false;
+      piv.add(strut);
+    }
     (T.moto ? chassis : root).add(piv);
-    wheels.push({ piv, spin, front: w.front, sign: w.side < 0 ? -1 : 1 });
+    wheels.push({ piv, spin, front: w.front, sign: w.side < 0 ? -1 : 1, x: w.x, z: w.z, y0: w.y || T.wheelR, strut, lift: 0 });
   }
   // sürücü maketi
-  const drv = new THREE.Mesh(dummyGeo(T.moto), darkMat);
+  const drv = new THREE.Mesh(T.dummyGeo || dummyGeo(T.moto), darkMat);
   drv.position.set(T.driver[0], T.driver[1], T.driver[2]);
   drv.visible = false;
   chassis.add(drv);
@@ -1053,9 +1242,10 @@ export function buildCarModel(type, color) {
   pool.scale.set(T.pool.w, 1, T.pool.d); pool.position.set(0, 0.04, T.pool.z); pool.visible = false; pool.renderOrder = 1;
   root.add(pool);
   Object.assign(root.userData, {
-    bodyMesh: bodyM, glassMesh: glassM, chassis, wheels, wheelR: T.wheelR, lights: lightsMat.userData, lightsMat,
+    bodyMesh: bodyM, darkMesh: darkM, chromeMesh: chromeM, glassMesh: glassM, decalMeshes, chassis, wheels, wheelR: T.wheelR, lights: lightsMat.userData, lightsMat,
     driverDummy: drv, driverTorso: drv, siren: T.siren, pool, plateGeo, turret, barrel, template: T, moto: !!T.moto,
   });
+  if (T.decorate) T.decorate(root, chassis, root.userData, color0);
   return root;
 }
 
@@ -1084,23 +1274,54 @@ class SkidMarks {
 // ======================================================================
 let VID = 1;
 const _push = { x: 0, z: 0 };
+const _q = [];
 const PHYS = {
-  // grip: yanal tutunma (m/s²), cs: yanal sertlik, steer: azami direksiyon açısı, gears: vites sayısı, rev: motor sesi çarpanı, soft: süspansiyon yumuşaklığı
-  sedan: { grip: 13, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1 },
-  wagon: { grip: 11.5, cs: 10, steer: 0.62, gears: 4, rev: 0.9, soft: 1.3 },
-  taxi: { grip: 12.5, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1.1 },
-  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9 },
-  sport: { grip: 17, cs: 13, steer: 0.55, gears: 6, rev: 1.3, soft: 0.6, rwd: true },
-  suv: { grip: 12, cs: 10, steer: 0.6, gears: 6, rev: 0.85, soft: 1.3 },
-  jeep: { grip: 11, cs: 9, steer: 0.6, gears: 4, rev: 0.8, soft: 1.4 },
-  van: { grip: 10, cs: 9, steer: 0.6, gears: 5, rev: 0.85, soft: 1.4 },
-  swat: { grip: 11, cs: 9, steer: 0.58, gears: 5, rev: 0.75, soft: 1.1 },
-  ambulance: { grip: 10, cs: 9, steer: 0.6, gears: 5, rev: 0.85, soft: 1.4 },
-  bus: { grip: 7.5, cs: 7, steer: 0.62, gears: 4, rev: 0.6, soft: 1.2 },
-  truck: { grip: 7, cs: 7, steer: 0.6, gears: 6, rev: 0.6, soft: 1.2 },
-  moto: { grip: 15, cs: 13, steer: 0.7, gears: 5, rev: 1.6, soft: 0.8 },
-  tank: { grip: 30, cs: 20, steer: 0, gears: 3, rev: 0.5, soft: 0.3 },
+  // grip: yanal tutunma (m/s²), cs: yanal sertlik, steer: azami direksiyon açısı, gears: vites sayısı, rev: motor sesi çarpanı,
+  // soft: süspansiyon yumuşaklığı, snd: motor sesi sınıfı (audio.setEngine opts.kind), horn: korna türü
+  sedan: { grip: 13, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1, snd: 'car' },
+  wagon: { grip: 11.5, cs: 10, steer: 0.62, gears: 4, rev: 0.9, soft: 1.3, snd: 'old' },
+  hatch: { grip: 12.5, cs: 11, steer: 0.65, gears: 5, rev: 1.1, soft: 1.1, snd: 'small' },
+  hatch3: { grip: 12.5, cs: 11.5, steer: 0.66, gears: 5, rev: 1.15, soft: 1.05, snd: 'small' },
+  estate: { grip: 12, cs: 10.5, steer: 0.62, gears: 5, rev: 0.95, soft: 1.2, snd: 'car' },
+  taxi: { grip: 12.5, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1.1, snd: 'car' },
+  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9, snd: 'car' },
+  sport: { grip: 17, cs: 13, steer: 0.55, gears: 6, rev: 1.3, soft: 0.6, rwd: true, snd: 'sport', turbo: true },
+  coupe: { grip: 16, cs: 13, steer: 0.56, gears: 6, rev: 1.25, soft: 0.7, rwd: true, snd: 'sport', turbo: true },
+  cabrio: { grip: 15, cs: 12.5, steer: 0.58, gears: 6, rev: 1.2, soft: 0.8, rwd: true, snd: 'sport' },
+  suv: { grip: 12, cs: 10, steer: 0.6, gears: 6, rev: 0.85, soft: 1.3, snd: 'v8', turbo: true },
+  jeep: { grip: 11, cs: 9, steer: 0.6, gears: 4, rev: 0.8, soft: 1.4, snd: 'diesel', offroad: true },
+  offroad: { grip: 11.5, cs: 9.5, steer: 0.6, gears: 5, rev: 0.8, soft: 1.6, snd: 'diesel', offroad: true },
+  van: { grip: 10, cs: 9, steer: 0.6, gears: 5, rev: 0.85, soft: 1.4, snd: 'diesel' },
+  swat: { grip: 11, cs: 9, steer: 0.58, gears: 5, rev: 0.75, soft: 1.1, snd: 'diesel', horn: 'truck' },
+  ambulance: { grip: 10, cs: 9, steer: 0.6, gears: 5, rev: 0.85, soft: 1.4, snd: 'diesel' },
+  bus: { grip: 7.5, cs: 7, steer: 0.62, gears: 4, rev: 0.6, soft: 1.2, snd: 'truck', horn: 'truck' },
+  truck: { grip: 7, cs: 7, steer: 0.6, gears: 6, rev: 0.6, soft: 1.2, snd: 'truck', horn: 'truck' },
+  mtruck: { grip: 8, cs: 7.5, steer: 0.58, gears: 6, rev: 0.6, soft: 1.4, snd: 'truck', horn: 'truck', offroad: true },
+  apc: { grip: 9, cs: 8, steer: 0.5, gears: 5, rev: 0.55, soft: 0.9, snd: 'truck', horn: 'truck', offroad: true },
+  moto: { grip: 15, cs: 13, steer: 0.7, gears: 5, rev: 1.6, soft: 0.8, snd: 'moto', horn: 'moto' },
+  bike: { grip: 9, cs: 10, steer: 0.8, gears: 1, rev: 0, soft: 0.5, snd: 'bike', horn: 'bell' },
+  tank: { grip: 30, cs: 20, steer: 0, gears: 3, rev: 0.5, soft: 0.3, snd: 'tank', horn: 'truck', offroad: true },
 };
+const rnd = (k = 1) => (Math.random() * 2 - 1) * k;
+
+// birleşik geometriden etiket aralığını ayrı geometri olarak kopyala
+function extractRange(geo, r) {
+  const g = new THREE.BufferGeometry();
+  for (const k of Object.keys(geo.attributes)) {
+    const a = geo.attributes[k], n = a.itemSize;
+    g.setAttribute(k, new THREE.BufferAttribute(a.array.slice(r.v0 * n, (r.v0 + r.nv) * n), n));
+  }
+  const ix = geo.index.array, out = new Uint32Array(r.ni);
+  for (let i = 0; i < r.ni; i++) out[i] = ix[r.i0 + i] - r.v0;
+  g.setIndex(new THREE.BufferAttribute(out, 1));
+  return g;
+}
+// aralığın köşelerini tek noktaya çökert (üçgenler görünmez olur)
+function collapseRange(geo, r) {
+  const p = geo.attributes.position, x = p.getX(r.v0), y = p.getY(r.v0), z = p.getZ(r.v0);
+  for (let i = r.v0; i < r.v0 + r.nv; i++) p.setXYZ(i, x, y, z);
+  p.needsUpdate = true;
+}
 
 export class Vehicle {
   constructor(game, type, x, z, heading, color, opts) {
@@ -1138,6 +1359,19 @@ export class Vehicle {
     this.headOK = 1; this.glassBroken = false; this.dented = false;
     this.skidT = 0; this.reloadT = 0; this.recoil = 0;
     this._fwd = { x: 0, z: 1 };
+    const T = this.mesh.userData.template;
+    this.T = T || null;
+    // Yolcu koltukları (hikâye: kız arkadaş yanında). seats[0] sürücü. Yerel kasa koordinatı, y = minder üstü.
+    this.seats = (T && T.seats ? T.seats : []).map((s, i) => ({ x: s.x, y: s.y, z: s.z, driver: i === 0, actor: null }));
+    this.passengers = [];
+    this.seatHipOffset = 0.45; // oturma pozunda kalça ile ayak tabanı arası (character.js sit)
+    // Pencere durumları: 0 sağlam, 1 çatlak, 2 ağır çatlak, 3 kırık
+    this.windows = T && T.panes ? T.panes.map((p) => ({ p, hits: 0, state: 0 })) : [];
+    this.detached = new Set();
+    this._own = {};
+    this.susp = { h: 0, hv: 0, p: 0, pv: 0, r: 0, rv: 0 };
+    // Sürücü pozu kancası (karakter mühendisi): yerel koordinatlar, iki tekerlekliler her kare günceller
+    this.riderPose = T && T.riderPose ? JSON.parse(JSON.stringify(T.riderPose)) : (T && T.driver ? { seat: T.driver.slice(), lean: 0, steer: 0 } : null);
     this.sync();
   }
 
@@ -1147,45 +1381,179 @@ export class Vehicle {
   setColor(col) {
     this.color = col;
     const T = this.mesh.userData.template;
-    this.mesh.userData.bodyMesh.material = paintMat(col, T && (T.S.st === 'jeep' || T.S.st === 'tank'));
+    this.mesh.userData.bodyMesh.material = paintMat(col, T && (T.matte || T.S.st === 'jeep' || T.S.st === 'tank'));
   }
 
   sync() {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.order = 'YXZ'; // yönelim sonra yerel eğim (köprü rampası, batma)
+    if (this.flip) { this.mesh.position.y += this.flipLift || 0; this.mesh.rotation.set(this.flip.x, this.heading, this.flip.z); return; }
     this.mesh.rotation.set(this.sinking > 0 ? Math.min(0.5, this.sinking * 0.2) : (this.roadPitch || 0), this.heading, this.lean);
   }
 
   dispose() {
     const ud = this.mesh.userData;
     if (ud.plateGeo) ud.plateGeo.dispose();
-    if (this.dentGeo) this.dentGeo.dispose();
+    for (const k in this._own) this._own[k].dispose();
     if (ud.lightsMat) ud.lightsMat.dispose();
+    for (const a of this.passengers.slice()) this.removePassenger(a);
   }
+
+  // araca özel (paylaşılmayan) geometri kopyası: göçük, kopan parça ve cam çatlağı için
+  ownGeo(kind) {
+    if (this._own[kind]) return this._own[kind];
+    const ud = this.mesh.userData;
+    const m = kind === 'paint' ? ud.bodyMesh : kind === 'dark' ? ud.darkMesh : kind === 'chrome' ? ud.chromeMesh : ud.glassMesh;
+    if (!m) return null;
+    const g = m.geometry.clone(); m.geometry = g; this._own[kind] = g;
+    return g;
+  }
+  get dentGeo() { return this._own.paint || null; }
 
   damage(amount, attacker) {
     if (this.destroyed) return;
     this.hp -= amount;
     if (attacker && attacker.isPlayer && this.driver && !this.driver.isPlayer && this.ai) this.ai.panic = 10;
-    if (amount > 25 && !this.glassBroken && Math.random() < 0.25) this.breakGlass();
-    if (this.hp < this.def.hp * 0.55 && !this.glassBroken) this.breakGlass();
+    const ray = this._ray; this._ray = null;
+    if (amount >= 200) { for (let i = 0; i < this.windows.length; i++) if (Math.random() < 0.6) this.setPane(i, 3); }
+    else if (ray) this.bulletHit(ray);
+    else if (amount > 25 && Math.random() < 0.25) this.crackRandom();
+    if (this.hp < this.def.hp * 0.3 && Math.random() < 0.1) this.crackRandom();
     if (this.hp <= 0 && this.burnT <= 0) { this.burnT = 4.5; this.lastAttacker = attacker; }
   }
-
-  breakGlass() {
-    const gm = this.mesh.userData.glassMesh;
-    if (!gm || this.glassBroken) return;
+  // eski API
+  breakGlass() { this.crackRandom(3); }
+  crackRandom(st) {
+    if (!this.windows.length) { this.glassBroken = true; return; }
+    const i = Math.floor(Math.random() * this.windows.length);
+    if (st) this.setPane(i, st); else this.paneHit(i, 1);
+  }
+  toLocal(wx, wz, out) {
+    const f = this.fwd, dx = wx - this.pos.x, dz = wz - this.pos.z;
+    out.x = dx * f.z - dz * f.x; out.z = dx * f.x + dz * f.z;
+    return out;
+  }
+  // mermi isabet noktası → hangi cam (kutusu genişletilmiş en yakın pencere)
+  bulletHit(h) {
+    if (!this.windows.length) return;
+    // isabet noktasından mermi yönünde kutunun içine doğru: ilk kesilen pencere kutusu (yerel uzayda ışın-AABB)
+    const l = this.toLocal(h.x, h.z, _push), oy = h.y - this.pos.y, ox = l.x, oz = l.z;
+    const f = this.fwd, dx = h.dx * f.z - h.dz * f.x, dz = h.dx * f.x + h.dz * f.z, dy = h.dy;
+    let best = -1, bt = this.def.len + this.def.wid;
+    for (let i = 0; i < this.windows.length; i++) {
+      const w = this.windows[i]; if (w.state >= 3) continue;
+      const { mn, mx } = w.p;
+      let t0 = -0.3, t1 = bt;
+      const O = [ox, oy, oz], D = [dx, dy, dz], M = 0.06;
+      for (let k = 0; k < 3 && t0 <= t1; k++) {
+        const lo = mn[k] - M, hi = mx[k] + M;
+        if (Math.abs(D[k]) < 1e-6) { if (O[k] < lo || O[k] > hi) t0 = 1e9; continue; }
+        let a = (lo - O[k]) / D[k], b = (hi - O[k]) / D[k]; if (a > b) { const q = a; a = b; b = q; }
+        t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+      }
+      if (t0 <= t1 && t0 < bt) { bt = t0; best = i; }
+    }
+    if (best >= 0) this.paneHit(best, 1);
+  }
+  paneHit(i, k) {
+    const w = this.windows[i]; if (!w || w.state >= 3) return;
+    w.hits += k;
+    const hp = w.p.hp;
+    const st = w.hits >= hp ? 3 : w.hits >= hp * 0.5 ? 2 : 1;
+    if (st > w.state) this.setPane(i, st);
+    else if (this.game.audio && this.game.audio.glassCrack) this.game.audio.glassCrack(this.pos.x, this.pos.z, 0.5);
+  }
+  setPane(i, st) {
+    const w = this.windows[i]; if (!w || st <= w.state) return;
+    const g = this.ownGeo('glass'); if (!g) return;
+    const r = w.p.r, a = this.game.audio || audio;
+    w.state = st;
+    if (st < 3) {
+      const cr = g.attributes.aCrack;
+      if (cr) { for (let k = r.v0; k < r.v0 + r.nv; k++) cr.setX(k, st); cr.needsUpdate = true; }
+      if (a.glassCrack) a.glassCrack(this.pos.x, this.pos.z, st === 2 ? 1 : 0.7);
+      return;
+    }
+    collapseRange(g, r);
     this.glassBroken = true;
-    gm.material = crackedGlassMat();
-    audio.impact && audio.impact(this.pos.x, this.pos.z);
+    // cam kırıkları: pencere merkezinden dışa ve aşağı saçılan parlak parçacıklar
+    const ch = this.mesh.userData.chassis;
+    this.mesh.updateMatrixWorld();
+    _v0.set(w.p.c[0], w.p.c[1], w.p.c[2]); ch.localToWorld(_v0);
+    const P = this.game.particles;
+    const out = Math.sign(w.p.c[0]) || 0, f = this.fwd;
+    const ox = f.z * out, oz = -f.x * out;
+    if (P && P.debris && P.debris.emit) for (let k = 0; k < 18; k++) {
+      const c = 0.7 + Math.random() * 0.25;
+      P.debris.emit(_v0.x + rnd(0.3), _v0.y + rnd(0.15), _v0.z + rnd(0.3), ox * 2 + this.vx * 0.8 + rnd(1.6), Math.random() * 2.2, oz * 2 + this.vz * 0.8 + rnd(1.6), 0.015 + Math.random() * 0.03, (this.groundY || 0) + 0.01, 0, c * 0.85, c * 0.95, c);
+    }
+    if (P && P.sparks) P.sparks(_v0, 3);
+    if (a.glassBreak) a.glassBreak(_v0.x, _v0.z, w.p.tag === 'g_ws' ? 1.2 : 1);
+  }
+
+  // Parça kopar (tampon/kaput/kapı/ayna): aralığı ayrı uçan parçaya taşı, gövdede çökert
+  detach(tag, vx = 0, vy = 2, vz = 0, fire = 0) {
+    const T = this.T;
+    if (!T || !T.tags || this.detached.has(tag) || this.kind !== 'car') return false;
+    const ud = this.mesh.userData;
+    const grp = new THREE.Group();
+    let any = false;
+    for (const kind of ['paint', 'dark', 'chrome']) {
+      for (const r of T.tags[kind]) {
+        if (r.tag !== tag) continue;
+        const own = this.ownGeo(kind); if (!own) continue;
+        const sub = extractRange(own, r);
+        collapseRange(own, r);
+        const mat = kind === 'paint' ? ud.bodyMesh.material : kind === 'dark' ? darkMat : chromeMat;
+        grp.add(new THREE.Mesh(sub, this.destroyed ? burntMat : mat));
+        any = true;
+      }
+    }
+    if (!any) return false;
+    this.detached.add(tag);
+    for (const d of ud.decalMeshes || []) if (d.tag === tag) d.m.visible = false;
+    // kopan parçanın altı: motor bölmesi / kapı boşluğu
+    if (tag === 'hood' && T.hood) {
+      const S = T.S, zc = (T.hood.z0 + T.hood.z1) / 2, len = T.hood.z1 - T.hood.z0;
+      const geo = mergeGeometries([colorize(bx(S.W * 0.78, 0.02, len, 0, T.hood.y - 0.12, zc), 0x111111), colorize(rbx(0.7, 0.3, len * 0.55, 0.05, 0, T.hood.y - 0.2, zc), 0x3a3a3a), colorize(cyl(0.12, 0.12, 0.25, 10, 'x', S.W * 0.25, T.hood.y - 0.12, zc + len * 0.25), 0x1a1a1a)]);
+      ud.chassis.add(new THREE.Mesh(geo, darkMat));
+    } else if (tag.startsWith('door') && T.doors) {
+      const dd = T.doors.find((x) => x.tag === tag);
+      if (dd) {
+        ud.chassis.add(new THREE.Mesh(colorize(doorPanel(T.S, dd.s, dd.z0, dd.z1, dd.y0, dd.y1, -0.02), 0x151515), darkMat));
+        for (let i = 0; i < this.windows.length; i++) { const c = this.windows[i].p.c; if (Math.sign(c[0]) === dd.s && c[2] < dd.z1 && c[2] > dd.z0) this.setPane(i, 3); }
+      }
+    }
+    // dünya konumuna taşı (merkez etrafında dönsün)
+    this.mesh.updateMatrixWorld();
+    grp.children[0].geometry.computeBoundingBox();
+    const bb = grp.children[0].geometry.boundingBox; bb.getCenter(_v0);
+    const cx = _v0.x, cy = _v0.y, cz = _v0.z;
+    for (const m of grp.children) m.geometry.translate(-cx, -cy, -cz);
+    ud.chassis.localToWorld(_v0.set(cx, cy, cz));
+    grp.position.copy(_v0);
+    grp.quaternion.setFromRotationMatrix(ud.chassis.matrixWorld);
+    const mgr = this.game.vehicles;
+    if (mgr && mgr.addPart) mgr.addPart(grp, this.vx * 0.7 + vx, vy, this.vz * 0.7 + vz, (this.groundY || 0) + 0.04, fire);
+    return true;
+  }
+  // patlamada tekerlek de fırlayabilir (yanan lastik)
+  detachWheel(i, vx, vy, vz) {
+    const ud = this.mesh.userData, w = ud.wheels[i];
+    if (!w || w.gone) return;
+    w.gone = true; this.mesh.updateMatrixWorld();
+    w.piv.getWorldPosition(_v0);
+    w.piv.visible = false;
+    const m = new THREE.Mesh(this.T.wheelGeo, burntMat);
+    const grp = new THREE.Group(); grp.add(m); grp.position.copy(_v0); grp.rotation.y = this.heading;
+    if (this.game.vehicles.addPart) this.game.vehicles.addPart(grp, vx, vy, vz, (this.groundY || 0) + this.T.wheelR, 18);
   }
 
   // Yerel noktada göçük (köşe ötelemesi)
   dent(lx, ly, lz, nx, nz, depth) {
     if (this.kind !== 'car' || depth < 0.01) return;
-    const bm = this.mesh.userData.bodyMesh;
-    if (!this.dentGeo) { this.dentGeo = bm.geometry.clone(); bm.geometry = this.dentGeo; }
-    const p = this.dentGeo.attributes.position;
+    const g = this.ownGeo('paint'); if (!g) return;
+    const p = g.attributes.position;
     const R = 0.9, d = Math.min(depth, 0.18);
     for (let i = 0; i < p.count; i++) {
       const dx = p.getX(i) - lx, dy = p.getY(i) - ly, dz = p.getZ(i) - lz;
@@ -1195,16 +1563,33 @@ export class Vehicle {
       p.setX(i, p.getX(i) + nx * k); p.setZ(i, p.getZ(i) + nz * k); p.setY(i, p.getY(i) - k * 0.25);
     }
     p.needsUpdate = true;
-    this.dentGeo.computeVertexNormals();
+    g.computeVertexNormals();
+    this.dented = true;
     if (lz > this.def.len * 0.35 && depth > 0.06) this.headOK = Math.max(0, this.headOK - 0.5);
   }
-  // dünya darbe noktası → yerel göçük
+  // dünya darbe noktası → yerel göçük + kopan parçalar + cam + süspansiyon sarsıntısı
   impact(wx, wz, nx, nz, speed) {
     const f = this.fwd;
     const dx = wx - this.pos.x, dz = wz - this.pos.z;
     const lx = dx * f.z - dz * f.x, lz = dx * f.x + dz * f.z;
     const nlx = nx * f.z - nz * f.x, nlz = nx * f.x + nz * f.z;
     this.dent(lx, this.def.hei * 0.45, lz, nlx, nlz, speed * 0.012);
+    const S = this.susp; S.pv += rnd(speed * 0.012); S.rv += rnd(speed * 0.016); S.hv += speed * 0.01;
+    if (this.kind !== 'car' || speed < 6) return;
+    const L2 = this.def.len / 2, front = lz > L2 * 0.5, rear = lz < -L2 * 0.5;
+    const side = lx > 0 ? 'L' : 'R';
+    const pv = (k) => [-nx * k + rnd(1.5), 1.5 + Math.random() * k * 0.25, -nz * k + rnd(1.5)];
+    if (front && speed > 9 && Math.random() < 0.35 + speed / 40) this.detach('bumperF', ...pv(speed * 0.25));
+    if (front && speed > 15 && Math.random() < 0.5) this.detach('hood', ...pv(speed * 0.2));
+    if (rear && speed > 9 && Math.random() < 0.35 + speed / 40) this.detach('bumperR', ...pv(speed * 0.25));
+    if (!front && !rear && speed > 12 && Math.random() < 0.4) this.detach(`door${side}${lz > -0.1 ? 0 : 1}`, ...pv(speed * 0.2));
+    if (!front && !rear && speed > 6 && Math.random() < 0.5) this.detach('mirror' + side, ...pv(speed * 0.2));
+    // en yakın cam
+    let best = -1, bd = 1e9;
+    for (let i = 0; i < this.windows.length; i++) { const c = this.windows[i].p.c; const d = (c[0] - lx) ** 2 + (c[2] - lz) ** 2; if (d < bd) { bd = d; best = i; } }
+    if (best >= 0 && bd < 2.5) this.paneHit(best, speed > 16 ? 99 : speed > 10 ? 2 : 1);
+    const a = this.game.audio || audio;
+    if (speed > 10 && a.crashMetal) a.crashMetal(wx, wz, Math.min(1.5, speed / 18));
   }
 
   explode() {
@@ -1212,17 +1597,38 @@ export class Vehicle {
     this.destroyed = true;
     this.wreckT = 40;
     const g = this.game;
-    g.combat.explosion(this.pos.x, this.pos.y + 0.5, this.pos.z, 7, 140, this.lastAttacker, this);
-    this.mesh.traverse((o) => { if (o.isMesh && o.material !== wheelMat) o.material = burntMat; });
+    const big = this.kind === 'air' ? 1.7 : (this.def.mass || 0) > 8000 ? 1.3 : 1;
+    g.combat.explosion(this.pos.x, this.pos.y + 0.5, this.pos.z, 7 * big, 140 * big, this.lastAttacker, this);
+    if (big > 1.5) g.particles.explosion({ x: this.pos.x, y: this.pos.y + 2, z: this.pos.z }, 1.4);
+    for (let i = 0; i < this.windows.length; i++) this.setPane(i, 3);
+    this.mesh.traverse((o) => { if (o.isMesh && o.material !== wheelMat && o.material !== chromeMat) o.material = burntMat; });
     this.mesh.userData.pool.visible = false;
-    this.vx *= 0.3; this.vz *= 0.3;
-    this.vy = 6;
-    this.wreckTilt = (Math.random() - 0.5) * 0.3;
+    // havaya fırlama + takla (kütleye göre)
+    const mass = this.def.mass || 1400 * this.def.len * this.def.wid / 8;
+    const k = clamp(2400 / mass, 0.15, 1.2);
+    this.vx = this.vx * 0.4 + rnd(3 * k); this.vz = this.vz * 0.4 + rnd(3 * k);
+    this.vy = 4 + 7 * k + Math.random() * 3 * k;
+    if (this.kind === 'car' && !(this.P.steer === 0)) {
+      this.flip = { x: this.roadPitch || 0, z: 0 };
+      this.flipV = { x: rnd(2.2 * k), z: (Math.random() < 0.5 ? -1 : 1) * (1.5 + Math.random() * 3.5) * k };
+    }
+    this.wreckTilt = rnd(0.15);
+    // parçalar savrulur
+    if (this.T && this.T.tags) {
+      const tags = new Set(); for (const kind of ['paint', 'dark', 'chrome']) for (const r of this.T.tags[kind]) tags.add(r.tag);
+      for (const t of tags) if (Math.random() < 0.8) this.detach(t, rnd(7 * k + 2), 5 + Math.random() * 9 * k, rnd(7 * k + 2), t === 'hood' ? 6 : 0);
+    }
+    const ud = this.mesh.userData;
+    if (!ud.moto && ud.wheels.length <= 6) for (let i = 0; i < ud.wheels.length; i++) if (Math.random() < 0.25) this.detachWheel(i, rnd(8), 6 + Math.random() * 6, rnd(8));
+    // ikincil: yakıt deposu, lastik yangınları
+    this.fuelT = 0.5 + Math.random() * 0.9;
+    this.tireFires = ud.wheels.map((w) => ({ w, t: 1 + Math.random() * 6, dur: 12 + Math.random() * 14 }));
     if (this.driver) {
       const d = this.driver;
       g.vehicles.ejectDriver(this);
       if (d.takeDamage) d.takeDamage(500, this.lastAttacker, 'explosion');
     }
+    for (const a of this.passengers.slice()) { this.removePassenger(a); if (a.takeDamage) a.takeDamage(500, this.lastAttacker, 'explosion'); }
   }
 
   // ortak: yangın/duman/enkaz
@@ -1237,10 +1643,155 @@ export class Vehicle {
       if (this.hp < this.def.hp * 0.25) g.particles.fire(p, 0.35);
       g.particles.smoke(p, this.hp < this.def.hp * 0.25 ? 1.2 : 0.7);
     }
-    if (this.destroyed) {
-      this.wreckT -= dt;
-      if (this.wreckT > 30 && Math.random() < 0.5) g.particles.fire({ x: this.pos.x, y: this.pos.y + 0.8, z: this.pos.z }, 1);
-      if (this.vy) { this.vy -= 20 * dt; const gy = this.groundY || 0; this.pos.y = Math.max(gy, this.pos.y + this.vy * dt); if (this.pos.y <= gy && this.vy < 0) this.vy = 0; }
+    if (!this.destroyed) return;
+    this.wreckT -= dt;
+    const gy = this.groundY || 0;
+    // yanan enkaz: önce büyük alev, sonra kara duman sütunu
+    if (this.wreckT > 22) { if (Math.random() < 0.7) g.particles.fire({ x: this.pos.x + rnd(L * 0.3) * f.x, y: this.pos.y + 0.6 + (this.flipLift || 0), z: this.pos.z + rnd(L * 0.3) * f.z }, 1.3); }
+    else if (this.wreckT > 0 && Math.random() < 0.35) g.particles.smoke({ x: this.pos.x, y: this.pos.y + 1.2, z: this.pos.z }, 1.4);
+    if (this.fuelT > 0) {
+      this.fuelT -= dt;
+      if (this.fuelT <= 0) {
+        g.particles.explosion({ x: this.pos.x - f.x * L * 0.3, y: this.pos.y + 0.8, z: this.pos.z - f.z * L * 0.3 }, 0.55);
+        (g.audio || audio).explosion(this.pos.x, this.pos.z, 0.5);
+        g.cameraShake && g.cameraShake(0.25);
+        if (this.flip) { this.vy = Math.max(this.vy, 3); this.flipV.x += rnd(1); }
+      }
+    }
+    if (this.tireFires && this.wreckT > 0) {
+      for (const tf of this.tireFires) {
+        if (tf.w.gone) continue;
+        tf.t -= dt;
+        if (tf.t < 0 && tf.t > -tf.dur && Math.random() < 0.45) { tf.w.piv.getWorldPosition(_v0); _v0.y += 0.1; g.particles.fire(_v0, 0.55); }
+      }
+    }
+    // uçuş + takla, iniş sekmesi, dengeli duruşa yerleşme
+    if (this.kind !== 'car') { /* tekne/uçak kendi düşüşünü yönetir */ } else if (this.vy || this.pos.y > gy + 0.01) {
+      this.vy -= 20 * dt; this.pos.y += this.vy * dt;
+      if (this.flip) { this.flip.x += this.flipV.x * dt; this.flip.z += this.flipV.z * dt; }
+      if (this.pos.y <= gy) {
+        this.pos.y = gy;
+        if (this.vy < -4) {
+          this.vy = -this.vy * 0.28; this.vx *= 0.6; this.vz *= 0.6;
+          if (this.flip) { this.flipV.x *= 0.5; this.flipV.z *= 0.55; }
+          (g.audio || audio).crash(this.pos.x, this.pos.z, 0.8);
+          g.particles.sparks({ x: this.pos.x, y: gy + 0.3, z: this.pos.z }, 10);
+          g.particles.dust({ x: this.pos.x, y: gy + 0.1, z: this.pos.z });
+        } else this.vy = 0;
+      }
+    } else if (this.flip) {
+      const tz = Math.round(this.flip.z / Math.PI) * Math.PI, tx = Math.round(this.flip.x / Math.PI) * Math.PI;
+      this.flip.z += (tz - this.flip.z) * Math.min(1, dt * 4); this.flip.x += (tx - this.flip.x) * Math.min(1, dt * 4);
+      this.vx *= Math.exp(-3 * dt); this.vz *= Math.exp(-3 * dt);
+    }
+    if (this.flip) {
+      // yere gömülmesin: dönmüş kutunun en alt köşesi
+      const W2 = this.def.wid / 2, L2 = this.def.len / 2, H = this.def.hei;
+      const cx = Math.cos(this.flip.x), sx = Math.sin(this.flip.x), cz = Math.cos(this.flip.z), sz = Math.sin(this.flip.z);
+      let mn = 0;
+      for (const x of [-W2, W2]) for (const y of [0, H * 0.85]) for (const z of [-L2, L2]) mn = Math.min(mn, (x * sz + y * cz) * cx - z * sx);
+      this.flipLift = -mn;
+    }
+  }
+
+  // ---- yolcu API'si (hikâye mühendisi) ----
+  // addPassenger(actor[, seatIndex]) → koltuk no (-1 yer yok). Oyuncu sürücü koltuğunda (0), yolcular 1.. koltuklarda.
+  addPassenger(actor, idx) {
+    if (!actor || actor.passengerOf === this) return actor ? actor.seatIndex : -1;
+    let i = idx;
+    if (i === undefined || !this.seats[i] || this.seats[i].actor || this.seats[i].driver) i = this.seats.findIndex((s) => !s.driver && !s.actor);
+    if (i < 0) return -1;
+    if (actor.passengerOf) actor.passengerOf.removePassenger(actor);
+    this.seats[i].actor = actor;
+    actor.passengerOf = this; actor.seatIndex = i; actor.sitting = true;
+    actor.speed = 0; actor.vx = 0; actor.vz = 0;
+    this.passengers.push(actor);
+    this.placePassengers();
+    return i;
+  }
+  removePassenger(actor) {
+    const i = this.passengers.indexOf(actor);
+    if (i < 0) return false;
+    this.passengers.splice(i, 1);
+    const s = this.seats[actor.seatIndex]; if (s) s.actor = null;
+    actor.passengerOf = null; actor.sitting = false;
+    const f = this.fwd, side = s && s.x < 0 ? -1 : 1, off = this.def.wid / 2 + 0.6;
+    // sol (+x) koltuk sola, sağ koltuk sağa iner
+    actor.pos.set(this.pos.x + f.z * off * side + f.x * (s ? s.z : 0), Math.max(0, this.pos.y), this.pos.z - f.x * off * side + f.z * (s ? s.z : 0));
+    if (this.game.physics) this.game.physics.resolveCircle(actor.pos, 0.35, actor.pos.y);
+    if (actor.model && actor.model.root) { actor.model.root.visible = true; actor.model.root.position.copy(actor.pos); }
+    return true;
+  }
+  placePassengers() {
+    if (!this.passengers.length) return;
+    const ch = this.mesh.userData.chassis;
+    this.mesh.updateMatrixWorld();
+    for (const a of this.passengers) {
+      const s = this.seats[a.seatIndex];
+      _v0.set(s.x, s.y, s.z); ch.localToWorld(_v0);
+      a.pos.set(_v0.x, _v0.y - this.seatHipOffset, _v0.z);
+      a.heading = this.heading; a.speed = 0; a.sitting = true;
+      if (a.model && a.model.root) { a.model.root.position.copy(a.pos); a.model.root.rotation.y = this.heading; a.model.root.visible = !this.mesh.userData.moto || true; }
+    }
+  }
+
+  // oyuncu girişi (player.updateDriving her kare çağırır): korna türü, siren, araç silahları
+  readInput(input) {
+    const a = this.game.audio || audio;
+    a.hornKind = this.P.horn || (this.def.len > 6 ? 'truck' : 'car');
+    if (this.def.siren && input.hit && input.hit('KeyN') && this.type !== 'police' && this.type !== 'swat') this.sirenOn = !this.sirenOn;
+  }
+
+  // Kurb (kaldırım) yüksekliği: fizik ızgarasındaki 'curb' kutuları
+  curbAt(x, z) {
+    const ph = this.game.physics;
+    if (!ph || !ph.active || ph.interiorMode) return 0;
+    const L = ph.active.query(x - 0.05, z - 0.05, x + 0.05, z + 0.05, _q);
+    for (let i = 0; i < L.length; i++) { const b = L[i]; if (b.tag === 'curb' && b.y1 < 0.4 && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) return b.y1; }
+    return 0;
+  }
+
+  // Süspansiyon: tekerlekler yolu izler (kaldırımdan çıkar/iner), kasa yay-sönüm ile yükseklik/burun/yalpa
+  updateSuspension(dt, near, showStruts) {
+    const ud = this.mesh.userData, T = this.T, S = this.susp;
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    let hF = 0, hR = 0, hL = 0, hRt = 0, nF = 0, nR = 0, nL = 0, nRt = 0;
+    for (const w of ud.wheels) {
+      let h = 0;
+      if (near) {
+        const wx = this.pos.x + fz * w.x + fx * w.z, wz = this.pos.z - fx * w.x + fz * w.z;
+        h = this.curbAt(wx, wz);
+        if (this.P.offroad && this.surface === 'grass') h += Math.sin(wx * 2.3 + wz * 1.7) * 0.02;
+      }
+      w.lift += (h - w.lift) * Math.min(1, dt * 22);
+      w.piv.position.y = w.y0 + w.lift;
+      if (w.z > 0) { hF += w.lift; nF++; } else { hR += w.lift; nR++; }
+      if (w.x > 0) { hL += w.lift; nL++; } else { hRt += w.lift; nRt++; }
+    }
+    hF /= nF || 1; hR /= nR || 1; hL /= nL || 1; hRt /= nRt || 1;
+    const wb = (T && T.wheelbase) || this.def.len * 0.6, tr = (T && T.track) || this.def.wid * 0.8;
+    const heave = (hF + hR) / 2, pT = this.pitch - (hF - hR) / wb, rT = this.roll + (hL - hRt) / tr;
+    const fr = 1.7 / Math.sqrt(this.P.soft || 1), k = (Math.PI * 2 * fr) ** 2, c = 2 * 0.3 * Math.sqrt(k);
+    const n = dt > 0.02 ? 2 : 1, h = dt / n;
+    for (let i = 0; i < n; i++) {
+      S.hv += (k * (heave - S.h) - c * S.hv) * h; S.h += S.hv * h;
+      S.pv += (k * (pT - S.p) - c * S.pv) * h; S.p += S.pv * h;
+      S.rv += (k * (rT - S.r) - c * S.rv) * h; S.r += S.rv * h;
+    }
+    const tv = (T && T.travel) || 0.1;
+    S.h = clamp(S.h, -tv, tv + 0.2); S.p = clamp(S.p, -0.12, 0.12); S.r = clamp(S.r, -0.14, 0.14);
+    const ch = ud.chassis;
+    ch.position.y = S.h - Math.abs(S.p) * 0.25;
+    ch.rotation.x = S.p; ch.rotation.z = S.r;
+    if (T && T.strut) {
+      const up = T.strut.up;
+      for (const w of ud.wheels) {
+        if (!w.strut) continue;
+        w.strut.visible = showStruts;
+        if (!showStruts) continue;
+        const mount = ch.position.y + w.y0 + up - w.z * S.p + w.x * S.r;
+        w.strut.scale.y = Math.max(0.08, mount - (w.y0 + w.lift));
+      }
     }
   }
 
@@ -1256,6 +1807,7 @@ export class Vehicle {
     const steer = canDrive ? c.steer : 0;
     const hb = canDrive ? c.handbrake : !this.destroyed && !this.driver;
     const isPlayer = !!(this.driver && this.driver.isPlayer);
+    const camD = g.camera ? Math.hypot(g.camera.position.x - this.pos.x, g.camera.position.z - this.pos.z) : 0;
 
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const rx = -fz, rz = fx;
@@ -1263,34 +1815,49 @@ export class Vehicle {
     let ls = this.vx * rx + this.vz * rz;
     const fs0 = fs;
     const max = def.maxSpeed * (g.state && isPlayer && g.state.carUpgrade ? 1.15 : 1) * (this.hp < def.hp * 0.25 ? 0.75 : 1);
+    // zemin türü (oyuncu): çim/toprakta tutunma düşer, çakıl sesi
+    if (isPlayer) {
+      this.surfT = (this.surfT || 0) - dt;
+      if (this.surfT <= 0) { this.surfT = 0.3; this.surface = g.combat && g.combat.surfaceAt && this.pos.y < 1 ? g.combat.surfaceAt(this.pos.x, this.pos.z) : 'concrete'; }
+    } else this.surface = 'concrete';
+    const offRoad = this.surface === 'grass' || this.surface === 'dirt';
     // vites ve devir
     const nG = P.gears, sp = Math.abs(fs);
     const top = (i) => max * Math.pow((i + 1) / nG, 0.8);
     if (this.shiftT > 0) this.shiftT -= dt;
+    const g0 = this.gear;
     if (fs < -0.5) this.gear = 0;
     else if (this.gear < nG - 1 && sp > top(this.gear) * 0.95) { this.gear++; this.shiftT = 0.2; }
     else if (this.gear > 0 && sp < top(this.gear - 1) * 0.7) this.gear--;
+    if (isPlayer && this.gear !== g0 && P.snd !== 'bike') {
+      const a = g.audio || audio;
+      if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
+      if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
+    }
     const lo = this.gear > 0 ? top(this.gear - 1) * 0.55 : 0, hi = top(this.gear);
     let rpmT = 0.18 + 0.82 * clamp((sp - lo) / (hi - lo), 0, 1);
     if (throttle > 0 && sp < 2) rpmT = Math.max(rpmT, 0.45 + 0.35 * throttle);
     if (this.shiftT > 0) rpmT *= 0.72;
+    if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65 && P.turbo) { const a = g.audio || audio; if (a.turbo) a.turbo(0.6); }
+    this._thrPrev = throttle;
     this.rpm += (rpmT - this.rpm) * Math.min(1, dt * (this.shiftT > 0 ? 18 : 8));
-    // boylamsal kuvvetler
+    // boylamsal kuvvetler (fren: ABS benzeri sabit yavaşlama, hız yükseldikçe biraz daha güçlü)
+    const terrain = offRoad && !P.offroad ? 0.8 : 1;
     if (throttle > 0) {
       if (fs < -0.5) fs += 22 * throttle * dt;
       else {
         const torque = (1.2 - 0.35 * this.rpm) * (1 + (nG - 1 - this.gear) * 0.1);
-        fs += def.accel * throttle * torque * (this.shiftT > 0 ? 0.3 : 1) * Math.max(0, 1 - (fs / max) ** 2) * dt;
+        fs += def.accel * terrain * throttle * torque * (this.shiftT > 0 ? 0.3 : 1) * Math.max(0, 1 - (fs / max) ** 2) * dt;
       }
     } else if (throttle < 0) {
-      if (fs > 0.5) fs += 24 * throttle * dt;
+      if (fs > 0.5) fs += (22 + Math.min(6, sp * 0.15)) * throttle * dt;
       else if (fs > -max * 0.3) fs += def.accel * 0.6 * throttle * dt;
-    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), 1.8 * dt);
+    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (1.8 + (offRoad ? 1.5 : 0)) * dt);
     if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), 7.5 * dt);
     fs -= fs * Math.abs(fs) * 0.0008 * dt;
     // yanal tutunma (kayma açısı → sınırlı yanal kuvvet)
     const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
-    let mu = P.grip * wet * (hb ? 0.33 : 1);
+    let mu = P.grip * wet * (hb ? 0.33 : 1) * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
     if (P.rwd && throttle > 0.5 && Math.abs(ls) > 2.5) mu *= 0.78;
     const dls = clamp(-ls * P.cs * dt, -mu * dt, mu * dt);
     ls += dls;
@@ -1303,7 +1870,7 @@ export class Vehicle {
     } else {
       const steerMax = P.steer / (1 + (fs * fs) / 700);
       this.steerAng += (steer * steerMax - this.steerAng) * Math.min(1, dt * 7);
-      const wb = this.mesh.userData.template ? this.mesh.userData.template.wheelbase || def.len * 0.6 : def.len * 0.6;
+      const wb = this.T ? this.T.wheelbase || def.len * 0.6 : def.len * 0.6;
       wT = (fs * Math.tan(this.steerAng)) / wb;
       const wMax = (mu * 1.15) / Math.max(3, sp);
       if (!hb) wT = clamp(wT, -wMax, wMax); else wT *= 1.5;
@@ -1313,47 +1880,46 @@ export class Vehicle {
     const spin = this.spin || 0;
     this.heading += (this.yawRate + spin) * dt;
     if (spin) { this.spin = spin * Math.exp(-dt * (hb || this.destroyed ? 1.4 : 2.6)); if (Math.abs(this.spin) < 0.005) this.spin = 0; }
-    // dünya hızı (eski çerçevede) → kayma bir sonraki karede yanal hız olarak görünür
     this.vx = fx * fs + rx * ls;
     this.vz = fz * fs + rz * ls;
     this.fs = fs; this.ls = ls;
-    // ağırlık transferi (görsel): fren → burun dalar, viraj → gövde dışa yatar
+    // ağırlık transferi: fren → burun dalar, viraj → gövde dışa yatar (yay-sönüm hedefi)
     const longAcc = (fs - fs0) / Math.max(dt, 1e-3), latAcc = fs * this.yawRate;
     const soft = P.soft;
     this.pitch += (clamp(-longAcc * 0.0045 * soft, -0.07, 0.07) - this.pitch) * Math.min(1, dt * 6);
     this.roll += (clamp(latAcc * 0.007 * soft, -0.08, 0.08) - this.roll) * Math.min(1, dt * 6);
     const ch = ud.chassis;
     if (ud.moto) {
-      const want = this.driver || (this.ai && !this.ai.empty) ? clamp(-Math.atan(latAcc / 9.81), -0.75, 0.75) : 0.12;
+      const want = this.driver || (this.ai && !this.ai.empty) ? clamp(-Math.atan(latAcc / 9.81), -0.75, 0.75) : (P.snd === 'bike' ? 0.0 : 0.12);
       this.lean += (want - this.lean) * Math.min(1, dt * 6);
       ch.rotation.x = this.pitch * 0.5;
     } else if (!this.destroyed) {
-      ch.rotation.x = this.pitch; ch.rotation.z = this.roll;
-      ch.position.y = -Math.abs(this.pitch) * 0.4;
+      if (P.steer === 0) { ch.rotation.x = this.pitch * 0.6; ch.rotation.z = this.roll * 0.4; ch.position.y = 0; }
+      else this.updateSuspension(dt, isPlayer || camD < 50, camD < 22);
     } else { ch.rotation.z = this.wreckTilt || 0; ch.position.y = -0.12; }
     // kayma, lastik sesi ve izleri
     let slip = clamp((Math.abs(ls) - 2.2) / 5, 0, 1);
     if (hb && sp > 4) slip = Math.max(slip, 0.5);
     if (throttle > 0.6 && sp < 6 && def.accel >= 12 && fs > -0.5) slip = Math.max(slip, 0.45);
     if (throttle < 0 && fs > 12) slip = Math.max(slip, 0.3);
-    if (P.steer === 0 || this.pos.y > 0.5) slip = 0;
-    if (isPlayer && audio.screech) audio.screech(slip);
+    if (P.steer === 0 || this.pos.y > 0.5 + (this.groundY || 0) || P.snd === 'bike') slip = 0;
+    if (isPlayer) { const a = g.audio || audio; if (a.skid) a.skid(slip, this.surface, sp); else if (a.screech) a.screech(slip); }
     if (slip > 0.25 && canDrive) {
       this.skidT -= dt;
-      if (this.skidT <= 0 && g.vehicles && g.vehicles.skids) {
+      if (this.skidT <= 0 && g.vehicles && g.vehicles.skids && !offRoad) {
         this.skidT = 0.05;
         const half = def.len * 0.3, wx = def.wid * 0.4, len = Math.max(0.4, sp * 0.06);
         const bx2 = this.pos.x - fx * half, bz = this.pos.z - fz * half;
         g.vehicles.skids.add(bx2 + rx * wx, bz + rz * wx, Math.atan2(this.vx, this.vz), len);
         if (!ud.moto) g.vehicles.skids.add(bx2 - rx * wx, bz - rz * wx, Math.atan2(this.vx, this.vz), len);
       }
-      if (Math.random() < slip * 0.6) g.particles.dust({ x: this.pos.x - fx * def.len * 0.4, y: 0.1, z: this.pos.z - fz * def.len * 0.4 });
-    }
+      if (Math.random() < slip * (offRoad ? 1 : 0.6)) g.particles.dust({ x: this.pos.x - fx * def.len * 0.4, y: 0.1 + (this.groundY || 0), z: this.pos.z - fz * def.len * 0.4 });
+    } else if (offRoad && sp > 6 && Math.random() < 0.3) g.particles.dust({ x: this.pos.x - fx * def.len * 0.45, y: 0.1, z: this.pos.z - fz * def.len * 0.45 });
 
     // konum + statik çarpışma (alt adımlı OBB çözücü)
     integrateVehicle(this, dt, phys, isPlayer);
     // köprü tabliyesi: yükseklik ve eğim (Boğaz köprüsü ~20 m, Galata 4.2 m)
-    if (this.kind === 'car' && !this.sinking && !this.vy) {
+    if (this.kind === 'car' && !this.sinking && !this.vy && !(this.destroyed && this.pos.y > (this.groundY || 0) + 0.01)) {
       const by = phys.interiorMode ? null : bridgeHeightAt(this.pos.x, this.pos.z);
       this.groundY = by === null ? 0 : by;
       this.pos.y = this.groundY;
@@ -1363,7 +1929,7 @@ export class Vehicle {
       } else this.roadPitch = 0;
     }
     // suya düşme
-    if (phys.inWater(this.pos.x, this.pos.z)) {
+    if (phys.inWater(this.pos.x, this.pos.z) && this.pos.y < 2) {
       if (this.sinking === 0) { audio.splash(this.pos.x, this.pos.z); g.particles.splash({ x: this.pos.x, y: -1.3, z: this.pos.z }); }
       this.sinking += dt;
       this.pos.y = Math.max(-6, -this.sinking * 1.2);
@@ -1375,7 +1941,7 @@ export class Vehicle {
       }
       if (this.sinking > 8) { this.destroyed = true; this.wreckT = 0; }
     }
-    // tank tareti ve top atışı
+    // taret (tank/zırhlı) ve atış
     if (ud.turret) this.updateTurret(dt, isPlayer);
     // tekerlekler
     const spinA = (fs * dt) / ud.wheelR;
@@ -1383,16 +1949,20 @@ export class Vehicle {
       w.spin.rotation.x += spinA * w.sign;
       if (w.front) w.piv.rotation.y = this.steerAng;
     }
-    if (ud.tankSpin) void 0;
     if (P.steer === 0) for (const w of ud.wheels) w.spin.rotation.x += (this.yawRate * 1.6 * dt / ud.wheelR) * (w.piv.position.x > 0 ? -1 : 1) * w.sign;
+    if (this.T && this.T.animate) this.T.animate(this, dt);
     this.updateLights(dt, throttle, hb, isPlayer);
-    // motor sesi (vites hissi)
+    // motor sesi (vites hissi + sınıfa özgü ses)
     if (isPlayer) {
       const r = this.rpm * P.rev;
-      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05);
+      const o = this._snd || (this._snd = { kind: 'car', gear: 0, throttle: 0, speed: 0, surface: 'concrete', slip: 0 });
+      o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = throttle; o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
+      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
     }
     ud.driverDummy.visible = !!(this.driver && !this.driver.isPlayer) || !!(this.ai && !this.ai.empty) || isPlayer;
+    this._ray = null;
     this.sync();
+    if (this.passengers.length) this.placePassengers();
   }
 
   // [çarpışma] eski API: tek adımlık statik çözüm (vehicle_physics.js)
@@ -1421,34 +1991,52 @@ export class Vehicle {
     ud.pool.visible = on && night > 0.25 && this.headOK > 0;
   }
 
-  // Tank: taret kamera yönüne döner, sol tık top atışı
+  // Taret: kamera yönüne döner. Tank: sol tık top (anlık mermi + iz + patlama). Zırhlı: sol tık basılı makineli.
   updateTurret(dt, isPlayer) {
-    const g = this.game, ud = this.mesh.userData;
+    const g = this.game, ud = this.mesh.userData, T = this.T;
+    const wpn = (T && T.weapon) || { kind: 'cannon', muzzle: 6.2, height: 1.85, reload: 2.5, rot: 1.2, barrelZ: 1.25 };
     if (this.reloadT > 0) this.reloadT -= dt;
-    this.recoil = Math.max(0, this.recoil - dt * 1.5);
-    ud.barrel.position.z = 1.25 - this.recoil * 0.6;
+    this.recoil = Math.max(0, this.recoil - dt * (wpn.kind === 'mg' ? 8 : 1.5));
+    ud.barrel.position.z = (wpn.barrelZ !== undefined ? wpn.barrelZ : 1.25) - this.recoil * (wpn.kind === 'mg' ? 0.06 : 0.6);
     if (!isPlayer) return;
     const pl = this.driver;
     const want = angleDiff(this.heading, pl.camYaw + Math.PI);
     const cur = ud.turret.rotation.y;
-    ud.turret.rotation.y = cur + clamp(angleDiff(cur, want), -1.2 * dt, 1.2 * dt);
-    ud.barrel.rotation.x = clamp(-(pl.camPitch - 0.22) * 0.6, -0.25, 0.12);
+    ud.turret.rotation.y = cur + clamp(angleDiff(cur, want), -wpn.rot * dt, wpn.rot * dt);
+    ud.barrel.rotation.x = clamp(-(pl.camPitch - 0.22) * 0.6, -0.3, 0.12);
     const inp = g.input;
-    if (inp && inp.mouse.leftPressed && !inp.mouse.right && this.reloadT <= 0 && !this.destroyed) {
-      this.reloadT = 2.5; this.recoil = 1;
-      const yaw = this.heading + ud.turret.rotation.y, pitch = -ud.barrel.rotation.x;
-      const dx = Math.sin(yaw) * Math.cos(pitch), dy = Math.sin(pitch), dz = Math.cos(yaw) * Math.cos(pitch);
-      const ox = this.pos.x + dx * 6.2, oy = this.pos.y + 1.85 + dy * 6, oz = this.pos.z + dz * 6.2;
-      let t = 300;
-      const hit = g.physics.raycast(ox, oy, oz, dx, dy, dz, t);
-      if (hit) t = hit.t;
-      if (g.combat.rayVehicles) { const vh = g.combat.rayVehicles({ x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz }, t, this); if (vh) t = vh.t; }
-      g.particles.explosion({ x: ox, y: oy - 0.5, z: oz }, 0.35);
-      audio.gunshot('rpg', ox, oz);
-      g.cameraShake(0.5);
-      g.combat.explosion(ox + dx * t, oy + dy * t, oz + dz * t, 6, 220, pl, this);
-      this.vx -= dx * 2; this.vz -= dz * 2;
+    if (!inp || this.destroyed || inp.mouse.right) return;
+    const fire = wpn.kind === 'mg' ? inp.mouse.left : inp.mouse.leftPressed;
+    if (!fire || this.reloadT > 0) return;
+    this.reloadT = wpn.reload; this.recoil = 1;
+    const yaw = this.heading + ud.turret.rotation.y, pitch = -ud.barrel.rotation.x;
+    const dx = Math.sin(yaw) * Math.cos(pitch), dy = Math.sin(pitch), dz = Math.cos(yaw) * Math.cos(pitch);
+    const ox = this.pos.x + dx * wpn.muzzle, oy = this.pos.y + wpn.height + dy * wpn.muzzle, oz = this.pos.z + dz * wpn.muzzle;
+    const o = _v0.set(ox, oy, oz);
+    if (wpn.kind === 'mg') {
+      const d = this._dir || (this._dir = new THREE.Vector3());
+      d.set(dx + rnd(0.012), dy + rnd(0.008), dz + rnd(0.012)).normalize();
+      const def = this._mgDef || (this._mgDef = { name: 'Ağır Makineli', type: 'rifle', range: 320, dmg: 38, sound: 'ak', flash: 2.2, shell: false });
+      if (g.combat.muzzleFlash) g.combat.muzzleFlash(pl, o, d, def);
+      g.combat.hitscan(pl, o, d, def, o);
+      audio.gunshot('ak', ox, oz);
+      g.cameraShake(0.05);
+      return;
     }
+    let t = 300;
+    const hit = g.physics.raycast(ox, oy, oz, dx, dy, dz, t);
+    if (hit) t = hit.t;
+    if (g.combat.rayVehicles) { const vh = g.combat.rayVehicles({ x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz }, t, this); if (vh) t = vh.t; }
+    if (g.combat.rayActors) { const ah = g.combat.rayActors({ x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz }, t, pl); if (ah) t = ah.t; }
+    g.particles.explosion({ x: ox, y: oy - 0.5, z: oz }, 0.35);
+    if (g.particles.backblast) g.particles.backblast({ x: ox - dx * 2, y: oy, z: oz - dz * 2 }, { x: -dx, y: 0, z: -dz });
+    if (g.combat.addTracer) g.combat.addTracer(o.clone(), new THREE.Vector3(ox + dx * t, oy + dy * t, oz + dz * t), 0.09);
+    audio.gunshot('rpg', ox, oz);
+    if ((g.audio || audio).cannon) (g.audio || audio).cannon(ox, oz);
+    g.cameraShake(0.5);
+    g.combat.explosion(ox + dx * t, oy + dy * t, oz + dz * t, 6, 220, pl, this);
+    this.vx -= dx * 2; this.vz -= dz * 2;
+    this.susp.pv -= 0.3;
   }
 }
 
@@ -1465,6 +2053,38 @@ export class VehicleManager {
     this.spawnT = 0;
     this.skids = new SkidMarks(game.scene);
     this.debris = new Debris(game); // [çarpışma] kırılan eşyaların enkazı
+    this.parts = []; // araçlardan kopan parçalar (tampon, kapı, kaput, tekerlek)
+  }
+
+  // Kopan parça: basit balistik + sekme + kıvılcım; fire > 0 ise yanar (lastik)
+  addPart(obj, vx, vy, vz, rest, fire = 0) {
+    if (this.parts.length >= 36) { const o = this.parts.shift(); this.group.remove(o.obj); }
+    this.group.add(obj);
+    this.parts.push({ obj, vx, vy, vz, wx: rnd(6), wy: rnd(4), wz: rnd(6), rest, fire, t: 0, still: false });
+  }
+  updateParts(dt) {
+    const g = this.game;
+    for (let i = this.parts.length - 1; i >= 0; i--) {
+      const p = this.parts[i], o = p.obj;
+      p.t += dt;
+      if (p.fire > 0) { p.fire -= dt; if (Math.random() < 0.5) g.particles.fire(o.position, 0.45); }
+      if (p.t > 70) { this.group.remove(o); this.parts.splice(i, 1); continue; }
+      if (p.still) continue;
+      p.vy -= 19 * dt;
+      o.position.x += p.vx * dt; o.position.y += p.vy * dt; o.position.z += p.vz * dt;
+      o.rotation.x += p.wx * dt; o.rotation.y += p.wy * dt; o.rotation.z += p.wz * dt;
+      if (o.position.y < p.rest) {
+        o.position.y = p.rest;
+        const hs = Math.hypot(p.vx, p.vz);
+        if (hs > 4 && Math.random() < 0.6) g.particles.sparks({ x: o.position.x, y: p.rest, z: o.position.z }, 3);
+        if (p.vy < -3) { p.vy *= -0.3; if (p.t < 6) (g.audio || audio).impactMetal && (g.audio || audio).impactMetal(o.position.x, o.position.z); } else p.vy = 0;
+        p.vx *= 0.55; p.vz *= 0.55; p.wx *= 0.5; p.wy *= 0.5; p.wz *= 0.5;
+        // yassı dur: dönüşü en yakın yatay duruşa çek
+        o.rotation.x += (Math.round(o.rotation.x / Math.PI) * Math.PI - o.rotation.x) * 0.3;
+        o.rotation.z += (Math.round(o.rotation.z / Math.PI) * Math.PI - o.rotation.z) * 0.3;
+        if (hs < 0.3 && Math.abs(p.vy) < 0.5) p.still = true;
+      }
+    }
   }
 
   add(type, x, z, heading, color) {
@@ -1516,12 +2136,12 @@ export class VehicleManager {
     const dx = to.x - from.x, dz = to.z - from.z, l = Math.hypot(dx, dz);
     const fx = dx / l, fz = dz / l;
     const t = type || pickTrafficType(this.game);
-    const outer = t === 'bus' || t === 'kamyon' || t === 'motor' || Math.random() < 0.5;
+    const outer = t === 'bus' || t === 'kamyon' || t === 'motor' || t === 'bisiklet' || Math.random() < 0.5;
     const lane = e.width >= 16 ? (outer ? 5.8 : 2.1) : 2.5;
     const x = s.x + -fz * lane, z = s.z + fx * lane;
     for (const v of this.list) if (Math.abs(v.pos.x - x) < 9 && Math.abs(v.pos.z - z) < 9) return null;
     const v = this.add(t, x, z, Math.atan2(fx, fz));
-    v.ai = { mode: 'traffic', from, to, next: this.chooseNext(to, from), cruise: (t === 'bus' || t === 'kamyon') ? 9 : 10 + Math.random() * 5, outer, laneCur: lane };
+    v.ai = { mode: 'traffic', from, to, next: this.chooseNext(to, from), cruise: t === 'bisiklet' ? 5.5 : (t === 'bus' || t === 'kamyon') ? 9 : 10 + Math.random() * 5, outer, laneCur: lane };
     if (t === 'ambulans' && Math.random() < 0.5) { v.sirenOn = true; v.ai.cruise = 16; }
     v.vx = fx * 6; v.vz = fz * 6;
     return v;
@@ -1539,7 +2159,7 @@ export class VehicleManager {
     const x = s.x - fz * side * (e.width / 2 - 1.0), z = s.z + fx * side * (e.width / 2 - 1.0);
     for (const v of this.list) if (Math.abs(v.pos.x - x) < 7 && Math.abs(v.pos.z - z) < 7) return null;
     const r = Math.random();
-    const t = r < 0.55 ? 'kartal' : r < 0.72 ? 'sedan' : r < 0.82 ? 'suv' : r < 0.9 ? 'motor' : r < 0.95 ? 'gt' : 'taksi';
+    const t = r < 0.22 ? 'kartal' : r < 0.36 ? 'hatch' : r < 0.44 ? 'hatch3' : r < 0.53 ? 'sedan' : r < 0.6 ? 'estate' : r < 0.68 ? 'suv' : r < 0.73 ? 'offroad' : r < 0.78 ? 'coupe' : r < 0.82 ? 'cabrio' : r < 0.88 ? 'motor' : r < 0.91 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
     // sağdan akan trafikte park: aracın sağ tarafı kaldırıma, yüzü trafik yönüne
     const v = this.add(t, x, z, Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI));
     v.parked = true; v.parkedAI = true;
@@ -1607,6 +2227,13 @@ export class VehicleManager {
     }
     this.sirens = _sirens;
     this.debris.update(dt);
+    this.updateParts(dt);
+    // [araç camı] mermi isabet noktası: combat.rayVehicles sonucunu araca not eder (combat.js değişmeden)
+    if (!this._rayHook && g.combat && g.combat.rayVehicles) {
+      this._rayHook = true;
+      const orig = g.combat.rayVehicles.bind(g.combat);
+      g.combat.rayVehicles = (o, d, m, ig) => { const r = orig(o, d, m, ig); if (r) r.vehicle._ray = { x: o.x + d.x * r.t, y: o.y + d.y * r.t, z: o.z + d.z * r.t, dx: d.x, dy: d.y, dz: d.z }; return r; };
+    }
     this.parkTick(dt, px, pz, parkedCount);
     const base = g.settings.quality === 'low' ? 14 : g.settings.quality === 'medium' ? 20 : 28;
     const maxTraffic = Math.round(base * this.densityFactor());
@@ -1680,15 +2307,8 @@ export class VehicleManager {
 function pickTrafficType(game) {
   const r = rng.next();
   const night = game && game.env ? game.env.nightFactor > 0.5 : false;
-  if (r < (night ? 0.42 : 0.3)) return 'taksi';
-  if (r < 0.56) return 'kartal';
-  if (r < 0.67) return 'sedan';
-  if (r < 0.74) return 'dolmus';
-  if (r < 0.79) return 'suv';
-  if (r < 0.84) return 'bus';
-  if (r < 0.89) return 'motor';
-  if (r < 0.92) return 'kamyon';
-  if (r < 0.94) return 'gt';
-  if (r < 0.96) return 'ambulans';
-  return 'police';
+  if (r < (night ? 0.36 : 0.24)) return 'taksi';
+  const T = [[0.38, 'kartal'], [0.47, 'hatch'], [0.53, 'hatch3'], [0.6, 'sedan'], [0.64, 'estate'], [0.7, 'dolmus'], [0.74, 'suv'], [0.76, 'offroad'], [0.79, 'bus'], [0.83, 'motor'], [0.845, 'bisiklet'], [0.88, 'kamyon'], [0.9, 'gt'], [0.92, 'coupe'], [0.935, 'cabrio'], [0.955, 'ambulans'], [0.975, 'police'], [1, 'polsuv']];
+  for (const [p, t] of T) if (r < p) return t;
+  return 'kartal';
 }

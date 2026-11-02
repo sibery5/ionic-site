@@ -15,6 +15,7 @@ Masaüstü: `npx electron .` · Windows kurulum: `npm run dist:win`.
 - `core/` util, input, audio (prosedürel), textures (canvas), particles
 - `world/` map (yerleşim, yol grafiği, semtler), physics (AABB ızgarası, raycast), city (zemin, binalar, sokak eşyası), landmarks, sky (gün/gece/hava), animals
 - `entities/` character (insan modeli + animasyon), actor (can/silah), player, npc (+NPCManager), vehicles (+VehicleManager, trafik AI)
+- Araçlar: `entities/vehicles.js` (şablon/gövde, sürüş, süspansiyon, cam, hasar, patlama), `two_wheelers.js` (bisiklet/motosiklet), `military_vehicles.js` (tank, zırhlı, kamyon + `spawnWorldVehicles`), `aircraft.js` (helikopter, taarruz helikopteri, jet), `boats.js`. Yolcu API: `v.seats`, `v.addPassenger(actor)`, `v.removePassenger(actor)` (actor.passengerOf iken NPC YZ'si atlanmalı); `v.riderPose`.
 - `game/` weapons, combat, pickups, wanted, missions, interiors, economy, save
 - `ui/` ui (HUD, menüler, dükkânlar), icons (SVG)
 - `main.js` Game sınıfı: tüm sistemleri bağlar; `game.updateGame(dt,t)` her kare.
