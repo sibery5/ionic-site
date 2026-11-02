@@ -295,6 +295,7 @@ export class City {
     g.globalCompositeOperation = 'destination-out';
     for (const [x0, z0, x1, z1] of [[200, -1000, 420, 1000], [-850, 70, 200, 190], [-1000, 820, 1000, 1000]]) g.fillRect(P(x0), P(z0), (x1 - x0) * ck, (z1 - z0) * ck);
     g.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#8a857a'; for (const p of HARBOR.piers) g.fillRect(P(p.x0), P(p.z0), Math.max(1, (p.x1 - p.x0) * ck), Math.max(1, (p.z1 - p.z0) * ck));
     g.fillStyle = '#7a6a50'; for (const p of MARINA.piers) g.fillRect(P(p.x0), P(p.z0), Math.max(1, (p.x1 - p.x0) * ck), Math.max(1, (p.z1 - p.z0) * ck));
     for (const b of BRIDGES) { g.fillStyle = '#38393b'; g.fillRect(P(b.x0), P(b.z0), (b.x1 - b.x0) * ck, (b.z1 - b.z0) * ck); }
     g.fillStyle = '#a49884'; g.beginPath(); g.arc(P(ISLAND.x), P(ISLAND.z), ISLAND.r * ck, 0, Math.PI * 2); g.fill();

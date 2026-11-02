@@ -3,10 +3,14 @@
 // reklam panoları, park etmiş motosikletler, logar kapakları, ızgaralar ve yol çizgileri.
 import * as THREE from 'three';
 import { RNG } from '../core/util.js';
-import { glowTexture, makeCanvas, AD_COUNT, PROP_UV } from '../core/textures.js';
+import { glowTexture, AD_COUNT, PROP_UV, grassPBR } from '../core/textures.js';
 import { isLand, SIDEWALK, BRIDGES, inBridge } from './map.js';
-import { GeoBuilder } from './instancer.js';
-import { SHARED } from './shaders.js';
+import { GeoBuilder, ChunkMerger } from './instancer.js';
+import { SHARED, pbrMaterial } from './shaders.js';
+
+// İstiklal benzeri tramvaylı cadde: Beyoğlu'nda x=-150 aksı (Tünel → Taksim yönü), nostaljik tramvay hattı
+export const TRAM_LINE = { x: -150, z0: -300, z1: 40, gauge: 1.435, poles: [] };
+const isTram = (rd) => !rd.bridge && rd.x0 === rd.x1 && rd.x0 === TRAM_LINE.x && Math.min(rd.z0, rd.z1) >= TRAM_LINE.z0 - 15 && Math.max(rd.z0, rd.z1) <= TRAM_LINE.z1 + 25;
 
 const HISTORIC = new Set(['fatih', 'beyoglu', 'eyup']);
 
@@ -82,6 +86,14 @@ export const STREET_PROP_DEFS = {
     g.box(1.1, 0.12, 1.1, { y: 2.4, color: 0x07607a });
     return g.build();
   },
+  trampole: () => {
+    const g = new GeoBuilder();
+    g.cyl(0.11, 0.14, 6.6, 8, { color: 0x2c3a34, metal: 0.6, rough: 0.45 });
+    g.box(4.2, 0.08, 0.08, { x: 2.1, y: 6.0, color: 0x2c3a34, metal: 0.6 });
+    g.add(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 4), { x: 1.1, y: 5.6, rz: 1.1, color: 0x2c3a34, metal: 0.6 });
+    g.box(0.18, 0.18, 0.18, { x: 3.9, y: 5.85, color: 0x222222 });
+    return g.build();
+  },
   pole: () => {
     const g = new GeoBuilder();
     g.cyl(0.11, 0.15, 9, 7, { color: 0x5a4532, rough: 0.9 });
@@ -128,7 +140,7 @@ export const STREET_PROP_DEFS = {
 export const STREET_PROP_OPTS = {
   lampModern: { radius: 420, shadow: true }, lampClassic: { radius: 320, shadow: true }, bin: { radius: 130 }, bench: { radius: 140 }, bollard: { radius: 100 },
   hydrant: { radius: 100 }, busstop: { radius: 260, shadow: true }, kiosk: { radius: 260, shadow: true }, simit: { radius: 150 }, news: { radius: 130 }, phone: { radius: 160 },
-  pole: { radius: 320, shadow: true }, flagpole: { radius: 420, double: true }, billboard: { radius: 500, shadow: true }, roofboard: { radius: 500 }, scooter: { radius: 120 },
+  pole: { radius: 320, shadow: true }, trampole: { radius: 300, shadow: true }, flagpole: { radius: 420, double: true }, billboard: { radius: 500, shadow: true }, roofboard: { radius: 500 }, scooter: { radius: 120 },
   manhole: { radius: 110 }, grate: { radius: 90 },
 };
 
@@ -288,6 +300,7 @@ export function buildStreetProps(city) {
   city.group.add(hp);
   // ışık havuzları: city.buildLightPools (tüm ışık kaynakları toplandıktan sonra)
   buildMarkings(city);
+  buildAvenues(city);
 }
 
 // Yol çizgileri: şerit, orta çift sarı, kenar, yaya geçidi, dur çizgisi
@@ -307,7 +320,8 @@ function buildMarkings(city) {
       if (horiz) mk(s + tm, rd.z0 + off, L, wdt, 0, c); else mk(rd.x0 + off, s + tm, wdt, L, 0, c);
     };
     if (main) {
-      for (let t = a; t < b; t += 6) { const t1 = Math.min(b, t + 6); seg(t, t1, -0.15, 0.14, Y); seg(t, t1, 0.15, 0.14, Y); seg(t, t1, hw - 0.5, 0.15, W); seg(t, t1, -hw + 0.5, 0.15, W); }
+      const tram = isTram(rd);
+      for (let t = a; t < b; t += 6) { const t1 = Math.min(b, t + 6); if (!tram) { seg(t, t1, -0.15, 0.14, Y); seg(t, t1, 0.15, 0.14, Y); } seg(t, t1, hw - 0.5, 0.15, W); seg(t, t1, -hw + 0.5, 0.15, W); }
       for (let t = a + 2; t < b - 3; t += 8) for (const o of [-hw / 2, hw / 2]) seg(t, t + 3, o, 0.13, W);
     } else {
       for (let t = a + 1; t < b - 3; t += 6) seg(t, t + 3, 0, 0.12, W);
@@ -333,4 +347,53 @@ function buildMarkings(city) {
     }
   }
   void BRIDGES; void PROP_UV; void SHARED;
+}
+
+// Ana caddeler: yükseltilmiş, çimli orta refüj (kavşaklardan önce kesilir; sol dönüş/U dönüşü serbest) ve
+// tramvaylı caddede beton tramvay yatağı + gömülü raylar + katener direkleri ve teli.
+function buildAvenues(city) {
+  const { map } = city, cols = city.physics.city, P = city.props;
+  const med = new ChunkMerger(), top = new ChunkMerger();
+  const wires = [];
+  const RAIL = new THREE.Color(0xa4a6aa), GROOVE = new THREE.Color(0x26282a), BED = new THREE.Color(0x9a958c);
+  for (const rd of map.roads) {
+    if (rd.bridge || rd.w < 16) continue;
+    const horiz = rd.z0 === rd.z1, len = horiz ? Math.abs(rd.x1 - rd.x0) : Math.abs(rd.z1 - rd.z0), hw = rd.w / 2;
+    const s0 = horiz ? Math.min(rd.x0, rd.x1) : Math.min(rd.z0, rd.z1);
+    const at = (t, off) => (horiz ? [s0 + t, rd.z0 + off] : [rd.x0 + off, s0 + t]);
+    if (isTram(rd)) {
+      const a = 6, b = len - 6;
+      const mk = (off, w, c, y) => { const [x, z] = at((a + b) / 2, off); if (horiz) city.mark(x, z, b - a, w, 0, c, y); else city.mark(x, z, w, b - a, 0, c, y); };
+      mk(0, 2.9, BED, 0.003);
+      for (const s of [-1, 1]) { mk(s * TRAM_LINE.gauge / 2, 0.075, RAIL, 0.006); mk(s * (TRAM_LINE.gauge / 2 - 0.07), 0.045, GROOVE, 0.0055); }
+      for (let t = hw + 6; t < len - hw - 4; t += 30) {
+        for (const side of [-1, 1]) {
+          const [x, z] = at(t, side * (hw + 0.6));
+          if (!isLand(x, z)) continue;
+          const rot = horiz ? (side > 0 ? Math.PI / 2 : -Math.PI / 2) : (side > 0 ? Math.PI : 0);
+          if (side > 0) { P.trampole.addTRS(x, 0.15, z, rot); cols.addCircle(x, z, 0.16, 0, 6.6, 'trampole'); TRAM_LINE.poles.push({ x, z }); }
+        }
+      }
+      const [wx0, wz0] = at(6, 0), [wx1, wz1] = at(len - 6, 0);
+      wires.push(wx0, 5.95, wz0, wx1, 5.95, wz1);
+      continue;
+    }
+    const a = hw + 20, b = len - hw - 20;
+    if (b - a < 12) continue;
+    const L = b - a, [cx, cz] = at((a + b) / 2, 0);
+    if (!isLand(cx, cz)) continue;
+    const W = 1.6;
+    const g = new THREE.BoxGeometry(horiz ? L : W, 0.17, horiz ? W : L); g.translate(cx, 0.085, cz);
+    med.add(g, cx, cz);
+    const g2 = new THREE.BoxGeometry(horiz ? L - 0.6 : W - 0.36, 0.02, horiz ? W - 0.36 : L - 0.6); g2.translate(cx, 0.175, cz);
+    top.add(g2, cx, cz);
+    if (horiz) cols.add(s0 + a, rd.z0 - W / 2, s0 + b, rd.z0 + W / 2, 0, 0.17, 'curb');
+    else cols.add(rd.x0 - W / 2, s0 + a, rd.x0 + W / 2, s0 + b, 0, 0.17, 'curb');
+  }
+  med.finalize(city.group, city.curbMat, { shadow: false });
+  top.finalize(city.group, pbrMaterial(grassPBR(city.quality), { color: 0x7aa060, scale: 1.2 }), { shadow: false });
+  if (wires.length) {
+    const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wires, 3));
+    city.group.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x151515 })));
+  }
 }

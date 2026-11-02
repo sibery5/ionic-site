@@ -150,7 +150,7 @@ export function buildHarbor(city) {
   // dış kenar: bordür çarpışması, usturmaçalar, babalar
   cols.add(T.x0, T.z1 - 0.6, T.x1, T.z1, 0, 0.35, 'curb');
   for (const [x0, x1, z] of [[T.x0, T.x0 + 0.6, 0], [T.x1 - 0.6, T.x1, 0]]) { void z; cols.add(x0, T.z0 + 1, x1, T.z1, 0, 0.35, 'curb'); }
-  for (let x = T.x0 + 6; x < T.x1 - 2; x += 10) { P.fender.addTRS(x, -1.6, T.z1 + 0.3, 0); P.cleat.addTRS(x + 5, 0, T.z1 - 0.9, 0); }
+  for (let x = T.x0 + 6; x < T.x1 - 2; x += 10) { P.fender.addTRS(x, -1.6, T.z1 + 0.3, 0); cols.add(x - 0.8, T.z1 + 0.05, x + 0.8, T.z1 + 0.55, WATER_Y - 0.4, 0.4, 'fender'); P.cleat.addTRS(x + 5, 0, T.z1 - 0.9, 0); }
   for (let z = Fg.z0 + 4; z < Fg.z1; z += 8) for (const x of [Fg.x0 + 0.3, Fg.x1 - 0.3]) P.cleat.addTRS(x, 0, z, 0);
   // yol çizgileri (sarı şerit + yaya yolu)
   const Y = new THREE.Color(0xe8c030), W = new THREE.Color(0xf0f0ea);

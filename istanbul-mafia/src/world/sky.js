@@ -269,6 +269,9 @@ export class Environment {
     U.uCover.value = cc; U.uCloudDark.value = clamp(rain + this.stormK * 0.5, 0, 1);
     U.uStars.value = Math.pow(this.nightFactor, 2) * (1 - smooth(0.25, 0.75, cc)) * (0.6 / expo + 0.4);
     U.uMoonK.value = smooth(0.25, 0.85, this.nightFactor) * (1 - smooth(0.6, 0.95, cc));
+    // ay evresi (29.53 günlük döngü; oyun 1. gün ≈ büyüyen şişkin ay) ve aydınlanan oran → ay ışığı şiddeti
+    U.uMoonPhase.value = (((this.day + this.time / 24 + 10) % 29.53) + 29.53) % 29.53 / 29.53;
+    this.moonFrac = 0.5 - 0.5 * Math.cos(U.uMoonPhase.value * Math.PI * 2);
     displayToScene(cT.set(0xe8e4d8), expo, U.uMoonCol.value);
     U.uSkyTime.value += dt;
     U.uWind.value.x += dt * 0.0011 * this.windK; U.uWind.value.y += dt * 0.0004 * this.windK;
@@ -320,7 +323,7 @@ export class Environment {
     const ld = moonOn ? this.moonDir : this.sunDir;
     if (moonOn) {
       this.sun.color.setRGB(0.55, 0.66, 1.0);
-      this.sun.intensity = 0.42 * smooth(-0.06, -0.16, e) * (1 - 0.8 * ovc);
+      this.sun.intensity = 0.42 * smooth(-0.06, -0.16, e) * (1 - 0.8 * ovc) * (0.3 + 0.7 * (this.moonFrac === undefined ? 1 : this.moonFrac));
     }
     if (focus) this.placeShadowCamera(ld, fx, fy, fz);
     if (!moonOn && e < 0.0) this.sun.intensity = 0;

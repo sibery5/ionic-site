@@ -965,7 +965,11 @@ class Game {
     // gölge haritası her N karede bir (statik geometri için fark edilmez, dinamikler 1-2 kare gecikir)
     const sm = this.renderer.shadowMap;
     if (sm.enabled) {
-      const every = this.mode === 'playing' || this.mode === 'dead' ? this.tier().shadowEvery : 1;
+      let every = this.mode === 'playing' || this.mode === 'dead' ? this.tier().shadowEvery : 1;
+      // [dünya/ışık] hızlı sürüşte araç/oyuncu gölgesi 1-2 kare geride kalıp yolda "titreyen leke" gibi
+      // görünüyordu: oyuncu aracı hızlıyken gölge haritası her karede (düşük kademede 2 karede bir) yenilenir.
+      const pv = this.player && this.player.vehicle;
+      if (pv && Math.hypot(pv.vx || 0, pv.vz || 0) > 8) every = Math.min(every, this.tier().shadowEvery >= 3 ? 2 : 1);
       if (++this.shadowFrame >= every || this.needsFrame) { this.shadowFrame = 0; sm.needsUpdate = true; }
     }
     this.composer.render();
