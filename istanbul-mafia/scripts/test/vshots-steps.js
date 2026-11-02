@@ -51,6 +51,6 @@ module.exports = async (p, out) => {
   }, scene);
   for (const s of (process.env.SCENES || '1,2,3').split(',').map(Number)) {
     console.log('scene', s, JSON.stringify(await setup(s)));
-    await H.shot(p, `${out}-v${s}.png`); console.log('shot', `${out}-v${s}.png`);
+    await p.evaluate(() => game.render()); await p.screenshot({ path: `${out}-v${s}.png`, timeout: 1200000 }); console.log('shot', `${out}-v${s}.png`);
   }
 };
