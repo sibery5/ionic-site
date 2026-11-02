@@ -4,7 +4,9 @@ import { RNG, clamp } from '../core/util.js';
 
 export const WORLD_MIN = -1000;
 export const WORLD_MAX = 1000;
-export const WATER_Y = -1.4;
+// Su seviyesi: rıhtım/köprü yaklaşımlarında ~2.2 m görünür serbest yükseklik (eskiden 1.4 m: dalga tepeleri
+// tabliyeye/rıhtıma neredeyse değiyordu). Dalga genliği yapıların yakınında ayrıca kısılır (shaders.js structD).
+export const WATER_Y = -2.2;
 export const SIDEWALK = 3.2;
 
 const BOSPHORUS = { x0: 200, x1: 420 };
@@ -44,6 +46,28 @@ export const MARINA = {
   name: 'Bebek Marina', x0: 200, x1: 262, z0: -700, z1: -560,
   piers: [], berths: [], shop: { x: 217, z: -566 }, entrances: [{ z0: -664, z1: -657 }, { z0: -612, z1: -605 }],
 };
+// Liman (Kadıköy, Marmara kıyısı): konteyner terminali iskelesi (suyun üstünde, y=0 güverte), STS vinçleri,
+// tekne iskelesi. berths: oyuncu tekneleri için yanaşma noktaları (suda, heading = burun yönü).
+// cranes/containers dünya inşasında doldurulur. Kara erişimi: z=810 caddesinden kıyı bandı üzerinden.
+export const HARBOR = {
+  name: 'Kadıköy Konteyner Limanı',
+  terminal: { x0: 560, x1: 760, z0: 820, z1: 878 }, // ana rıhtım güvertesi
+  finger: { x0: 792, x1: 798, z0: 820, z1: 868 }, // tekne iskelesi
+  piers: [], berths: [], cranes: [], gates: [{ x: 600, z: 818 }, { x: 720, z: 818 }, { x: 795, z: 818 }],
+  shipBerths: [], // büyük gemi yanaşma yeri (rıhtımın dış kenarı)
+  box: [556, 818, 802, 880],
+};
+HARBOR.piers.push(HARBOR.terminal, HARBOR.finger);
+for (let i = 0; i < 3; i++) for (const side of [-1, 1]) {
+  HARBOR.berths.push({ x: 795 + side * 5.2, z: 832 + i * 13, heading: Math.PI, length: 11, width: 4.5, side: side < 0 ? 'west' : 'east' });
+}
+HARBOR.shipBerths.push({ x: 660, z: 896, heading: Math.PI / 2, length: 150 });
+export function onHarborPier(x, z) { for (const p of HARBOR.piers) if (x >= p.x0 && x <= p.x1 && z >= p.z0 - 0.01 && z <= p.z1) return p; return null; }
+// Dağ / orman bölgesi (Anadolu yakası doğu ucu, harita kenarı): orman yolu ve izole dağ evi (yasa dışı anlaşmalar).
+// lines: harita kurulurken (CityMap.build) son Anadolu sütununa göre ayarlanır; içinden yol geçmez.
+export const FOREST = { name: 'Aydos Ormanı', lines: { x0: 900, x1: 985, z0: 250, z1: 810 }, x0: 0, x1: 0, z0: 0, z1: 0, road: [], trees: [] };
+// Gizli mekânlar (görev/YZ ekipleri için): { id, name, x, z, door:{x,z}, parking:{x,z,heading}, approach:[{x,z}], interact }
+export const HIDEOUTS = [];
 // Boğaz kıyısındaki satılık lüks villa/yalı parselleri (CityMap kurulurken doldurulur)
 export const VILLAS = [];
 // Satılık mülkler (villalar + satın alınabilir apartmanlar)
@@ -90,6 +114,7 @@ export function isWater(x, z) {
 export function isLand(x, z) {
   if (inBridge(x, z)) return true;
   if (x > 199 && x < 263 && z > -701 && z < -559 && onPier(x, z)) return true;
+  if (z > 817 && z < 881 && x > 555 && x < 803 && onHarborPier(x, z)) return true;
   const dx = x - ISLAND.x, dz = z - ISLAND.z;
   if (dx * dx + dz * dz < ISLAND.r * ISLAND.r) return true;
   return !isWater(x, z);
@@ -179,6 +204,8 @@ export class CityMap {
     const ez = [...ezN, ...ezS];
     // Anadolu yakası
     const axs = genLines(r, 435, 985, [435, 800, 985]).filter((v) => v >= 435);
+    // orman: son Anadolu sütunu, 250 caddesinin güneyi (bu sütunun blokları blok listesinin sonundadır)
+    { const xl = axs[axs.length - 2]; const ZB2 = 5.5 + 3.2; Object.assign(FOREST.lines, { x0: xl, x1: 985 }); Object.assign(FOREST, { x0: xl + ZB2, x1: 985 - ZB2, z0: 250 + 8 + 3.2, z1: 810 - 8 - 3.2 }); }
     const az = genLines(r, -985, 810, [-985, -450, -380, 250, 810]).filter((v) => v <= 810);
     this.mainX = new Set([-860, -500, -150, 190, 435]);
     this.mainZ = new Set([-450, 60, 200, 810, 250]);
@@ -204,7 +231,7 @@ export class CityMap {
   // Kenar özel bölgenin içinden mi geçiyor? (askeri üs / havalimanı içinde yol yok)
   inZoneEdge(x0, z0, x1, z1) {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-    for (const zn of [MILITARY_BASE.lines, AIRPORT.lines]) if (inRect(mx, mz, { x0: zn.x0 + 1, x1: zn.x1 - 1, z0: zn.z0 + 1, z1: zn.z1 - 1 })) return true;
+    for (const zn of [MILITARY_BASE.lines, AIRPORT.lines, FOREST.lines]) if (inRect(mx, mz, { x0: zn.x0 + 1, x1: zn.x1 - 1, z0: zn.z0 + 1, z1: zn.z1 - 1 })) return true;
     return false;
   }
 
@@ -272,6 +299,14 @@ export class CityMap {
     }
     // parseller ve binalar
     for (const b of this.blocks) if (b.kind === 'city') this.subdivide(b);
+    // orman blokları: parselleme yine yapılır (rastgele sayı dizisi ve diğer binaların kimlikleri değişmesin),
+    // sonra bu blokların binaları atılır — hepsi listenin sonunda olduğundan kalan kimlikler = indeks korunur.
+    const forestIds = new Set();
+    for (const b of this.blocks) if (inRect(b.cx, b.cz, FOREST.lines)) { forestIds.add(b.id); if (b.kind === 'park') this.parks.splice(this.parks.indexOf(b), 1); b.kind = 'zone'; b.zone = 'forest'; }
+    if (forestIds.size) {
+      this.buildings = this.buildings.filter((bl) => !forestIds.has(bl.block));
+      this.buildings.forEach((bl, i) => { if (bl.id !== i) { if (!this._idWarn) console.error('orman: bina kimliği kaydı', bl.id, i); this._idWarn = true; bl.id = i; } });
+    }
     for (const b of this.blocks) if (b.kind === 'villa') this.villaPlots(b);
   }
 

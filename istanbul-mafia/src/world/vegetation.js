@@ -117,7 +117,7 @@ export function buildVegetation(city) {
     for (let x = b.x0 + 5; x < b.x1 - 3; x += 12) tree('linden', x, b.z0 - 2.0, rng.float(0.75, 1.0));
   }
   // sahil palmiyeleri (Kadıköy-Moda / Marmara kıyısı)
-  for (let x = -980; x < 1000; x += rng.float(18, 30)) { if (x > 190 && x < 430) continue; tree('palm', x, 816, rng.float(0.85, 1.15), 0); }
+  for (let x = -980; x < 1000; x += rng.float(18, 30)) { if (x > 190 && x < 430) continue; if (x > 550 && x < 806) continue; tree('palm', x, 816, rng.float(0.85, 1.15), 0); }
 
   // çit (şimşir) ve lale tarhları
   const hedgeMat = pbrMaterial(grassPBR(quality), { color: 0x6a9a50, scale: 1.4, normalScale: 2.5 });
@@ -165,7 +165,7 @@ export function buildVegetation(city) {
       const a = (k / 8) * Math.PI * 2;
       const x = p.cx + Math.sin(a) * 10.5, z = p.cz + Math.cos(a) * 10.5;
       if (k % 2 === 0) { P.bench.addTRS(x, 0.15, z, a + Math.PI); cols.breakable(cols.addLocal(x, z, a + Math.PI, 0, -0.04, 1.8, 0.56, 0, 0.9, 'bench'), 'bench', 70, P.bench, x, 0.15, z, a + Math.PI); (city.benches || (city.benches = [])).push([x, z, a + Math.PI]); }
-      else { const lx = p.cx + Math.sin(a) * 12, lz = p.cz + Math.cos(a) * 12; P.lampClassic.addTRS(lx, 0.15, lz, 0); cols.addCircle(lx, lz, 0.25, 0, 4.9, 'lamp'); }
+      else { const lx = p.cx + Math.sin(a) * 12, lz = p.cz + Math.cos(a) * 12; P.lampClassic.addTRS(lx, 0.15, lz, 0); cols.addCircle(lx, lz, 0.25, 0, 4.9, 'lamp'); city.addLight(lx, 4.9, lz, 0xffc27a, 0.75); }
     }
     // çeşme
     P.fountain.addTRS(p.cx, 0.15, p.cz, 0);

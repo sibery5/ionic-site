@@ -15,7 +15,7 @@ module.exports = async (p, out) => {
   const audit = await p.evaluate(() => {
     const g = game, ph = g.physics, city = g.city;
     const EXEMPT = new Set(['manhole', 'grate', 'helipad', 'helipadM', 'rwyNum', 'rwyNum2', 'rlight', 'cleat', 'door', 'awning', 'forsale', 'graf0', 'graf1', 'graf2', 'graf3',
-      'laundry', 'sill', 'ac', 'balcony', 'railing', 'glassrail', 'potted', 'razor', 'dish', 'solar', 'pool', 'tulips', 'bed', 'crown']);
+      'laundry', 'sill', 'ac', 'balcony', 'stscrane' /* açık portal: bacakların ayrı çarpışması var */, 'railing', 'glassrail', 'potted', 'razor', 'dish', 'solar', 'pool', 'tulips', 'bed', 'crown']);
     const lists = [];
     for (const k in city.props) lists.push([k, city.props[k]]);
     for (const n of city.near) if (n.name && !Object.values(city.props).includes(n)) lists.push([n.name, n]);

@@ -56,4 +56,4 @@ export function bridgeSlopeAt(x, z, out = { x: 0, z: 0 }) {
   return out;
 }
 // Gemiler için: Boğaz köprüsü altındaki serbest yükseklik (su seviyesinden, tabliye altı ~2.6 m kalın)
-export function bridgeClearanceAt(x) { return bosphorusDeckY(x) - 2.6 + 1.4; }
+export function bridgeClearanceAt(x) { return bosphorusDeckY(x) - 2.6 - WATER_Y; }

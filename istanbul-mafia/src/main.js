@@ -36,6 +36,7 @@ import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
 import { formatMoney, clamp } from './core/util.js';
+import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
 
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
@@ -189,6 +190,7 @@ class Game {
     this.particles = new Particles(this.scene);
     this.combat = new Combat(this);
     this.vehicles = new VehicleManager(this);
+    this.nightLights = new NightLights(this, q); // [dünya/ışık] sabit sayıda lamba/far/projektör ışığı
     this.traffic = new TrafficLights(this);
     this.boats = new BoatManager(this);
     this.aircraft = new AircraftManager(this);
@@ -960,7 +962,11 @@ class Game {
     // gölge haritası her N karede bir (statik geometri için fark edilmez, dinamikler 1-2 kare gecikir)
     const sm = this.renderer.shadowMap;
     if (sm.enabled) {
-      const every = this.mode === 'playing' || this.mode === 'dead' ? this.tier().shadowEvery : 1;
+      let every = this.mode === 'playing' || this.mode === 'dead' ? this.tier().shadowEvery : 1;
+      // [dünya/ışık] hızlı sürüşte araç/oyuncu gölgesi 1-2 kare geride kalıp yolda "titreyen leke" gibi
+      // görünüyordu: oyuncu aracı hızlıyken gölge haritası her karede (düşük kademede 2 karede bir) yenilenir.
+      const pv = this.player && this.player.vehicle;
+      if (pv && Math.hypot(pv.vx || 0, pv.vz || 0) > 8) every = Math.min(every, this.tier().shadowEvery >= 3 ? 2 : 1);
       if (++this.shadowFrame >= every || this.needsFrame) { this.shadowFrame = 0; sm.needsUpdate = true; }
     }
     this.composer.render();
@@ -978,6 +984,7 @@ class Game {
     this.uniforms.uNight.value = this.env.nightFactor;
     this.city.setNight(this.env.nightFactor);
     this.city.update(dt, t);
+    this.nightLights.update(dt, this.camera.position); // [dünya/ışık]
     this.animals.update(dt);
     if (this.flag) this.flag.rotation.y = Math.sin(t * 2) * 0.15;
   }
@@ -1018,6 +1025,7 @@ class Game {
     if (!inside) {
       this.city.update(dt, t);
       this.vehicles.update(dt);
+      this.nightLights.update(dt, this.camera.position); // [dünya/ışık]
       this.traffic.update(dt);
       this.boats.update(dt);
       this.aircraft.update(dt);

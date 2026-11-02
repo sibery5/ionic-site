@@ -119,7 +119,7 @@ export function buildAirport(city) {
   city.fenceLine(AP.x0, -488, AP.x0, AP.z1, 'chain', 2.6, 'razor');
   P.booth.addTRS(AP.x0 + 3, 0, -484, -Math.PI / 2); cols.addOBB(AP.x0 + 3, -484, 1.7, 1.7, -Math.PI / 2, 0, 2.7, 'booth');
   P.barrier.addTRS(AP.x0, 0, -520, Math.PI / 2); addBarrier(city, AP.x0, -520, Math.PI / 2, 0);
-  for (let z = -500; z > -700; z -= 40) { P.lampModern.addTRS(899, 0, z, Math.PI / 2); cols.addCircle(899, z, 0.2, 0, 6.6, 'lamp'); }
+  for (let z = -500; z > -700; z -= 40) { P.lampModern.addTRS(899, 0, z, Math.PI / 2); cols.addCircle(899, z, 0.2, 0, 6.6, 'lamp'); city.addLight(899 - 1.6, 6.4, z, 0xffe6c0, 1); }
 }
 
 // Bariyer: sabit direk + kırılabilir kol (araç çarpınca kırılır, yayalar üstünden atlar)
@@ -140,9 +140,9 @@ export function buildMarina(city) {
     const horiz = p.x1 - p.x0 > p.z1 - p.z0;
     if (horiz) for (let x = p.x0 + 2; x < p.x1; x += 6) for (const z of [p.z0 + 0.2, p.z1 - 0.2]) { P.piling.addTRS(x, 0, z, 0); cols.addCircle(x, z, 0.19, -6, 0.5, 'piling'); P.cleat.addTRS(x + 3, 0, z, 0); }
     else for (let z = p.z0 + 2; z < p.z1; z += 6) for (const x of [p.x0 + 0.2, p.x1 - 0.2]) { P.piling.addTRS(x, 0, z, 0); cols.addCircle(x, z, 0.19, -6, 0.5, 'piling'); }
-    if (horiz) { P.lampClassic.addTRS(p.x1 - 1.2, 0, (p.z0 + p.z1) / 2, 0); cols.addCircle(p.x1 - 1.2, (p.z0 + p.z1) / 2, 0.25, 0, 4.9, 'lamp'); }
+    if (horiz) { P.lampClassic.addTRS(p.x1 - 1.2, 0, (p.z0 + p.z1) / 2, 0); cols.addCircle(p.x1 - 1.2, (p.z0 + p.z1) / 2, 0.25, 0, 4.9, 'lamp'); city.addLight(p.x1 - 1.2, 4.75, (p.z0 + p.z1) / 2, 0xffc27a, 0.75); }
   }
-  for (let z = MR.z0 + 8; z < MR.z1; z += 22) { P.lampClassic.addTRS(203, 0, z, 0); cols.addCircle(203, z, 0.25, 0, 4.9, 'lamp'); }
+  for (let z = MR.z0 + 8; z < MR.z1; z += 22) { P.lampClassic.addTRS(203, 0, z, 0); cols.addCircle(203, z, 0.25, 0, 4.9, 'lamp'); city.addLight(203, 4.75, z, 0xffc27a, 0.75); }
   // kulüp binası (beyaz villa üslubu, kıyıya bakar)
   city.addZoneBuilding(209, -577, 226, -563, 7.0, 5, '#f4f2ec', 3, 0);
   city.addSign('marina', 208.8, 5.6, -570, -Math.PI / 2, 9, 0.9);

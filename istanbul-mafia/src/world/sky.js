@@ -70,7 +70,7 @@ const OVC_KEYS = [
 // Güneş ışığı: [e, renk, ışınım]
 const SUN_KEYS = [[-0.04, C(0x000000), 0], [0.0, C(0xff5418), 0.25], [0.05, C(0xff8a40), 1.1], [0.12, C(0xffbe80), 2.0], [0.3, C(0xffe6c8), 2.8], [0.6, C(0xfff2e4), 3.1], [1.0, C(0xfff6ee), 3.2]];
 // Pozlama: [e, pozlama]
-const EXPO_KEYS = [[-0.3, 1.0], [-0.1, 0.95], [-0.03, 0.85], [0.02, 0.74], [0.12, 0.66], [0.4, 0.62], [1, 0.6]];
+const EXPO_KEYS = [[-0.3, 1.3], [-0.1, 1.15], [-0.03, 0.85], [0.02, 0.74], [0.12, 0.66], [0.4, 0.62], [1, 0.6]];
 
 function keyIdx(keys, e) {
   if (e <= keys[0][0]) return [0, 0, 0];
@@ -269,6 +269,9 @@ export class Environment {
     U.uCover.value = cc; U.uCloudDark.value = clamp(rain + this.stormK * 0.5, 0, 1);
     U.uStars.value = Math.pow(this.nightFactor, 2) * (1 - smooth(0.25, 0.75, cc)) * (0.6 / expo + 0.4);
     U.uMoonK.value = smooth(0.25, 0.85, this.nightFactor) * (1 - smooth(0.6, 0.95, cc));
+    // ay evresi (29.53 günlük döngü; oyun 1. gün ≈ büyüyen şişkin ay) ve aydınlanan oran → ay ışığı şiddeti
+    U.uMoonPhase.value = (((this.day + this.time / 24 + 10) % 29.53) + 29.53) % 29.53 / 29.53;
+    this.moonFrac = 0.5 - 0.5 * Math.cos(U.uMoonPhase.value * Math.PI * 2);
     displayToScene(cT.set(0xe8e4d8), expo, U.uMoonCol.value);
     U.uSkyTime.value += dt;
     U.uWind.value.x += dt * 0.0011 * this.windK; U.uWind.value.y += dt * 0.0004 * this.windK;
@@ -301,6 +304,18 @@ export class Environment {
     const n = this.nightFactor;
     this.ambient.color.setRGB(lerp(0.32, 0.5, ovc), lerp(0.34, 0.4, ovc), lerp(0.5, 0.36, ovc));
     this.ambient.intensity = n * 0.16 + 0.02;
+    // gece tabanı: mavi ay ışığı gök ışığı + aşağıdan turuncu şehir ışığı (aydınlık pencereler/sokak ışığı
+    // bulutlardan ve cephelerden seken ışık). Böylece gece "kapkara" değil, okunur ve sinematik olur.
+    if (n > 0) {
+      const nk = smooth(0.1, 0.75, n);
+      const floorI = nk * (1.6 + 0.3 * ovc);
+      if (this.hemi.intensity < floorI) {
+        const k = 1 - this.hemi.intensity / Math.max(floorI, 1e-4);
+        this.hemi.color.lerp(cT.setRGB(0.52, 0.64, 1.0), k * 0.85);
+        this.hemi.intensity = floorI;
+      }
+      this.hemi.groundColor.lerp(cT.setRGB(0.55, 0.36, 0.2), nk * 0.75);
+    }
 
     // ---- ay ışığı: güneş battıktan sonra yönlü ışık aya döner (gölgeler korunur) ----
     const fx = focus ? focus.x : 0, fy = focus ? focus.y : 0, fz = focus ? focus.z : 0;
@@ -308,12 +323,9 @@ export class Environment {
     const ld = moonOn ? this.moonDir : this.sunDir;
     if (moonOn) {
       this.sun.color.setRGB(0.55, 0.66, 1.0);
-      this.sun.intensity = 0.16 * smooth(-0.06, -0.16, e) * (1 - 0.85 * ovc);
+      this.sun.intensity = 0.42 * smooth(-0.06, -0.16, e) * (1 - 0.8 * ovc) * (0.3 + 0.7 * (this.moonFrac === undefined ? 1 : this.moonFrac));
     }
-    if (focus) {
-      this.sun.position.set(fx + ld.x * 250, fy + Math.max(ld.y, 0.15) * 250, fz + ld.z * 250);
-      this.sun.target.position.set(fx, fy, fz);
-    }
+    if (focus) this.placeShadowCamera(ld, fx, fy, fz);
     if (!moonOn && e < 0.0) this.sun.intensity = 0;
 
     // ---- sis: ufuk rengine eşit (her şeyi beyazlatmaz), yoğunluk havaya göre ----
@@ -357,6 +369,35 @@ export class Environment {
     this.envTimer -= dt;
     if (this._envElev === undefined || Math.abs(e - this._envElev) > 0.03 || Math.abs(cc - this._envCover) > 0.06 || Math.abs(rain - this._envRain) > 0.15) this.envTimer = 0;
     if (this.envTimer <= 0) { this.envTimer = 20; this._envElev = e; this._envCover = cc; this._envRain = rain; this.updateEnvMap(); }
+  }
+
+  // Gölge kamerası yerleşimi (yolda "kayan/titreyen gölge" hatasının düzeltmesi):
+  //  1) Işık yönü ~0.08° adımlarla güncellenir (güneş her karede biraz döndüğünde tüm gölge kenarları
+  //     yeniden rasterleşip yüzüyordu).
+  //  2) Odak noktası ışık uzayında gölge texel ızgarasına kilitlenir: oyuncu/kamera hareket edince harita
+  //     tam texel kadar kayar, statik gölgelerin kenarları piksel piksel aynı kalır (texel snapping).
+  placeShadowCamera(ld, fx, fy, fz) {
+    if (this.noSnap) { // eski davranış (teşhis testi için): kayan gölge kamerası
+      this.sun.position.set(fx + ld.x * 250, fy + Math.max(ld.y, 0.15) * 250, fz + ld.z * 250);
+      this.sun.target.position.set(fx, fy, fz); this.snapShadow = false; return;
+    }
+    const q = this._sq || (this._sq = { dir: new THREE.Vector3(0, 1, 0), r: new THREE.Vector3(), u: new THREE.Vector3(), f: new THREE.Vector3(), p: new THREE.Vector3() });
+    const dx = ld.x, dy = Math.max(ld.y, 0.15), dz = ld.z;
+    const L = Math.hypot(dx, dy, dz);
+    _v3.set(dx / L, dy / L, dz / L);
+    if (q.dir.angleTo(_v3) > 0.0014) q.dir.copy(_v3);
+    const d = q.dir;
+    // DirectionalLightShadow: kamera ışık konumundan hedefe bakar, up = +Y → eksenler: z = d, x = up×z, y = z×x
+    q.r.set(d.z, 0, -d.x).normalize(); // (0,1,0) × d
+    q.u.crossVectors(d, q.r);
+    const sc = this.sun.shadow.camera;
+    const texel = (sc.right - sc.left) / this.sun.shadow.mapSize.x;
+    q.f.set(fx, fy, fz);
+    const a = Math.round(q.f.dot(q.r) / texel) * texel, b = Math.round(q.f.dot(q.u) / texel) * texel, c = q.f.dot(d);
+    q.p.copy(q.r).multiplyScalar(a).addScaledVector(q.u, b).addScaledVector(d, c);
+    this.sun.target.position.copy(q.p);
+    this.sun.position.copy(q.p).addScaledVector(d, 250);
+    this.snapShadow = true;
   }
 
   // Şimşek: rastgele uzak bir noktaya zikzak çizgi + flaş (ses için onLightning kancası)
