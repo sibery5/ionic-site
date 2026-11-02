@@ -164,7 +164,11 @@ class Game {
     this.input = new Input(canvas);
     this.ui = new UI(this);
     this.ui.showLoading();
-    const step = async (p, t) => { this.ui.setLoading(p, t); await new Promise((r) => setTimeout(r, 30)); };
+    // [hikâye] açılış profili: her aşamanın süresi window.__boot'a yazılır (testler ve rapor için)
+    const BOOT = window.__boot = { js: Math.round(performance.now()), phases: [], frames: [] };
+    let bootLast = performance.now(), bootLabel = 'Görüntü + arayüz';
+    const mark = (label) => { const n = performance.now(); BOOT.phases.push([bootLabel, Math.round(n - bootLast)]); bootLast = n; bootLabel = label; };
+    const step = async (p, t) => { mark(t); this.ui.setLoading(p, t); await new Promise((r) => setTimeout(r, 30)); };
 
     await step(0.02, 'İstanbul haritası çiziliyor...');
     this.map = new CityMap(1453);
@@ -229,7 +233,9 @@ class Game {
     this.env.time = 18.3; this.env.update(0.01, new THREE.Vector3(-110, 0, 10));
     this.uniforms.uNight.value = this.env.nightFactor;
     await step(1, 'Hazır!');
+    mark('Gölgelendirici derleme');
     this.renderer.compile(this.scene, this.camera);
+    mark('Menü');
     this.ui.hideLoading();
     this.mode = 'menu';
     this.applyPixelRatio();
@@ -259,6 +265,7 @@ class Game {
     this.last = performance.now();
     this.lastFrameT = this.last; this.lastMenuRender = 0;
     this.fpsAcc = 0; this.fpsN = 0;
+    mark('-'); BOOT.ready = Math.round(performance.now()); // [hikâye]
     window.__ready = true;
     requestAnimationFrame(this._loop);
   }
@@ -957,6 +964,9 @@ class Game {
       console.error(err);
     }
     if (drew) this.needsFrame = false;
+    // [hikâye] açılış profili: ilk karelerin süresi (gölgelendirici derleme sıçraması burada görünür)
+    const BF = window.__boot && window.__boot.frames;
+    if (BF && BF.length < 8 && drew) BF.push(Math.round(performance.now() - now));
     this.input.endFrame();
     // uyarlamalı çözünürlük: kare aralığı + bu karenin CPU iş süresi
     if (this.mode === 'playing') { this.perf.sample(raw * 1000, performance.now() - now); this.perf.update(dt); }
