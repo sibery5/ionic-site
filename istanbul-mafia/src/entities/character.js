@@ -472,7 +472,14 @@ export class CharacterModel {
     if (st.downed) { this.poseDowned(dt, st); return; } // [savaş kancası] yaralı, yerde sürünüyor
     if (this.downK) this.downK = 0;
     // ---- ağırlıklar ----
-    const sp = st.speed || 0;
+    // kök hareketi: bu karede kök gerçekten ne kadar ilerledi? (duvara yürürken yerinde koşma / ay yürüyüşü olmasın)
+    const rp = this.root.position;
+    let rwx = 0, rwz = 0, tele = this._rpx === undefined;
+    if (!tele) { rwx = rp.x - this._rpx; rwz = rp.z - this._rpz; if (rwx * rwx + rwz * rwz > 1.2) { tele = true; rwx = rwz = 0; } }
+    this._rpx = rp.x; this._rpz = rp.z;
+    const meas = tele ? (st.speed || 0) : Math.hypot(rwx, rwz) / Math.max(dt, 1e-3);
+    this.measSp = dmp(this.measSp || 0, meas, 14, dt);
+    const sp = st.force || tele ? st.speed || 0 : Math.min(st.speed || 0, this.measSp * 1.08 + 0.06);
     const sc = this.rig.height;
     this.spd = dmp(this.spd, sp, 9, dt);
     const accRaw = (this.spd - this.prevSpd) / Math.max(dt, 1e-3); this.prevSpd = this.spd;
@@ -531,6 +538,14 @@ export class CharacterModel {
     const c0 = -0.06 * run;
     const F = this.feet;
     let sLs = 0, sRs = 0;
+    // ---- ayak kilidi: duruş fazındaki ayak dünyada sabit kalır ----
+    // Formül adımı (along) hız/kadans değişirken (kalkış, hızlanma, dönüş, durma) ayağı yerde kaydırıyordu.
+    // Kök hareketi (dünya → vücut uzayı) ve dönüş açısı ile kilitli ayak ters yönde taşınır, ideal noktaya
+    // yavaşça çekilir; kalkışta kalan fark salınım boyunca sönümlenir.
+    let rdx = 0, rdz = 0;
+    if (!tele) { const cr = Math.cos(ry - dy), sr = Math.sin(ry - dy); rdx = (rwx * cr - rwz * sr) / sc; rdz = (rwx * sr + rwz * cr) / sc; }
+    const lockOK = !tele && moving > 0.05 && W.air < 0.3 && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead;
+    const cdy = Math.cos(dy), sdy = Math.sin(dy), kp = 1 - Math.exp(-3 * dt);
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;
       const p = fract(cyc + i * 0.5);
@@ -552,6 +567,28 @@ export class CharacterModel {
       const baseX = s * this.hipX * width;
       let fx = baseX + dX * along, fz = dZ * along;
       fx = s > 0 ? Math.max(fx, 0.035) : Math.min(fx, -0.035);
+      const Fk = F[i];
+      if (lockOK && p < beta) {
+        if (!Fk.lock) { Fk.lock = true; Fk.lx = fx; Fk.lz = fz; }
+        else {
+          // vücut döndü/ilerledi: dünyada sabit nokta vücut uzayında ters yöne gider
+          const lx = Fk.lx * cdy - Fk.lz * sdy - rdx, lz = Fk.lx * sdy + Fk.lz * cdy - rdz;
+          Fk.lx = lx + (fx - lx) * kp; Fk.lz = lz + (fz - lz) * kp;
+          const ex = Fk.lx - fx, ez = Fk.lz - fz, el = Math.hypot(ex, ez);
+          if (el > 0.2) { Fk.lx = fx + ex / el * 0.2; Fk.lz = fz + ez / el * 0.2; }
+        }
+        fx = Fk.lx; fz = Fk.lz;
+        Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along;
+      } else {
+        if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; }
+        // kilit bırakılınca kalan fark sönümlenir (sıçrama yok): kalkışta salınım boyunca, duruşta zamanla
+        if (Fk.sw > 0 && Fk.ox !== undefined) {
+          let k2;
+          if (Fk.byPhase && p >= beta) { const w2 = (p - beta) / (1 - beta); k2 = Math.max(0, 1 - w2 * w2 * (3 - 2 * w2)); if (w2 > 0.98) Fk.sw = 0; }
+          else { Fk.byPhase = false; Fk.sw = Math.max(0, Fk.sw - dt * 3); k2 = Fk.sw * Fk.sw * (3 - 2 * Fk.sw); }
+          fx += Fk.ox * k2; fz += Fk.oz * k2;
+        }
+      }
       // ayak bileği pivotu: topuk kalkınca parmak ucu, topuk basınca topuk etrafında
       let ay = 0.08, az = 0;
       if (pitch > 0) { ay += 0.055 * (Math.cos(pitch) - 1) + 0.12 * Math.sin(pitch); az += 0.055 * Math.sin(pitch) + 0.12 * (1 - Math.cos(pitch)); }

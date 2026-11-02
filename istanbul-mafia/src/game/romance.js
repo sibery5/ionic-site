@@ -126,6 +126,8 @@ export class Romance {
       const n = this.npcs[id];
       if (n.dead || n.state === 'flee') continue;
       const d = Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z);
+      // yanındaki sevgili peşinden yürürken kapı/araç etkileşimini kapatmasın: yakın ve ona dönük olmalı
+      if (this.with === id && (d > 1.7 || ((n.pos.x - p.pos.x) * Math.sin(p.camYaw) + (n.pos.z - p.pos.z) * Math.cos(p.camYaw)) / (d || 1) < 0.6)) continue;
       if (d < 2.3) return { label: this.with === id ? `${n.name} ile...` : `Konuş: ${n.name}`, action: () => this.talk(id) };
     }
     return null;
