@@ -309,7 +309,7 @@ export class Aircraft extends Vehicle {
         if (this.sinking > 1.5 && this.driver) { const dr = this.driver; g.vehicles.ejectDriver(this); if (dr.isPlayer) dr.pos.y = -1.2; }
         if (this.sinking > 10) { this.destroyed = true; this.wreckT = 0; }
       } else {
-        const hard = -vy > 7 || (!this.heli && (hs > 48 || Math.abs(this.rollA) > 0.45 || this.pitchA < -0.25)) || (this.heli && Math.abs(this.rollA) > 0.6);
+        const hard = -vy > 7 || (!this.heli && (hs > (d.stall || 24) * 2 || Math.abs(this.rollA) > 0.45 || this.pitchA < -0.25)) || (this.heli && Math.abs(this.rollA) > 0.6);
         if (hard && !this.destroyed && (Math.abs(vy) > 3 || hs > 10)) { this.damage(this.hp + 1, null); this.burnT = 0.05; }
         this.vy = Math.max(0, this.vy);
         this.grounded = true;

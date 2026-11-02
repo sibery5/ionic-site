@@ -231,7 +231,7 @@ export function spawnWorldVehicles(game) {
     prop(game.aircraft.add('jet', st.x - 8, st.z, rw.heading !== undefined ? rw.heading : Math.PI));
   }
   // marina: iki boş tekne (çalınabilir)
-  const berths = (MAP.HARBOR && MAP.HARBOR.berths) || (MAP.MARINA && MAP.MARINA.berths) || [];
+  const berths = (MAP.MARINA && MAP.MARINA.berths) || [];
   if (game.boats && berths.length) {
     ['surat', 'balikci'].forEach((t, i) => {
       const b = berths[(i * 5 + 2) % berths.length];
