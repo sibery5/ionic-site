@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { audio } from '../core/audio.js';
 import { buildWeaponModel, buildRocketModel, WEAPONS } from './weapons.js';
-import { inBridge } from '../world/map.js';
+import { inBridge, WATER_Y } from '../world/map.js';
 import { BI } from '../entities/charParts.js';
 
 // NPC mermilerinin oyuncuya verdiği hasar çarpanı (denge: 3 yıldızda birkaç saniyede ölmemek için)
@@ -647,8 +647,8 @@ export class Combat {
     const g = this.game;
     const sc = radius / 7;
     const water = g.physics.inWater(x, z) && y < 0.5;
-    const floorY = g.physics.groundAt(x, z) > -1 ? g.physics.groundAt(x, z) : -1.4;
-    g.particles.explosion({ x, y, z }, sc, { floorY: water ? -1.4 : floorY, water });
+    const floorY = g.physics.groundAt(x, z) > -1 ? g.physics.groundAt(x, z) : WATER_Y;
+    g.particles.explosion({ x, y, z }, sc, { floorY: water ? WATER_Y : floorY, water });
     if (!water && y - floorY < 2.5) g.particles.scorchMark(x, floorY, z, radius * 0.9);
     audio.explosion(x, z, sc);
     this.expLight.position.set(x, y + 2, z); this.expI = 28 * sc; this.expLight.intensity = this.expI; this.expT = this.expMax;
