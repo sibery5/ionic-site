@@ -133,7 +133,8 @@ export class Player extends Actor {
     if (input.down('KeyA')) { mx -= rgt.x; mz -= rgt.z; }
     // [mekanik tepki] yere savrulduysa (patlama / araç): kalkana kadar kontrol yok
     const down = this.kdT > 0;
-    if (down) { this.kdT -= dt; mx = 0; mz = 0; this.crouch = false; }
+    if (down) { this.kdT -= dt; mx = 0; mz = 0; this.crouch = false; if (this.kdT <= 0) this.kdImmT = 2.5; }
+    else if (this.kdImmT > 0) this.kdImmT -= dt;
     const ml = down ? 0 : Math.hypot(mx, mz);
     if (ml > 0.01) { mx /= ml; mz /= ml; }
     const busy = !!(this.vault || this.rollT > 0 || down);

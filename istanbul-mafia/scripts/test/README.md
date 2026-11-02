@@ -19,3 +19,8 @@ Hikâye dalgası (görev defteri, Reis çağrısı, kovalamaca görevi, sevgili,
 Yürüme geçişlerinde ayak kayması (başla/yürü/koş/dur/dönüş/çömel/zıpla):
 
     node scripts/test/play.js file://$PWD/app/index.html .testout/g $PWD/scripts/test/gait-steps.js
+
+Mekanik tepkiler (her karakter türünde baş/kol/bacak tepkisi, patlama/araç ile yere savrulma, oyuncu kontrol kilidi,
+topallama, sivil çömel-kaç, trafik paniği, hayvan ürkmesi):
+
+    SETTINGS='{"quality":"low"}' NOSHOT=1 node scripts/test/play.js file://$PWD/app/index.html .testout/mech $PWD/scripts/test/mech-steps.js

@@ -709,7 +709,9 @@ export class Combat {
           const ux = (a.pos.x - x) / (d || 1), uz = (a.pos.z - z) / (d || 1);
           a.knock = { x: ux * 8 * k, z: uz * 8 * k, t: 0.3 };
           // [mekanik tepki] patlama dalgası: yakındakiler yere savrulur
-          if (k > 0.25 && a.knockdown) a.knockdown(ux, uz, 1.8 + 1.6 * k);
+          // oyuncu: yalnız yakın patlamada ve kalktıktan sonra kısa dokunulmazlıkla (art arda yere kilitlenmesin)
+          if (a.isPlayer) { if (k > 0.45 && !(a.kdImmT > 0)) a.knockdown(ux, uz, 1.1 + 1.1 * k); }
+          else if (k > 0.25 && a.knockdown) a.knockdown(ux, uz, 1.8 + 1.6 * k);
         } else {
           tmp.set(a.pos.x, a.pos.y + 1, a.pos.z);
           _a.set(a.pos.x - x, 0.6, a.pos.z - z).normalize();
@@ -753,6 +755,9 @@ export class Combat {
 
   // [mekanik tepki] silah sesi / patlama: trafikteki sürücüler panikler — tehdit öndeyse geri kaçar, yanından gaza basar,
   // duran araçtan inip kaçan da olur. Seyrek tarama (otomatik silahta her mermide değil).
+  // çığlık / korna / inleme gibi tepki sesleri için ortak seyreltme (kalabalıkta ses düğümü yığılmasın)
+  voice() { if (this.vocT > 0) return false; this.vocT = 0.35; return true; }
+
   trafficPanic(x, z, radius, source) {
     const g = this.game, now = performance.now();
     if (now - (this.panicScan || 0) < 250) return;
@@ -777,7 +782,7 @@ export class Combat {
       }
       if (ahead > 0.55 && d < 22 && v.speed < 6) { ai.reverseT = Math.max(ai.reverseT || 0, 1.6); ai.panic = 0; }
       else ai.panic = Math.max(ai.panic || 0, 5 + Math.random() * 3);
-      if (v.honkT <= 0 && Math.random() < 0.4) { audio.horn(v.pos.x, v.pos.z); v.honkT = 2 + Math.random() * 2; }
+      if (v.honkT <= 0 && Math.random() < 0.4 && this.voice()) { audio.horn(v.pos.x, v.pos.z); v.honkT = 2 + Math.random() * 2; }
     }
   }
 
@@ -816,6 +821,7 @@ export class Combat {
     const g = this.game;
     this.hitMarkFrame = false;
     this.sndBudget = 3;
+    if (this.vocT > 0) this.vocT -= dt;
     this.whizT -= dt;
     // izli mermiler
     let any = false;

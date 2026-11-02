@@ -44,6 +44,14 @@ const ENGINE_KINDS = {
   jet: { base: 40, span: 60, h2: 0.5, fire: 0.5, trem: 0.05, nf: 8, grit: 0.1, lp: 250, lpSpan: 400, sq: 0.1, bright: 0.3, motor: 0.15, vol: 1.4 },
 };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// Her karede güncellenen parametre: değer değişmediyse olay ekleme; ses saati ilerlemediyse (takılma / hızlı simülasyon)
+// aynı ana yığılan olayları sil -> AudioParam zaman çizelgesi ve bellek sınırlı kalır
+function tgt(p, v, t, tc) {
+  if (p._lv !== undefined && Math.abs(p._lv - v) <= Math.abs(v) * 0.003 + 1e-4) return;
+  if (p._lt !== undefined && t <= p._lt + 1e-4) p.cancelScheduledValues(t);
+  p._lv = v; p._lt = t;
+  p.setTargetAtTime(v, t, tc);
+}
 
 export class AudioEngine {
   constructor() {
@@ -149,6 +157,11 @@ export class AudioEngine {
     const d = Math.hypot(dx, dz);
     const k = 1 - d / range;
     if (k <= 0.01) return null;
+    // ses düğümü bütçesi: yoğun çatışmada (ya da hızlandırılmış testte) aynı anda yüzlerce ses grafiği kurulmasın
+    // (ses saati ile ölçülür: ses işleme takılırsa biten düğüm olmaz, yenileri de kurulmaz -> bellek şişmez)
+    const now = c.currentTime;
+    if (now - (this._vT || 0) > 0.1 || now < (this._vT || 0)) { this._vT = now; this._vN = 0; }
+    if (++this._vN > 30) return null;
     const a = Math.pow(k, 1.6);
     const g = c.createGain(); g.gain.value = a;
     const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400 + 17000 * k * k * k; lp.Q.value = 0.5;
@@ -608,7 +621,7 @@ export class AudioEngine {
     this.rpmPrev = rpm;
     const r = clamp(rpm, 0, 1.4);
     const K = ENGINE_KINDS[o.kind] || ENGINE_KINDS.car;
-    const S = (p, v, tc = 0.05) => p.setTargetAtTime(v, t, tc);
+    const S = (p, v, tc = 0.05) => tgt(p, v, t, tc);
     const base = K.base + r * K.span;
     S(n.o1.frequency, base); S(n.o2.frequency, base * K.h2); S(n.o3.frequency, base * 2); S(n.o4.frequency, base * 0.25);
     S(n.lfo.frequency, base * K.fire); S(n.lfoG.gain, K.trem - r * K.trem * 0.5, 0.1);
@@ -640,14 +653,14 @@ export class AudioEngine {
     const ground = o.kind !== 'heli' && o.kind !== 'jet' && o.kind !== 'boat' && o.kind !== 'prop';
     const dirt = ground && (o.surface === 'grass' || o.surface === 'dirt');
     const gl = this.loop('gravel', { type: 'bandpass', freq: 1100, q: 0.9, lfoRate: 9, lfoDepth: 500 });
-    gl.f.frequency.setTargetAtTime(700 + Math.min(1500, sp * 60), t, 0.2);
+    tgt(gl.f.frequency, 700 + Math.min(1500, sp * 60), t, 0.2);
     this.loopGain('gravel', dirt ? Math.min(0.2, sp * 0.012) : 0, 0.15);
     this.loop('roadwind', { buf: this.brownBuf, type: 'bandpass', freq: 500, q: 0.6, lfoRate: 0.3, lfoDepth: 150 });
     this.loopGain('roadwind', ground ? Math.min(0.14, Math.max(0, sp - 8) * 0.004) * (o.kind === 'moto' || o.kind === 'bike' ? 1.8 : 1) : 0, 0.3);
     this.loop('water', { buf: this.brownBuf, type: 'lowpass', freq: 700, q: 0.8, lfoRate: 0.7, lfoDepth: 300 });
     this.loopGain('water', o.kind === 'boat' ? 0.05 + Math.min(0.25, sp * 0.012) : 0, 0.3);
     const fw = this.loop('freewheel', { type: 'highpass', freq: 3500, q: 0.7, lfoRate: 8, lfoDepth: 0 });
-    if (o.kind === 'bike') { fw.f.frequency.setTargetAtTime(3000 + sp * 200, t, 0.2); this.loopGain('freewheel', (o.throttle > 0 ? 0.004 : 0.018) * Math.min(1, sp / 4), 0.1); }
+    if (o.kind === 'bike') { tgt(fw.f.frequency, 3000 + sp * 200, t, 0.2); this.loopGain('freewheel', (o.throttle > 0 ? 0.004 : 0.018) * Math.min(1, sp / 4), 0.1); }
     else this.loopGain('freewheel', 0, 0.1);
   }
 
@@ -664,7 +677,7 @@ export class AudioEngine {
     this.loops[name] = { src, f, g };
     return this.loops[name];
   }
-  loopGain(name, v, tc = 0.2) { const l = this.loops[name]; if (l) l.g.gain.setTargetAtTime(v, this.ctx.currentTime, tc); }
+  loopGain(name, v, tc = 0.2) { const l = this.loops[name]; if (l) tgt(l.g.gain, v, this.ctx.currentTime, tc); }
 
   // Lastik cızırtısı: her karede çağrılır, amount 0..1
   screech(amount = 0) {
@@ -674,7 +687,7 @@ export class AudioEngine {
     // aynı karede araç skid() çağırdıysa genel güncelleme (audio.update) onu ezmesin
     if (this._skidT && this.ctx.currentTime - this._skidT < 0.1 && amount < this.screechSet) return;
     this.screechSet = a;
-    l.f.frequency.setTargetAtTime(2600 + a * 900, this.ctx.currentTime, 0.1);
+    tgt(l.f.frequency, 2600 + a * 900, this.ctx.currentTime, 0.1);
     this.loopGain('screech', a * 0.11, 0.06);
   }
   // Kayma: asfaltta cızırtı, toprak/çimde çakıl hışırtısı
@@ -806,7 +819,7 @@ export class AudioEngine {
       this.sirenNode = { o, lfo, g };
     }
     if (this.sirenNode) {
-      this.sirenNode.g.gain.setTargetAtTime(Math.min(0.07, level * 0.07), this.ctx.currentTime, 0.3);
+      tgt(this.sirenNode.g.gain, Math.min(0.07, level * 0.07), this.ctx.currentTime, 0.3);
       if (level <= 0) {
         const n = this.sirenNode; this.sirenNode = null;
         setTimeout(() => { try { n.o.stop(); n.lfo.stop(); } catch (e) { /* zaten durdu */ } }, 1500);

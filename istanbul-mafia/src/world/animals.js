@@ -213,7 +213,7 @@ export class Animals {
       if (d > 3) continue;
       if (d < (a.dog ? 0.32 : 0.22)) {
         a.hurtT = 25;
-        audio.yelp(a.x, a.z, a.dog);
+        if (!this.game.combat.voice || this.game.combat.voice()) audio.yelp(a.x, a.z, a.dog);
         const gp = this.game.particles;
         if (gp && gp.blood) gp.blood({ x: a.x, y: 0.35, z: a.z }, 3, null, 0.005);
       }

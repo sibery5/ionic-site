@@ -344,7 +344,7 @@ export class NPC extends Actor {
         this.state = 'cower'; this.afterDuck = true; this.fleeT = 0.8 + Math.random() * 1.2;
         this.fleeFrom = src.clone ? src.clone() : new THREE.Vector3(src.x, 0, src.z);
         this.flee = null; this.path = []; this.cur = null;
-        if (Math.random() < 0.35) audio.scream(this.pos.x, this.pos.z);
+        if (Math.random() < 0.35 && g.combat.voice()) audio.scream(this.pos.x, this.pos.z);
         if (Math.random() < 0.3) this.say(BARKS.flee, 1);
       } else if (this.fleeFrom && Math.hypot(src.x - this.fleeFrom.x, src.z - this.fleeFrom.z) > 4) { this.fleeFrom = src.clone ? src.clone() : this.fleeFrom; this.fleeT = Math.max(this.fleeT, 4); }
       return;

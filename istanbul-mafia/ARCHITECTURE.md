@@ -24,6 +24,9 @@ Masaüstü: `npx electron .` · Windows kurulum: `npm run dist:win`.
   Ek harita işaretçileri: `missions.addMarkerSet({list, version})`; işaretçi alanları `blink, icon, label, area, mmHide`.
 - Çift pozu: `actor.couple = {kind:'hand'|'hug'|'kiss', side:±1}` (character.js katman 5b). Ayak kilidi: duruştaki ayak
   dünyada sabit; animasyon hızı kökün gerçek hareketinden ölçülür (duvara yürürken yerinde koşmaz).
+- Mekanik tepki: `actor.knockdown(dx, dz, sn)` (yere savrulma, `kdT`; model `knockdown/hitZone`), `npc.onNearMiss(saldırgan, d)`
+  (combat.nearMiss her atışta bir kez çağırır), `combat.trafficPanic` (silah sesinde sürücüler), `animals.onBullet`.
+  Kolluk/asker `engageRange` etkili menzilinin ötesinde ateş etmez; `npc._face` ayarlıyken yol bulma tehdide dönük yürütür.
 - `ui/` ui (HUD, menüler, dükkânlar), icons (SVG)
 - `main.js` Game sınıfı: tüm sistemleri bağlar; `game.updateGame(dt,t)` her kare.
 
