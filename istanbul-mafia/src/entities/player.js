@@ -131,9 +131,12 @@ export class Player extends Actor {
     if (input.down('KeyS')) { mx -= f.x; mz -= f.z; }
     if (input.down('KeyD')) { mx += rgt.x; mz += rgt.z; }
     if (input.down('KeyA')) { mx -= rgt.x; mz -= rgt.z; }
-    const ml = Math.hypot(mx, mz);
+    // [mekanik tepki] yere savrulduysa (patlama / araç): kalkana kadar kontrol yok
+    const down = this.kdT > 0;
+    if (down) { this.kdT -= dt; mx = 0; mz = 0; this.crouch = false; }
+    const ml = down ? 0 : Math.hypot(mx, mz);
     if (ml > 0.01) { mx /= ml; mz /= ml; }
-    const busy = !!(this.vault || this.rollT > 0);
+    const busy = !!(this.vault || this.rollT > 0 || down);
     this.aiming = input.mouse.right && this.wdef.type !== 'melee' && !busy;
     const wantSprint = input.down('ShiftLeft') && ml > 0 && !this.aiming;
     if (wantSprint && this.crouch && this.stamina > 10) this.crouch = false;
@@ -148,6 +151,8 @@ export class Player extends Actor {
     let speed = this.swimming ? (sprint ? 3.5 : 2.2) : this.aiming ? (this.crouch ? 1.4 : 2.4) : this.crouch ? 1.7 : sprint ? 7.4 : 3.6;
     speed *= 1 + g.state.stats.stamina * 0.002;
     if (this.landSlow > 0) { this.landSlow -= dt; speed *= 0.55; }
+    // bacağından yaralı: topallar, koşusu yavaşlar
+    if (this.limp > 0) speed *= 1 - (sprint ? 0.45 : 0.3) * this.limp;
     if (this.vault) {
       const V = this.vault;
       V.t += dt;
@@ -159,6 +164,9 @@ export class Player extends Actor {
       const sp = Math.min(5.5, Math.max(3, this.speed));
       this.vx = V.dx * sp; this.vz = V.dz * sp; this.vy = 0;
       if (u >= 1) { this.vault = null; this.vaultT = 0; this.grounded = true; }
+    } else if (down) {
+      // yerde kayma: sürtünmeyle durur
+      const fr = Math.exp(-5 * dt); this.vx *= fr; this.vz *= fr;
     } else if (this.rollT > 0) {
       this.rollT += dt / 0.7;
       const k = 6.2 * (1 - 0.45 * Math.min(1, this.rollT));
@@ -243,7 +251,7 @@ export class Player extends Actor {
       if (input.hit('Space')) this.jumpBuf = 0.15;
       this.jumpBuf = (this.jumpBuf || 0) - dt;
       this.coyote = this.grounded ? 0.12 : (this.coyote || 0) - dt;
-      if (this.jumpBuf > 0 && this.coyote > 0 && this.rollT <= 0) {
+      if (this.jumpBuf > 0 && this.coyote > 0 && this.rollT <= 0 && !down) {
         this.vy = 6.4; this.grounded = false; this.coyote = 0; this.jumpBuf = 0;
         this.crouch = false;
         this.stamina = Math.max(0, this.stamina - 5);
@@ -382,7 +390,7 @@ export class Player extends Actor {
       const sprinting = this.speed > 5.5 && !this.aiming;
       const wantDist = this.dead ? 6 : this.aiming ? (aimScope ? 0.6 : 1.75) : (this.crouch ? 3.4 : this.camDist) + (sprinting ? 0.6 : 0);
       const wantSide = this.dead ? 0 : this.aiming ? 0.58 : 0.42;
-      const wantH = (this.crouch ? 1.2 : 1.58) + (this.swimming ? 0.25 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0);
+      const wantH = (this.crouch ? 1.2 : 1.58) + (this.swimming ? 0.25 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0) - (this.kdT > 0 ? 0.9 : 0);
       if (!this.camInit || this.cDist === undefined) { this.cDist = wantDist; this.cSide = wantSide; this.cH = wantH; this.cSh = this.shoulder; this.cCol = 99; this.camTgt = null; }
       this.cDist = damp(this.cDist, wantDist, this.aiming ? 14 : 7, dt);
       this.cSide = damp(this.cSide, wantSide, 10, dt);

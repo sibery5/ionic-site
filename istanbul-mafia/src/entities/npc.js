@@ -288,6 +288,8 @@ export class NPC extends Actor {
         if (Math.random() < 0.25) this.say(BARKS.flee, 1);
       }
       this.sitting = false; this.talking = false;
+      // yakından geçen kurşunla çömeldiyse: önce çömelme bitsin (kaçış yönü güncellenir)
+      if (this.state === 'cower' && this.afterDuck) { this.fleeFrom = source.pos.clone(); return; }
       this.state = 'flee'; this.fleeFrom = source.pos.clone(); this.fleeT = 3 + Math.random() * 4;
       this.static = false;
       this.path = []; this.cur = null;
@@ -325,6 +327,54 @@ export class NPC extends Actor {
       if (this.faction !== 'civilian' && (attacker.faction !== this.faction || (attacker.ally !== this.ally))) { if (!(this.ally && attacker.ally)) this.engage(attacker, 0.4); }
       else if (this.faction === 'civilian') this.hearThreat(attacker, 2);
     }
+  }
+
+  // [mekanik tepki] kurşun yakından geçti (d: ışının NPC'ye en yakın uzaklığı, m)
+  onNearMiss(attacker, d) {
+    if (this.downed || this.kdT > 0 || this.static || this.sitting && this.mission) return;
+    const g = this.game;
+    const close = 1 - d / 2.5;
+    if (this.faction === 'civilian' && !this.ally && this.state !== 'attack' && this.state !== 'arrest') {
+      if (this.mission && (this.state === 'flee' || this.state === 'move' || this.state === 'surrender')) return;
+      const src = attacker && attacker.pos ? attacker.pos : g.player.pos;
+      if (this.state === 'cower') { this.fleeT = Math.max(this.fleeT, 1.5 + Math.random()); return; } // kurşunlar vızıldarken kalkma
+      // çok yakından geçti ya da yeni fark etti: önce olduğu yere çömel, sonra tehditten uzağa kaç
+      if (d < 1.3 || this.state !== 'flee') {
+        this.sitting = false; this.talking = false;
+        this.state = 'cower'; this.afterDuck = true; this.fleeT = 0.8 + Math.random() * 1.2;
+        this.fleeFrom = src.clone ? src.clone() : new THREE.Vector3(src.x, 0, src.z);
+        this.flee = null; this.path = []; this.cur = null;
+        if (Math.random() < 0.35) audio.scream(this.pos.x, this.pos.z);
+        if (Math.random() < 0.3) this.say(BARKS.flee, 1);
+      } else if (this.fleeFrom && Math.hypot(src.x - this.fleeFrom.x, src.z - this.fleeFrom.z) > 4) { this.fleeFrom = src.clone ? src.clone() : this.fleeFrom; this.fleeT = Math.max(this.fleeT, 4); }
+      return;
+    }
+    if (this.faction === 'civilian') return;
+    // savaşan: baskı altında (siper/çömelme ister), ateşin geldiği yönü fark eder
+    this.suppress = Math.min(1, this.suppress + 0.15 + 0.3 * close);
+    this.underFireT = 2.5;
+    if (!attacker || attacker === this || attacker.dead) return;
+    // oyuncu açıkça bu çete üyesine ateş etti (ıskaladı): saldırı sayılır
+    if (attacker.isPlayer && this.faction === 'gang' && !this.ally && !this.mission && d < 1.2 && this.gang && this.gang !== 'family' && !this.hostileTo(attacker)) this.game.angerGang(this.gang, this.pos);
+    if (this.hostileTo(attacker)) {
+      if (this.state !== 'attack') this.engage(attacker, 0.5);
+      else if (this.target !== attacker && this.target && Math.random() < 0.4) {
+        const dn = Math.hypot(attacker.pos.x - this.pos.x, attacker.pos.z - this.pos.z), dt0 = Math.hypot(this.target.pos.x - this.pos.x, this.target.pos.z - this.pos.z);
+        if (dn < dt0) this.engage(attacker, 0.4);
+      }
+      if (this.state === 'attack' && this.suppress > 0.75 && !this.diveT && Math.random() < 0.2) this.diveT = 0.9;
+    }
+  }
+  // yere savrulduktan sonra kalkış
+  onGetUp() {
+    const g = this.game;
+    this.kdT = 0;
+    if (this.faction === 'civilian' && !this.ally && this.state !== 'attack') {
+      if (this.mission && this.state === 'flee') return;
+      const src = (this.lastAttacker && this.lastAttacker.pos) || g.player.pos;
+      this.state = 'flee'; this.fleeFrom = src.clone ? src.clone() : new THREE.Vector3(src.x, 0, src.z); this.fleeT = 5 + Math.random() * 3; this.flee = null; this.reactT = 0.1;
+      this.say(['Ahh, belim!', 'Ne oldu?!', 'Kaçın!'], 0.6);
+    } else if (this.state === 'attack') { this.stunT = 0.35; this.tacT = 0; this.suppress = Math.min(1, this.suppress + 0.3); }
   }
 
   onDeath(attacker, kind) {
@@ -469,7 +519,21 @@ export class NPC extends Actor {
     }
     want = Math.atan2(sx, sz);
     if (this.detourT > 0) { this.detourT -= dt; want += this.side * 1.25; }
+    if (this._face !== undefined) {
+      // [savaş: taktik] hareket yönü ile bakış ayrı: yolu izlerken gövde tehdide dönük (yan/geri adım animasyonu)
+      this.mvH = dampAngle(this.mvH === undefined ? this.heading : this.mvH, want, 10, dt);
+      const mx = Math.sin(this.mvH), mz = Math.cos(this.mvH);
+      this.heading = dampAngle(this.heading, this._face, 8, dt);
+      const c = Math.cos(this.heading), sn = Math.sin(this.heading), fwd = mx * sn + mz * c;
+      const s2 = Math.min(speed * (this.limpMul || 1) * (fwd < -0.3 ? 0.7 : 1), d / Math.max(dt, 1e-3));
+      if (vaultOK && fwd > 0.6 && s2 > 0.9 && !this.vault) { const v = nav.at(px + mx * 0.55, pz + mz * 0.55); if (v === N_LOW && this.startVault(mx, mz)) return; }
+      this.pos.x += mx * s2 * dt; this.pos.z += mz * s2 * dt;
+      this.moveLocalX = mx * c - mz * sn; this.moveLocalZ = fwd;
+      this.speed = s2;
+      return;
+    }
     this.heading = dampAngle(this.heading, want, 10, dt);
+    this.mvH = this.heading;
     const s = Math.min(speed * (this.limpMul || 1), d / Math.max(dt, 1e-3)); // [savaş] bacağından vurulan yavaşlar
     const hx = Math.sin(this.heading), hz = Math.cos(this.heading);
     // alçak engel tam önde: üstünden atla
@@ -520,7 +584,21 @@ export class NPC extends Actor {
     let F = null;
     if (canDoor && !cont && Math.random() < 0.6) { const d = g.npcs.doorAway(this.pos, from, 30); if (d) F = { x: d.x, z: d.z, door: true }; }
     if (!F && !cont && !this.mission && Math.random() < 0.2) { const c = this.findCover({ pos: from }); if (c) F = { x: c.x, z: c.z, cover: true }; }
+    // [mekanik tepki] kaçış yolu tehdidin yanından/üstünden geçmesin
+    const thru = (q) => {
+      const ax = q.x - this.pos.x, az = q.z - this.pos.z, L2 = ax * ax + az * az || 1;
+      const u = clamp(((from.x - this.pos.x) * ax + (from.z - this.pos.z) * az) / L2, 0, 1);
+      const dT = Math.hypot(from.x - this.pos.x, from.z - this.pos.z);
+      return u > 0.05 && Math.hypot(this.pos.x + ax * u - from.x, this.pos.z + az * u - from.z) < Math.min(6, dT * 0.7);
+    };
+    if (F && thru(F)) F = null;
     if (!F) { const p = g.npcs.streetAway(this.pos, from, 28 + Math.random() * 14, this); F = { x: p.x, z: p.z, street: true }; }
+    if (thru(F)) {
+      // sokak boyunca kaçış tehdide doğru: doğrudan uzağa (gerekirse karşı kaldırıma)
+      const ax = this.pos.x - from.x, az = this.pos.z - from.z, al = Math.hypot(ax, az) || 1;
+      probe.set(this.pos.x + ax / al * 20, 0, this.pos.z + az / al * 20); g.physics.resolveCircle(probe, 0.5, 0);
+      F = { x: probe.x, z: probe.z, street: true };
+    }
     this.flee = F;
     this.navReset();
   }
@@ -650,6 +728,7 @@ export class NPC extends Actor {
     }
     if (def.pellets) p *= 0.6;
     if (this.tac === 'suppress') p *= 0.55;
+    if (this.armHurt) p *= 1 - 0.45 * this.armHurt; // [mekanik tepki] yaralı kol: daha çok ıska
     const hit = Math.random() < p;
     const ey = this.pos.y + (this.crouch ? 1.15 : 1.45);
     tmp.set(this.pos.x, ey, this.pos.z);
@@ -698,6 +777,18 @@ export class NPC extends Actor {
       this.pos.x += this.knock.x * dt * 3; this.pos.z += this.knock.z * dt * 3;
     }
     if (this.carHitT > 0) this.carHitT -= dt;
+    if (this.underFireT > 0) this.underFireT -= dt;
+    // [mekanik tepki] yere savruldu (patlama / araç / ağır darbe): yatar, sonra kalkar ve duruma göre tepki verir
+    if (this.kdT > 0) {
+      this.kdT -= dt;
+      this.aiming = false; this.crouch = false; this.speed = 0;
+      const rs = g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
+      this.pos.y = Math.max(rs.support, this.pos.y - 9 * dt);
+      if (this.kdT <= 0) this.onGetUp();
+      if (full) this.model.animate(dt, this.animState());
+      this.sync();
+      return;
+    }
     // engel üstünden atlama sürüyor: yalnız hareketi oynat
     if (this.vault) {
       this.updateVault(dt);
@@ -811,14 +902,18 @@ export class NPC extends Actor {
         this.handsUp = Math.sin(performance.now() * 0.002 + this.id) > -0.2;
         this.fleeT -= dt;
         if (this.fleeT < 3 && Math.random() < dt * 0.15) this.say(BARKS.cower, 0.5);
-        if (this.fleeT <= 0) { this.state = 'walk'; this.path = []; this.cur = null; }
+        if (this.fleeT <= 0) {
+          if (this.afterDuck) { this.afterDuck = false; this.state = 'flee'; this.fleeT = 4 + Math.random() * 4; this.flee = null; this.reactT = 0; }
+          else { this.state = 'walk'; this.path = []; this.cur = null; }
+        }
         break;
       }
       case 'flee': {
         if (this.reactT > 0) { this.reactT -= dt; this.heading = dampAngle(this.heading, Math.atan2(this.pos.x - (this.fleeFrom || player.pos).x, this.pos.z - (this.fleeFrom || player.pos).z), 6, dt); break; }
         this.fleeT -= dt;
         // kaçış planı: kapıya / sipere / sokak boyunca (yeni tehdit gelince yeniden planla)
-        if (!this.flee || this.fleeSrc !== this.fleeFrom) this.planFlee(false);
+        // tehdit belirgin biçimde yer değiştirdiyse yeniden planla (her atışta hedef değiştirip zikzak çizmesin)
+        if (!this.flee || !this.fleeSrc || (this.fleeSrc !== this.fleeFrom && Math.hypot(this.fleeSrc.x - this.fleeFrom.x, this.fleeSrc.z - this.fleeFrom.z) > 5)) this.planFlee(false);
         const F = this.flee;
         const from = this.fleeFrom || player.pos;
         const dT = Math.hypot(this.pos.x - from.x, this.pos.z - from.z);
@@ -933,14 +1028,16 @@ export class NPC extends Actor {
       return out;
     }
     // [savaş: taktik] vurulunca kısa sersemleme; baskı altında yere kapanma
+    const RG = engageRange(def, this.kind);
+    const threatened = this.hurtT > 0 || this.suppress > 0.35 || this.underFireT > 0;
+    // etkili menzil: bunun ötesinde ateş etme, yaklaş (ateş altındayken biraz daha uzaktan karşılık verir)
+    const fireMax = def.scope || def.type === 'launcher' ? def.range : Math.min(def.range, RG[2] * (threatened || this.tac === 'suppress' ? 1.3 : 1.08));
     if (this.stunT > 0) { this.stunT -= dt; this.heading = dampAngle(this.heading, want, 8, dt); return out; }
     if (this.diveT > 0) {
       this.diveT -= dt; out.crouch = true; this.heading = dampAngle(this.heading, want, 8, dt);
-      if (los && this.diveT < 0.35 && d < def.range) { this.aiming = true; this.fireAt(t, d); }
+      if (los && this.diveT < 0.35 && d < fireMax) { this.aiming = true; this.fireAt(t, d); }
       return out;
     }
-    const RG = engageRange(def, this.kind);
-    const threatened = this.hurtT > 0 || this.suppress > 0.35;
     // taktik seçimi
     this.tacT -= dt;
     if (this.tacT <= 0) this.chooseTactic(t, d, los, RG);
@@ -948,12 +1045,18 @@ export class NPC extends Actor {
     const ideal = RG[1];
     // hareket yardımcısı: görüş varsa hedefe dönük yürüyerek (yan/geri adım) git, engel varsa normal yol bulma
     if (this.navLockT > 0) this.navLockT -= dt;
+    let crouchMove = false;
     const go = (x, z, sp, face) => {
+      // yoğun ateş altında: eğilerek, daha yavaş ilerle
+      if (face && threatened && this.suppress > 0.6 && this.kind !== 'boss') { sp = Math.min(sp, 2.3); crouchMove = true; }
       if (face && !(this.navLockT > 0)) {
         if (this.strafeMove(x, z, sp, dt, want) >= 0) { out.speed = this.speed; return; }
         this.navLockT = 2; // önü kapalı: bir süre normal yol bulmayla devam (gidip gelme olmasın)
       }
+      // yol bulurken de tehdide dönük kal (yan / geri adım); sırtını dönüp koşma
+      this._face = face ? want : undefined;
       this.navTo(x, z, sp, dt, true); out.speed = this.speed;
+      this._face = undefined;
     };
     // sırtını tehdide uzun süre dönme: say, gerekirse yan adıma geç
     if (threatened && los && Math.abs(angleDiff(this.heading, want)) > 1.9) this.backT = (this.backT || 0) + dt; else this.backT = 0;
@@ -974,6 +1077,18 @@ export class NPC extends Actor {
         if (this.coverPt) { go(this.coverPt.x, this.coverPt.z, 4.6, faceT); moving = true; }
       } else {
         // siperde: saklan / dışarı çık ve ateş et
+        // siper hâlâ koruyor mu? (tehdit yer değiştirdiyse siperi tehdide göre yeniden seç)
+        this.covChkT = (this.covChkT || Math.random()) - dt;
+        if (!this.peeking && this.covChkT <= 0) {
+          this.covChkT = 0.8 + Math.random() * 0.5;
+          const ch = this.coverPt.low ? 0.8 : 1.2;
+          if (g.physics.lineOfSight(t.pos.x, t.pos.y + 1.4, t.pos.z, this.pos.x, this.pos.y + ch, this.pos.z)) {
+            const c2 = g.npcs.coverBudget-- > 0 ? this.findCover(t, { noRetreat: true, R: 10 }) : null;
+            if (c2 && Math.hypot(c2.x - this.coverPt.x, c2.z - this.coverPt.z) > 1.5) { this.coverPt = c2; this.coverRe = true; this.coverMoves = (this.coverMoves || 0) + 1; }
+            else { this.tac = 'engage'; this.coverPt = null; this.tacT = 1 + Math.random(); }
+            return out;
+          }
+        }
         this.peekT -= dt;
         if (this.peekT <= 0) { this.peeking = !this.peeking; this.peekT = this.peeking ? 1.4 + Math.random() * 1.6 : 0.9 + Math.random() * 1.4 + this.suppress * 1.5; }
         out.crouch = !this.peeking && (this.coverPt.low || true);
@@ -983,7 +1098,7 @@ export class NPC extends Actor {
       }
     } else if (this.tac === 'flank' && this.flankPt) {
       const fd = Math.hypot(this.flankPt.x - this.pos.x, this.flankPt.z - this.pos.z);
-      if (fd > 1) { go(this.flankPt.x, this.flankPt.z, 5.0, faceT && fd < 14); moving = true; }
+      if (fd > 1) { go(this.flankPt.x, this.flankPt.z, 5.0, faceT && (fd < 14 || threatened)); moving = true; }
       else { this.tac = 'engage'; this.tacT = 3; }
     } else if (this.tac === 'advance' && this.advPt) {
       // kademeli ilerleme: bir sonraki mevziye koş, varınca çömel ve kısa süre ateş et
@@ -1020,7 +1135,8 @@ export class NPC extends Actor {
     if (!moving || this.tac === 'flank' || los) {
       if (!moving) this.heading = dampAngle(this.heading, want, 10, dt);
     }
-    if (los && d < def.range && Math.abs(angleDiff(moving ? this.heading : this.heading, want)) < (moving ? 1.2 : 0.35)) {
+    if (crouchMove) out.crouch = true;
+    if (los && d < fireMax && Math.abs(angleDiff(this.heading, want)) < (moving ? 1.2 : 0.35)) {
       this.aiming = true;
       // [savaş] kolluk uyarıları (megafon/telsiz sesiyle)
       if (t.isPlayer && this.barkT <= 0) this.say(this.kind === 'swat' ? BARKS.swat : this.faction === 'police' ? BARKS.cop : this.faction === 'military' ? BARKS.soldier : BARKS.gang, this.faction === 'gang' ? 0.04 : 0.08);
@@ -1078,7 +1194,7 @@ export class NPC extends Actor {
     }
     if (wantsCover && d < 50 && g.npcs.coverBudget > 0) {
       g.npcs.coverBudget--;
-      const c = this.findCover(t);
+      const c = this.findCover(t, this.hp > this.maxHp * 0.4 ? { noRetreat: true } : null);
       if (c) { this.tac = 'cover'; this.coverPt = c; this.peeking = false; this.peekT = 0.6; this.tacT = 6 + Math.random() * 5; return; }
     }
     this.tac = 'engage'; this.coverPt = null;
@@ -1544,6 +1660,12 @@ export class NPCManager {
         a.takeDamage(dmg, v.driver, 'car');
         const dx = a.pos.x - v.pos.x, dz = a.pos.z - v.pos.z, lat = dx * -f.z + dz * f.x;
         a.knock = { x: v.vx * 0.6 + (lat > 0 ? -f.z : f.z) * 3, z: v.vz * 0.6 + (lat > 0 ? f.x : -f.x) * 3, t: 0.4 };
+        // [mekanik tepki] çarpma yönünde irkilme; hızlı çarpmada yere savrulma (sürücüsüz araçta da)
+        if (!a.dead) {
+          if (!v.driver) a.model.hit(a.knock.x, a.knock.z, 1.4);
+          if (sp > 3.2 && a.knockdown) a.knockdown(a.knock.x, a.knock.z, 1.8 + Math.min(1.6, sp * 0.12));
+          if (a.isPlayer) g.cameraShake(Math.min(1.4, 0.4 + sp * 0.08));
+        }
         audio.punch(a.pos.x, a.pos.z);
         g.particles.blood({ x: a.pos.x, y: 1, z: a.pos.z }, 6);
         const m = v.def.mass || v.def.len * v.def.wid * 150;

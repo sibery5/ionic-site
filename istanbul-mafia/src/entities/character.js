@@ -368,6 +368,22 @@ export class CharacterModel {
     this.deathDir = { x: lx / l, z: lz / l };
     this.hitT = 0.35; this.hitSide = Math.random() < 0.5 ? 1 : -1;
   }
+  // [mekanik tepki] bölgesel irkilme: baş geriye/yana savrulur, kol sarsılır, bacak bükülür (dirX/Z: merminin gidiş yönü)
+  hitZone(zone, side, k, dirX, dirZ) {
+    const h = this.root.rotation.y, c = Math.cos(h), s = Math.sin(h);
+    const lx = dirX * c - dirZ * s, lz = dirX * s + dirZ * c, l = Math.hypot(lx, lz) || 1;
+    const Z = this.hz || (this.hz = { zone: null, t: 0, dur: 0.45, k: 0, side: 1, x: 0, z: 0 });
+    Z.zone = zone; Z.side = side > 0 ? 1 : -1; Z.k = clamp(k, 0.3, 1.6); Z.x = lx / l; Z.z = lz / l;
+    Z.dur = zone === 'head' ? 0.6 : zone === 'leg' ? 0.55 : 0.4; Z.t = Z.dur;
+  }
+  // [mekanik tepki] yere savrulma (patlama / araç çarpması): düşer, bir süre yatar, kalkar. dur: toplam süre (sn)
+  knockdown(dirX, dirZ, dur = 2.2) {
+    const h = this.root.rotation.y, c = Math.cos(h), s = Math.sin(h);
+    const lx = dirX * c - dirZ * s, lz = dirX * s + dirZ * c, l = Math.hypot(lx, lz) || 1;
+    if (this.kd) { this.kd.dur = Math.max(this.kd.dur, this.kd.t + dur * 0.6); return; }
+    this.kd = { t: 0, dur: Math.max(1.6, dur), dir: { x: lx / l, z: lz / l } };
+    this.D0.set(this.P);
+  }
   // ---- [savaş kancası: yara / topallama / yere yığılma] (API: addWound, clearWounds, setLimp, setDowned) ----
   // boneName: BONES adı; local: kemik uzayında konum (THREE.Vector3); out: dışa normal (kemik uzayı, isteğe bağlı)
   addWound(boneName, local, size = 1, out = null) {
@@ -456,6 +472,9 @@ export class CharacterModel {
     fistW[0] = 0; fistW[1] = 0;
     // ---- ölüm ----
     if (st.dead) {
+      // yerdeyken öldü: yatış pozundan devam (yeniden ayağa kalkıp düşmesin)
+      if (this.deadT === 0 && this.kd) { this.deathDir = this.kd.dir; this.deadT = 1.0; this.DS.fill(0); this.settled = false; }
+      this.kd = null;
       if (this.deadT === 0) { this.D0.set(P); this.DS.fill(0); this.settled = false; if (!this.deathDir) this.die(); }
       this.deadT += dt;
       if (this.settled) return;
@@ -469,7 +488,21 @@ export class CharacterModel {
       return;
     }
     if (this.deadT > 0) { this.deadT = 0; this.deathDir = null; this.settled = false; }
-    if (st.downed) { this.poseDowned(dt, st); return; } // [savaş kancası] yaralı, yerde sürünüyor
+    if (st.downed) { this.kd = null; this.poseDowned(dt, st); return; } // [savaş kancası] yaralı, yerde sürünüyor
+    // [mekanik tepki] yere savrulma: düşüş (ölüm pozunun ilk 0.9 sn'si), yatış, ters yönde kalkış
+    if (this.kd) {
+      const K = this.kd;
+      K.t += dt;
+      const rise = 0.95, T = K.t < K.dur - rise ? Math.min(1.05, K.t) : Math.max(0, (K.dur - K.t) / rise) * 1.05;
+      const save = this.deathDir; this.deathDir = K.dir;
+      this.poseDeath(P, T);
+      this.deathDir = save;
+      this.apply(P, 0);
+      const crk = this._cr || (this._cr = [0, 0]); crk[0] = 0.3; crk[1] = this.weaponMesh ? 0.7 : 0.3;
+      this.applyHands(dt, crk);
+      if (K.t >= K.dur) { this.kd = null; this._rpx = undefined; }
+      return;
+    }
     if (this.downK) this.downK = 0;
     // ---- ağırlıklar ----
     // kök hareketi: bu karede kök gerçekten ne kadar ilerledi? (duvara yürürken yerinde koşma / ay yürüyüşü olmasın)
@@ -849,6 +882,27 @@ export class CharacterModel {
       addJ(P, J.spine, Fl.z * 0.35, 0, -Fl.x * 0.3); addJ(P, J.chest, Fl.z * 0.3, Fl.x * 0.2 * (this.hitSide || 1), -Fl.x * 0.25);
       addJ(P, J.shL, -0.2 * m, 0, 0.35 * m); addJ(P, J.shR, -0.2 * m, 0, 0.35 * m);
       pel.x -= Fl.x * 0.05; pel.z -= Fl.z * 0.05;
+    }
+    // bölgesel irkilme (hitZone): hızlı vuruş, yumuşak sönüm
+    const HZ = this.hz;
+    if (HZ && HZ.t > 0) {
+      HZ.t -= dt;
+      const u = 1 - HZ.t / HZ.dur, w = Math.min(1, u / 0.12) * (1 - sm(u)) * HZ.k;
+      if (HZ.zone === 'head') {
+        // baş merminin gittiği yöne savrulur, gövde de takip eder
+        addJ(P, J.neck, 0.35 * w * HZ.z, 0, -0.3 * w * HZ.x); addJ(P, J.head, 0.55 * w * HZ.z, 0.25 * w * HZ.x, -0.45 * w * HZ.x);
+        addJ(P, J.chest, 0.15 * w * HZ.z, 0, -0.12 * w * HZ.x);
+      } else if (HZ.zone === 'arm') {
+        const sh = HZ.side > 0 ? J.shR : J.shL, el = HZ.side > 0 ? J.elR : J.elL;
+        addJ(P, sh, 0.55 * w * (HZ.z >= 0 ? 1 : -1), 0, 0.45 * w * HZ.side); addJ(P, el, 0.4 * w, 0, 0);
+        addJ(P, J.chest, 0, -0.3 * w * HZ.side, 0);
+      } else if (HZ.zone === 'leg') {
+        // diz bükülür, kalça çöker (topallayarak toparlanır)
+        const hp = HZ.side > 0 ? J.hipR : J.hipL, kn = HZ.side > 0 ? J.knR : J.knL;
+        addJ(P, hp, -0.35 * w, 0, 0); addJ(P, kn, 0.85 * w, 0, 0);
+        addJ(P, J.spine, 0.18 * w, 0, 0.12 * w * HZ.side);
+        hipsY -= 0.1 * w;
+      }
     }
 
     // ---- baş: sabitleme + bakış ----

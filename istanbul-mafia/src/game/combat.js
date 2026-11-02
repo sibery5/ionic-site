@@ -238,11 +238,12 @@ export class Combat {
       const a = list[n];
       if (a === ignore || a.dead || a.vehicle || a.inInteriorOther) continue;
       const cr = a.crouch ? 0.3 : 0;
-      // [savaş] yerde sürünen: tek alçak küre (gövde)
-      const K = a.downed ? 1 : 3;
+      // [savaş] yerde sürünen / yere savrulmuş: tek alçak küre (gövde)
+      const low = a.downed || a.kdT > 0.5;
+      const K = low ? 1 : 3;
       for (let k = 0; k < K; k++) {
-        const h = a.downed ? 0.28 : k === 0 ? 1.65 - cr : k === 1 ? 1.15 - cr : 0.55;
-        const r = a.downed ? 0.5 : k === 0 ? 0.16 : k === 1 ? 0.38 : 0.3;
+        const h = low ? 0.28 : k === 0 ? 1.65 - cr : k === 1 ? 1.15 - cr : 0.55;
+        const r = low ? 0.5 : k === 0 ? 0.16 : k === 1 ? 0.38 : 0.3;
         const cx = a.pos.x, cy = a.pos.y + h, cz = a.pos.z;
         const ox = origin.x - cx, oy = origin.y - cy, oz = origin.z - cz;
         const b = ox * dir.x + oy * dir.y + oz * dir.z;
@@ -250,7 +251,7 @@ export class Combat {
         const disc = b * b - c;
         if (disc < 0) continue;
         const t = -b - Math.sqrt(disc);
-        if (t > 0 && t < bt) { bt = t; best = a; head = !a.downed && k === 0; bk = a.downed ? 1 : k; }
+        if (t > 0 && t < bt) { bt = t; best = a; head = !low && k === 0; bk = low ? 1 : k; }
       }
     }
     if (!best) return null;
@@ -260,8 +261,9 @@ export class Combat {
     const lat = hx * -fz + hz * fx;
     const side = lat >= 0 ? 1 : -1;
     let zone = bk === 0 ? 'head' : bk === 2 ? 'leg' : 'torso';
-    if (zone === 'torso' && !best.downed && Math.abs(lat) > 0.2 && hy > 0.85) zone = 'arm';
-    if (zone === 'torso' && !best.downed && hy < 0.86) zone = 'leg';
+    const lowB = best.downed || best.kdT > 0.5;
+    if (zone === 'torso' && !lowB && Math.abs(lat) > 0.2 && hy > 0.85) zone = 'arm';
+    if (zone === 'torso' && !lowB && hy < 0.86) zone = 'leg';
     return { actor: best, t: bt, head, zone, side };
   }
 
@@ -324,6 +326,7 @@ export class Combat {
     const hp = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
     this.addTracer(muzzle || origin, hp, def.pellets ? 0.012 : def.sound === 'sniper' ? 0.03 : 0.02);
     if (!attacker.isPlayer) this.whizCheck(origin, dir, t, def, ah && ah.actor.isPlayer);
+    this.nearMiss(origin, dir, t, attacker, ah && !vh ? ah.actor : null);
     const loud = this.sndBudget-- > 0;
     if (vh) {
       vh.vehicle.damage(def.dmg * 1.2, attacker);
@@ -370,6 +373,25 @@ export class Combat {
     this.whizT = 0.07;
     // geçiş noktası dinleyicinin solunda/sağında
     audio.whiz(1 - d / 3, -cx, -cz, def.sound === 'rifle' || def.sound === 'sniper');
+  }
+
+  // [mekanik tepki] mermi yakından geçti: siviller çömelir/kaçar, savaşanlar baskı altına girer (siper, çömelme),
+  // sokak hayvanları ürker (sıyırırsa acıyla kaçar). Atış başına bir tarama; her karede maliyet yok.
+  nearMiss(origin, dir, t, attacker, hitActor) {
+    const g = this.game, L = g.npcs.list;
+    for (let i = 0; i < L.length; i++) {
+      const n = L[i];
+      if (n === attacker || n === hitActor || n.dead || n.vehicle || n.passengerOf) continue;
+      const lx = n.pos.x - origin.x, ly = n.pos.y + 1.2 - origin.y, lz = n.pos.z - origin.z;
+      const sp = lx * dir.x + ly * dir.y + lz * dir.z;
+      if (sp < 1 || sp > t + 1.5) continue;
+      const cx = lx - dir.x * sp, cy = ly - dir.y * sp, cz = lz - dir.z * sp;
+      const d2 = cx * cx + cy * cy + cz * cz;
+      if (d2 > 6.25) continue;
+      n.onNearMiss && n.onNearMiss(attacker, Math.sqrt(d2));
+    }
+    const A = g.animals;
+    if (A && A.onBullet && !g.player.inInterior) A.onBullet(origin, dir, t);
   }
 
   // Et isabeti: yönlü kan, duvara sıçrayan kan, ses, ölüm halinde kan gölü
@@ -439,16 +461,33 @@ export class Combat {
     _w2.copy(dir).negate();
     g.particles.blood(hp, 3, _w2, target.pos.y + 0.005);
     if (target.dead) return;
+    const strongZ = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
+    if (M.hitZone) M.hitZone(zone, side, strongZ, dir.x, dir.z);
+    if (zone === 'arm') {
+      // kol yarası: nişan titrer, isabet düşer (oyuncuda saçılma artar)
+      target.armHurt = Math.min(1, (target.armHurt || 0) + 0.5);
+      if (!target.isPlayer) target.aimT = 0;
+    }
     if (zone === 'leg') {
       target.limp = Math.min(1, (target.limp || 0) + 0.55); target.limpSide = side > 0 ? 1 : 0;
       M.setLimp && M.setLimp(target.limp, target.limpSide);
       if (!target.isPlayer) target.limpMul = 1 - 0.5 * target.limp;
     }
     if (target.isPlayer) return;
-    const strong = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
+    const strong = strongZ;
     if (zone === 'arm' && !target.downed && target.wdef && target.wdef.type === 'gun' && Math.random() < 0.45) this.dropWeapon(target);
-    if (zone === 'torso' || zone === 'head') target.knock = { x: dir.x * 1.1 * strong, z: dir.z * 1.1 * strong, t: 0.22 };
-    if (zone === 'leg' && strong > 1.1) target.knock = { x: dir.x * 0.6, z: dir.z * 0.6, t: 0.2 };
+    if (zone === 'torso') target.knock = { x: dir.x * 1.1 * strong, z: dir.z * 1.1 * strong, t: 0.22 };
+    if (zone === 'head') {
+      // başa isabet (kask/zırh sayesinde hayatta): ağır sersemleme, geriye savrulma; güçlü darbede yere düşer
+      target.knock = { x: dir.x * 1.8 * strong, z: dir.z * 1.8 * strong, t: 0.3 };
+      target.stunT = Math.max(target.stunT || 0, 0.7 + 0.3 * strong);
+      if (strong > 1.1 && Math.random() < 0.45 && target.knockdown) target.knockdown(dir.x, dir.z, 2.2);
+    }
+    if (zone === 'leg' && strong > 1.1) {
+      target.knock = { x: dir.x * 0.6, z: dir.z * 0.6, t: 0.2 };
+      // ağır bacak isabeti: dizinin üstüne çöker
+      if (target.limp > 0.9 && Math.random() < 0.3 && target.knockdown) target.knockdown(dir.x, dir.z, 1.7);
+    }
     const pb = zone === 'head' ? 1 : zone === 'torso' ? 0.65 : 0.45;
     if (Math.random() < pb) this.applyBleed(target, attacker, 0.8 + Math.random() * 1.6, 8 + Math.random() * 8);
     // ağır yaralı: yere yığılıp sürünür (görev hedefleri, patronlar ve sabit NPC'ler hariç)
@@ -479,10 +518,14 @@ export class Combat {
     const ang = Math.atan2(rgt, fwd);
     const k = Math.min(1, 0.3 + dealt / 22);
     if (g.ui.hitIndicator) g.ui.hitIndicator(ang, k);
-    g.cameraShake(0.25 + k * 0.5);
+    // bölge: baş -> sert sarsıntı ve geriye savrulan bakış; kol -> nişan kayar; bacak -> çöküş
+    const zk = zone === 'head' ? 2 : zone === 'arm' ? 1.3 : 1;
+    g.cameraShake(Math.min(1.6, (0.25 + k * 0.5) * zk));
     if (!p.vehicle) {
-      p.camYaw -= Math.sin(ang) * 0.04 * k;
-      p.camPitch -= 0.02 * k;
+      p.camYaw -= Math.sin(ang) * 0.04 * k * zk;
+      p.camPitch -= (zone === 'head' ? 0.07 : 0.02) * k;
+      if (zone === 'arm') p.camYaw += (Math.random() - 0.5) * 0.05 * k;
+      if (zone === 'leg') p.camDip = Math.max(p.camDip || 0, 0.12 * k);
       p.staggerT = 0.16 + 0.14 * k; p.staggerX = dir.x * 1.5 * k; p.staggerZ = dir.z * 1.5 * k;
     }
     audio.playerHurt(k);
@@ -535,7 +578,7 @@ export class Combat {
   }
   healPlayerWounds() {
     const p = this.game.player;
-    p.bleed = 0; p.limp = 0;
+    p.bleed = 0; p.limp = 0; p.armHurt = 0;
     if (p.model.setLimp) p.model.setLimp(0);
     if (p.model.clearWounds) p.model.clearWounds();
   }
@@ -662,8 +705,12 @@ export class Combat {
       if (d < radius) {
         const k = 1 - d / radius;
         a.takeDamage(dmg * k, attacker, 'explosion');
-        if (!a.dead) a.knock = { x: (a.pos.x - x) / (d || 1) * 8 * k, z: (a.pos.z - z) / (d || 1) * 8 * k, t: 0.3 };
-        else {
+        if (!a.dead) {
+          const ux = (a.pos.x - x) / (d || 1), uz = (a.pos.z - z) / (d || 1);
+          a.knock = { x: ux * 8 * k, z: uz * 8 * k, t: 0.3 };
+          // [mekanik tepki] patlama dalgası: yakındakiler yere savrulur
+          if (k > 0.25 && a.knockdown) a.knockdown(ux, uz, 1.8 + 1.6 * k);
+        } else {
           tmp.set(a.pos.x, a.pos.y + 1, a.pos.z);
           _a.set(a.pos.x - x, 0.6, a.pos.z - z).normalize();
           g.particles.bloodSpray(tmp, _a, 14, a.pos.y + 0.005, 1.5);
@@ -701,6 +748,37 @@ export class Combat {
       if (d < radius) n.hearThreat && n.hearThreat(source, d);
     }
     if (source && source.isPlayer) g.wanted.onPlayerNoise(x, z, radius);
+    if (source && !source.inInterior) this.trafficPanic(x, z, radius, source);
+  }
+
+  // [mekanik tepki] silah sesi / patlama: trafikteki sürücüler panikler — tehdit öndeyse geri kaçar, yanından gaza basar,
+  // duran araçtan inip kaçan da olur. Seyrek tarama (otomatik silahta her mermide değil).
+  trafficPanic(x, z, radius, source) {
+    const g = this.game, now = performance.now();
+    if (now - (this.panicScan || 0) < 250) return;
+    this.panicScan = now;
+    const R = Math.min(45, radius * 0.7);
+    for (const v of g.vehicles.list) {
+      const ai = v.ai;
+      if (!ai || ai.empty || ai.mode !== 'traffic' || v.driver || v.mission || v.police || v.destroyed || v.kind !== 'car') continue;
+      const dx = x - v.pos.x, dz = z - v.pos.z, d = Math.hypot(dx, dz);
+      if (d > R) continue;
+      const f = v.fwd || { x: Math.sin(v.heading), z: Math.cos(v.heading) };
+      const ahead = (dx * f.x + dz * f.z) / (d || 1);
+      if (v.speed < 1.5 && d < 14 && v.type !== 'bus' && Math.random() < 0.35 && g.npcs.list.length < 80) {
+        // sürücü kapıyı açıp tehditten uzak taraftan kaçar
+        v.ai = { empty: true }; v.parked = true;
+        if (v.controls) { v.controls.throttle = 0; v.controls.handbrake = true; }
+        const rx = -f.z, rz = f.x, sd = (dx * rx + dz * rz) > 0 ? -1 : 1, off = v.def.wid / 2 + 0.8;
+        const n = g.npcs.add('civilian', v.pos.x + rx * off * sd, v.pos.z + rz * off * sd);
+        n.hearThreat(source, d);
+        if (Math.random() < 0.5) g.ui.bark(n, ['Vuruyorlar!', 'Arabayı bırak, kaç!', 'Allah\'ım!'][Math.floor(Math.random() * 3)]);
+        continue;
+      }
+      if (ahead > 0.55 && d < 22 && v.speed < 6) { ai.reverseT = Math.max(ai.reverseT || 0, 1.6); ai.panic = 0; }
+      else ai.panic = Math.max(ai.panic || 0, 5 + Math.random() * 3);
+      if (v.honkT <= 0 && Math.random() < 0.4) { audio.horn(v.pos.x, v.pos.z); v.honkT = 2 + Math.random() * 2; }
+    }
   }
 
   // ---------------- el bombası yörünge önizlemesi ----------------

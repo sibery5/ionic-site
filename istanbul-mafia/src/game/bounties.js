@@ -142,7 +142,7 @@ export class Bounties {
     if (t.dead) { this.payout(b, false); return; }
     const d = Math.hypot(p.pos.x - t.pos.x, p.pos.z - t.pos.z);
     // fark edilme: yakınlık, silah çekme ya da ateş
-    if (!L.alert && (d < 18 || (d < 40 && p.aiming) || t.hp < t.maxHp || L.guards.some((n) => n.hp < n.maxHp || n.dead))) {
+    if (!L.alert && (d < 18 || (d < 40 && p.aiming) || t.hp < t.maxHp || t.underFireT > 0 || L.guards.some((n) => n.hp < n.maxHp || n.dead || n.underFireT > 0))) {
       L.alert = true;
       for (const n of L.guards) if (!n.dead) { n.hostile = true; n.engage(p, 0.8); }
       g.ui.bark(t, 'Ödül avcısı! Vurun şunu!');

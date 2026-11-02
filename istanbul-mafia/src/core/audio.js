@@ -512,6 +512,8 @@ export class AudioEngine {
   }
   phoneBeep(n = 1) { for (let i = 0; i < n; i++) this.tone({ freq: 425, dur: 0.18, type: 'sine', gain: 0.12, delay: i * 0.32 }); }
   meow(x, z) { this.tone({ freq: 700, freq2: 1100, dur: 0.15, type: 'sawtooth', gain: 0.08, x, z, range: 25 }); this.tone({ freq: 1100, freq2: 500, dur: 0.35, type: 'sawtooth', gain: 0.08, x, z, range: 25, delay: 0.15 }); }
+  // acı inlemesi (yaralanan sokak hayvanı): köpekte tiz kaynama, kedide çığlık
+  yelp(x, z, dog) { if (dog) { this.tone({ freq: 1400, freq2: 700, dur: 0.18, type: 'sawtooth', gain: 0.12, x, z, range: 50 }); this.tone({ freq: 1200, freq2: 600, dur: 0.22, type: 'sawtooth', gain: 0.1, x, z, range: 50, delay: 0.22 }); } else this.tone({ freq: 900, freq2: 1600, dur: 0.4, type: 'sawtooth', gain: 0.1, x, z, range: 35 }); }
   bark(x, z) { this.noiseBurst({ dur: 0.12, freq: 700, type: 'bandpass', q: 3, gain: 0.5, x, z, range: 60 }); this.tone({ freq: 300, freq2: 180, dur: 0.12, type: 'sawtooth', gain: 0.15, x, z, range: 60 }); }
   seagull(x, z, k = 1) {
     for (let i = 0; i < 3; i++) this.tone({ freq: 1600 + Math.random() * 300, freq2: 900, dur: 0.22, type: 'sawtooth', gain: 0.05 * k, x, z, range: 150, delay: i * 0.26 });
