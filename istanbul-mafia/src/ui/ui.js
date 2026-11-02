@@ -1094,17 +1094,27 @@ export class UI {
     if (fn) fn.call(this);
   }
 
-  shop_gun() {
+  // cat: null (hepsi) | 'pistol' | 'long' | 'side' (yakın dövüş + ağır) | 'ammo' (sahip olunanların mermisi + yelek)
+  shop_gun(cat = null) {
     const g = this.game, s = g.state, pl = g.player;
-    const p = this.panel('SİLAHÇI CEMAL', 'Parayı veren düdüğü çalar.');
+    const sub = { pistol: 'Vitrin: tabancalar', long: 'Pano: tüfekler ve makineliler', side: 'Yakın dövüş ve ağır silahlar', ammo: 'Cephane ve çelik yelek' }[cat] || 'Parayı veren düdüğü çalar.';
+    const inCat = (id) => {
+      const d = WEAPONS[id];
+      if (!cat) return true;
+      if (cat === 'ammo') return !!pl.weapons[id] && d.type !== 'melee';
+      if (cat === 'pistol') return d.type === 'gun' && d.slot === 2;
+      if (cat === 'long') return d.type === 'gun' && d.slot >= 3;
+      return d.type === 'melee' || d.type === 'launcher' || d.type === 'throw';
+    };
+    const p = this.panel('SİLAHÇI CEMAL', sub);
     const m = this.openModal(p, { cls: 'right' });
     $('.x', p).onclick = () => this.closeModal(m);
     const body = $('.panel-body', p);
     const render = () => {
       body.innerHTML = '';
-      const req = { m4: 300, sniper: 300, rpg: 700, grenade: 100, ak: 100 };
+      const req = { m4: 300, sniper: 300, rpg: 700, grenade: 100, ak: 100, akrep: 100, kartal: 150, tufan: 350, bozkurt: 350, simsek: 800 };
       for (const id of WEAPON_ORDER) {
-        if (id === 'fists') continue;
+        if (id === 'fists' || !inCat(id)) continue;
         const d = WEAPONS[id];
         const owned = !!pl.weapons[id];
         const locked = (req[id] || 0) > s.respect;
@@ -1125,6 +1135,7 @@ export class UI {
         row.appendChild(act);
         body.appendChild(row);
       }
+      if (cat && cat !== 'ammo') return;
       const ar = el('div', 'item');
       ar.innerHTML = `<div class="ii">${svgImg('shield', '#6ab8ff', 54)}</div><div class="in"><b>Çelik Yelek</b><small>Zırhı 100'e tamamlar (şu an ${Math.round(pl.armor)})</small></div>`;
       const a = el('div', 'ia'); a.appendChild(this.btn(formatMoney(2000), () => { if (pl.armor >= 100) return this.notify('Zırhın zaten tam', 'warn'); this.buy(2000, () => { pl.armor = 100; render(); }); }, 'gold')); ar.appendChild(a);
