@@ -13,7 +13,18 @@ const GUN = {
   rifle: { click: 0.75, body: [1650, 0.12, 1.2], thump: [145, 40, 0.16, 0.9], tail: [820, 0.9, 0.48], range: 390, crack: true },
   sniper: { click: 0.85, body: [1250, 0.22, 1.6], thump: [100, 30, 0.3, 1.35], tail: [600, 1.6, 0.7], range: 520, crack: true },
   rpg: { click: 0.3, body: [520, 0.5, 1.2], thump: [80, 30, 0.4, 1.0], tail: [420, 1.2, 0.5], range: 360, whoosh: true },
+  // [savaş: yeni silah sesleri] boom = ek alçak patlama, slap = bina yankısı (sn)
+  pistol2: { click: 0.55, body: [2100, 0.09, 0.95], thump: [180, 52, 0.11, 0.7], tail: [1000, 0.55, 0.3], range: 250, slap: 0.11 },
+  magnum: { click: 0.8, body: [1150, 0.2, 1.55], thump: [110, 30, 0.26, 1.3], tail: [640, 1.2, 0.62], range: 380, boom: 0.6, slap: 0.16 },
+  smg2: { click: 0.4, body: [2600, 0.06, 0.7], thump: [210, 70, 0.07, 0.42], tail: [1300, 0.4, 0.2], range: 200 },
+  sawed: { click: 0.7, body: [820, 0.28, 1.7], thump: [95, 28, 0.32, 1.5], tail: [560, 1.2, 0.66], range: 300, boom: 0.8, slap: 0.14 },
+  lmg: { click: 0.75, body: [1500, 0.13, 1.25], thump: [130, 38, 0.17, 1.0], tail: [780, 0.9, 0.5], range: 420, crack: true, slap: 0.2 },
+  dmr: { click: 0.85, body: [1400, 0.17, 1.4], thump: [115, 34, 0.24, 1.15], tail: [700, 1.3, 0.6], range: 480, crack: true, slap: 0.22 },
+  gl: { click: 0.3, body: [420, 0.16, 1.1], thump: [70, 40, 0.18, 1.2], tail: [380, 0.5, 0.25], range: 260, boom: 0.3 },
 };
+// [savaş: telsiz/megafon sesi] Türkçe ünlülerin yaklaşık formantları (F1, F2)
+const VOWELS = { a: [780, 1250], e: [520, 1900], ı: [380, 1450], i: [300, 2300], o: [520, 880], ö: [460, 1650], u: [340, 820], ü: [300, 1750] };
+const HISS = 'sşzcçfhj', STOP = 'tkpgdbq';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 export class AudioEngine {
@@ -198,6 +209,11 @@ export class AudioEngine {
     this.nz(o.node, t + 0.02, { dur: P.tail[1], freq: P.tail[0], q: 0.5, type: 'lowpass', gain: P.tail[2] * (0.5 + (1 - near) * 0.6), attack: 0.03, sweep: P.tail[0] * 0.35 });
     if (P.crack && o.d > 25) this.nz(o.node, t, { dur: 0.008, freq: 3500, type: 'highpass', gain: 0.5, attack: 0.0005 });
     if (P.whoosh) this.nz(o.node, t + 0.03, { dur: 0.9, freq: 700, q: 1.5, type: 'bandpass', gain: 0.6, attack: 0.05, sweep: 2200 });
+    // [savaş] iri kalibre ek gümleme + bina duvarından dönen tokat yankısı
+    if (P.boom) this.osc(o.node, t, { freq: 75 * pit, freq2: 26, dur: 0.45, type: 'sine', gain: P.boom * (0.6 + near * 0.6), attack: 0.003 });
+    if (P.slap && o.d < 120) this.nz(o.node, t + P.slap * (0.8 + Math.random() * 0.5), { dur: 0.09, freq: P.body[0] * 0.8, q: 0.9, type: 'bandpass', gain: P.body[2] * 0.28, attack: 0.002, sweep: P.body[0] * 0.4 });
+    if (kind === 'gl' && o.d < 25) this.clickAt(o.node, t + 0.25, 1300, 0.3, 0.05);
+    if (kind === 'sawed' && o.d < 18) this.clickAt(o.node, t + 0.12, 1600, 0.2, 0.03);
     // mekanik devam: pompa / sürgü
     if (o.d < 18) {
       if (kind === 'shotgun') { this.clickAt(o.node, t + 0.36, 1500, 0.35, 0.04); this.nz(o.node, t + 0.38, { dur: 0.08, freq: 900, type: 'bandpass', q: 1.5, gain: 0.2 }); this.clickAt(o.node, t + 0.5, 1800, 0.4, 0.04); }
@@ -275,7 +291,104 @@ export class AudioEngine {
     const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
     os.connect(g); g.connect(o.node);
     os.start(t); lfo.start(t); os.stop(t + 0.45); lfo.stop(t + 0.45);
+    // [savaş] taş/beton kıymığı çıtırtısı
+    this.nz(o.node, t, { dur: 0.03, freq: 4200, q: 1.2, type: 'bandpass', gain: 0.25, attack: 0.0006 });
   }
+
+  // ---------------- [savaş: yeni ses işlevleri] ----------------
+  // oyuncu vurulunca: göğüse tok darbe + kısa inleme (k: şiddet)
+  playerHurt(k = 1) {
+    if (!this.ctx) return;
+    const o = this.spatial(undefined, undefined, 1, 0);
+    const t = this.ctx.currentTime;
+    this.osc(o.node, t, { freq: 90, freq2: 40, dur: 0.18, type: 'sine', gain: 0.6 * k });
+    this.nz(o.node, t, { dur: 0.06, freq: 900, gain: 0.35 * k });
+    // inleme: ünlü formantlı kısa ses
+    const f0 = 115 + Math.random() * 25;
+    this.osc(o.node, t + 0.04, { freq: f0 * 1.15, freq2: f0 * 0.8, dur: 0.24, type: 'sawtooth', gain: 0.035 * k, attack: 0.02 });
+  }
+  // kalp atışı (ağır yaralı / kanama)
+  heartbeat(k = 1) {
+    if (!this.ctx) return;
+    const o = this.spatial(undefined, undefined, 1, 0), t = this.ctx.currentTime;
+    this.osc(o.node, t, { freq: 58, freq2: 38, dur: 0.12, gain: 0.45 * k });
+    this.osc(o.node, t + 0.2, { freq: 52, freq2: 34, dur: 0.14, gain: 0.32 * k });
+  }
+  // helikopter pervane darbeleri (yaklaşık 0.3 sn'lik dilim; çağıran tekrarlar)
+  heliChop(x, z, k = 1) {
+    const o = this.spatial(x, z, 420, 0.4);
+    if (!o) return;
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 4; i++) this.nz(o.node, t + i * 0.075, { dur: 0.06, freq: 260, q: 0.8, type: 'lowpass', gain: 0.75 * k, attack: 0.004, buf: this.brownBuf });
+    this.nz(o.node, t, { dur: 0.32, freq: 1800, q: 0.6, type: 'bandpass', gain: 0.05 * k, attack: 0.05 });
+  }
+  // Prosedürel konuşma: ünlü formantları + ünsüz gürültüleri; mega=true megafon/telsiz zinciri (bant geçiren + bozulma + yankı)
+  // Dönüş: süre (sn)
+  voice(text, x, z, { mega = true, pitch = 125, rate = 1, gain = 1 } = {}) {
+    if (!this.ctx || !text) return 0;
+    const o = this.spatial(x, z, mega ? 170 : 55, mega ? 0.45 : 0.1);
+    if (!o) return 0;
+    const c = this.ctx;
+    const t0 = c.currentTime + 0.04;
+    const bus = c.createGain(); bus.gain.value = 0.9 * gain;
+    if (mega) {
+      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 480;
+      const pk = c.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1750; pk.gain.value = 10; pk.Q.value = 1.1;
+      const ws = c.createWaveShaper();
+      if (!this._megaCurve) { const n = 512, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const xx = i / (n - 1) * 2 - 1; cv[i] = (1 + 7) * xx / (1 + 7 * Math.abs(xx)); } this._megaCurve = cv; }
+      ws.curve = this._megaCurve;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3300;
+      const og = c.createGain(); og.gain.value = 0.5;
+      bus.connect(hp); hp.connect(pk); pk.connect(ws); ws.connect(lp); lp.connect(og); og.connect(o.node);
+      const dl = c.createDelay(0.6); dl.delayTime.value = 0.21; const fb = c.createGain(); fb.gain.value = 0.28;
+      og.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(o.node);
+      // açılış cızırtısı
+      this.osc(o.node, t0 - 0.03, { freq: 1900, dur: 0.06, gain: 0.05 });
+      this.nz(o.node, t0 - 0.03, { dur: 0.05, freq: 2500, q: 1, type: 'bandpass', gain: 0.12 });
+    } else bus.connect(o.node);
+    // kaynak: testere dişi + formant süzgeçleri
+    const src = c.createOscillator(); src.type = 'sawtooth';
+    const vg = c.createGain(); vg.gain.setValueAtTime(0, t0);
+    const f1 = c.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
+    const f2 = c.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 7;
+    const g2 = c.createGain(); g2.gain.value = 0.7;
+    src.connect(vg); vg.connect(f1); vg.connect(f2); f1.connect(bus); f2.connect(g2); g2.connect(bus);
+    const s = text.toLocaleLowerCase('tr');
+    const syl = 0.12 / rate;
+    let t = t0, n = 0;
+    const total = s.length;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      const V = VOWELS[ch];
+      if (V) {
+        const prog = i / total;
+        const ex = s.indexOf('!', i) >= 0 && s.indexOf('!', i) - i < 6 ? 1.18 : 1;
+        const p = pitch * (1.12 - 0.22 * prog) * ex * (1 + Math.sin(n * 2.3) * 0.04);
+        src.frequency.setTargetAtTime(p, t, 0.02);
+        f1.frequency.setTargetAtTime(V[0], t, 0.015); f2.frequency.setTargetAtTime(V[1], t, 0.015);
+        vg.gain.setTargetAtTime(0.55, t, 0.012);
+        vg.gain.setTargetAtTime(0.12, t + syl * 0.75, 0.02);
+        t += syl; n++;
+      } else if (HISS.includes(ch)) {
+        this.nz(bus, t, { dur: 0.07 / rate, freq: ch === 'ş' || ch === 'ç' ? 3200 : 5200, q: 1.5, type: 'bandpass', gain: 0.35, attack: 0.01 });
+        t += 0.05 / rate;
+      } else if (STOP.includes(ch)) {
+        vg.gain.setTargetAtTime(0.0, t, 0.006);
+        this.nz(bus, t + 0.025 / rate, { dur: 0.025, freq: ch === 'k' || ch === 'g' ? 1800 : 3600, q: 1, type: 'bandpass', gain: 0.4, attack: 0.002 });
+        t += 0.04 / rate;
+      } else if (ch === ' ') { vg.gain.setTargetAtTime(0.02, t, 0.02); t += 0.05 / rate; }
+      else if (ch === '!' || ch === ',' || ch === '.' || ch === '?') { vg.gain.setTargetAtTime(0.0, t, 0.02); t += 0.18 / rate; }
+      else { // akıcı ünsüzler (l, r, m, n, y, v): sesli devam
+        vg.gain.setTargetAtTime(0.3, t, 0.015);
+        if (ch === 'r') { f1.frequency.setTargetAtTime(450, t, 0.01); }
+        t += 0.035 / rate;
+      }
+    }
+    vg.gain.setTargetAtTime(0, t, 0.03);
+    src.start(t0); src.stop(t + 0.3);
+    return t - t0;
+  }
+  megaphone(text, x, z, opts = {}) { return this.voice(text, x, z, Object.assign({ mega: true }, opts)); }
   bulletFlesh(x, z) {
     const o = this.spatial(x, z, 50, 0.05);
     if (!o) return;

@@ -58,6 +58,14 @@ export const ICONS = {
   w_sniper: S('<path d="M2 32 L18 26 L34 26 L34 24 L64 24 L64 27 L36 30 L28 40 L20 40 L18 32 L4 38Z"/><rect x="22" y="16" width="16" height="6" rx="3"/>'),
   w_rpg: S('<rect x="2" y="26" width="48" height="8" rx="2"/><path d="M50 22 L64 30 L50 38Z"/><rect x="16" y="34" width="5" height="10"/><rect x="30" y="34" width="5" height="10"/>'),
   w_grenade: S('<ellipse cx="32" cy="38" rx="16" ry="20"/><rect x="26" y="10" width="12" height="10"/><path d="M38 12 Q52 8 50 22" fill="none" stroke="currentColor" stroke-width="3"/><g fill="rgba(0,0,0,0.35)"><rect x="18" y="34" width="28" height="3"/><rect x="18" y="42" width="28" height="3"/></g>'),
+  // [savaş: yeni silah simgeleri]
+  w_kilic: S('<path d="M6 18 L56 18 L56 29 L30 29 L27 52 L12 52 L17 29 L6 29Z"/><rect x="40" y="29" width="10" height="4" fill="rgba(0,0,0,0.35)"/>'),
+  w_kartal: S('<path d="M2 16 L62 16 L62 30 L32 30 L28 54 L12 54 L16 30 L2 30Z"/><rect x="6" y="19" width="52" height="3" fill="rgba(0,0,0,0.3)"/>'),
+  w_akrep: S('<path d="M4 20 L50 20 L50 23 L62 23 L62 29 L50 29 L50 31 L40 31 L38 52 L31 52 L33 31 L22 31 L18 46 L10 46 L14 31 L4 31Z"/><rect x="42" y="31" width="5" height="12"/>'),
+  w_cifte: S('<path d="M4 34 L14 26 L62 22 L62 30 L26 32 L22 44 L10 48 L4 44Z"/><path d="M26 25 L62 22" stroke="rgba(0,0,0,0.4)" stroke-width="2"/>'),
+  w_tufan: S('<path d="M2 28 L14 22 L36 22 L38 18 L52 18 L52 22 L64 22 L64 26 L40 26 L40 30 L30 30 L30 44 L24 44 L24 30 L16 30 L4 36Z"/><rect x="18" y="30" width="12" height="12" fill="rgba(0,0,0,0.35)"/><path d="M50 26 L46 40 M54 26 L58 40" stroke="currentColor" stroke-width="2.5"/>'),
+  w_bozkurt: S('<path d="M2 32 L16 26 L34 26 L34 24 L64 24 L64 27 L36 30 L30 40 L22 40 L20 32 L4 38Z"/><rect x="20" y="16" width="18" height="6" rx="3"/><rect x="28" y="30" width="5" height="9"/>'),
+  w_simsek: S('<rect x="20" y="22" width="40" height="10" rx="3"/><circle cx="24" cy="34" r="10"/><path d="M4 30 L16 26 L16 38 L4 40Z"/><rect x="40" y="32" width="5" height="12"/>'),
   car: S('<path d="M6 40 L10 26 Q12 20 20 20 L44 20 Q52 20 54 26 L58 40 L58 48 L6 48Z"/><circle cx="18" cy="48" r="6" fill="#111"/><circle cx="46" cy="48" r="6" fill="#111"/><path d="M16 26 L48 26 L50 34 L14 34Z" fill="rgba(0,0,0,0.4)"/>'),
   respect: S('<path d="M8 50 L14 18 L26 34 L32 10 L38 34 L50 18 L56 50Z"/><rect x="8" y="52" width="48" height="6"/>'),
 

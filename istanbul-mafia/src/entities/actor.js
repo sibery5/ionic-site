@@ -33,6 +33,8 @@ export class Actor {
     this.faction = 'civilian';
     this.grounded = true;
     this.swimming = false;
+    // [savaş: yara durumu] bleed: kanama seviyesi (oyuncu, 0..3), limp: topallama 0..1, downed: yerde sürünüyor
+    this.bleed = 0; this.limp = 0; this.limpSide = 0; this.downed = false; this.lastHurtT = 0;
   }
 
   giveWeapon(id, ammo = 0) {
@@ -108,7 +110,9 @@ export class Actor {
     this.game.combat.muzzleFlash(this, muzzle, dir, def);
     // [savaş entegrasyonu] oyuncu için silaha özgü kamera geri tepmesi
     if (this.isPlayer && def.recoil) { this.camPitch -= def.recoil * (this.aiming ? 0.7 : 1); this.camYaw += (Math.random() - 0.5) * 2 * (def.recoilH || 0); }
-    if (def.type === 'launcher') {
+    if (def.type === 'launcher' && def.lob) {
+      this.game.combat.lobGrenade(this, muzzle, dir, def); // [savaş] 40 mm bombaatar
+    } else if (def.type === 'launcher') {
       this.game.combat.rocket(this, muzzle, dir, def);
     } else {
       const n = def.pellets || 1;
@@ -141,6 +145,7 @@ export class Actor {
     }
     this.hp -= dmg;
     this.lastAttacker = attacker;
+    if (kind !== 'bleed') this.lastHurtT = 0;
     // vuruş tepkisi: saldırgandan kurbana doğru
     if (attacker && attacker !== this && attacker.pos) {
       const dx = this.pos.x - attacker.pos.x, dz = this.pos.z - attacker.pos.z;
@@ -153,6 +158,8 @@ export class Actor {
 
   die(attacker, kind) {
     this.dead = true;
+    // [savaş] yerde sürünürken ölen: yüzüstü pozdan devam (yeniden düşme animasyonu oynatma)
+    if (this.downed) { this.downed = false; this.model.setDowned && this.model.setDowned(false); this.model.deathDir = { x: 0, z: 1 }; this.model.deadT = 1.2; }
     if (!this.model.deathDir) {
       if (attacker && attacker !== this && attacker.pos) this.model.die(this.pos.x - attacker.pos.x, this.pos.z - attacker.pos.z);
       else this.model.die();
@@ -171,7 +178,7 @@ export class Actor {
     st.aim = this.aiming && this.weapon !== 'fists' && def.type !== 'melee';
     st.aimPitch = this.aimPitch; st.aimYaw = this.aimYaw || 0;
     st.twoHanded = def && !def.oneHand && def.type !== 'melee' && this.weapon !== 'grenade';
-    st.dead = this.dead; st.swim = this.swimming; st.recoil = this.recoil;
+    st.dead = this.dead; st.swim = this.swimming; st.recoil = this.recoil; st.downed = !!this.downed && !this.dead;
     st.reload = this.reloadT > 0 ? 1 - this.reloadT / (def.reload || 1.5) : 0;
     st.weapon = this.weapon; st.crouch = !!this.crouch; st.hands_up = !!this.handsUp; st.sit = !!this.sitting; st.talk = !!this.talking;
     st.air = this.isPlayer ? !this.grounded && !this.swimming : !!(this.jumping && !this.vault && !this.vaultT); st.vy = this.vy;

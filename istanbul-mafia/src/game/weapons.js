@@ -54,8 +54,37 @@ export const WEAPONS = {
     recoil: 0.03, recoilH: 0.01, bloom: 0, bloomMax: 0, adsMul: 0.6, flash: 1.6, shell: false,
   },
   grenade: { name: 'El Bombası', type: 'throw', dmg: 180, radius: 7, rate: 1, mag: 1, price: 900, ammoPrice: 900, slot: 8 },
+  // ---- [savaş: yeni silahlar] (kurgusal adlar). stagger: vurulanı sendeletme çarpanı ----
+  kilic: {
+    name: 'Kılıç 17', type: 'gun', sound: 'pistol2', dmg: 22, rate: 5, mag: 17, spread: 0.011, range: 90, price: 2400, ammoPrice: 6, slot: 2, oneHand: true, reload: 1.15,
+    recoil: 0.01, recoilH: 0.006, bloom: 0.007, bloomMax: 0.04, bloomRecover: 0.14, adsMul: 0.55, flash: 0.65, shell: 'pistol',
+  },
+  kartal: {
+    name: 'Boz Kartal .50', type: 'gun', sound: 'magnum', dmg: 78, rate: 1.7, mag: 7, spread: 0.01, range: 120, price: 9500, ammoPrice: 25, slot: 2, oneHand: true, reload: 1.9,
+    recoil: 0.05, recoilH: 0.016, bloom: 0.025, bloomMax: 0.06, bloomRecover: 0.1, adsMul: 0.5, flash: 1.35, shell: 'rifle', stagger: 1.4,
+  },
+  akrep: {
+    name: 'Akrep Kompakt', type: 'gun', sound: 'smg2', dmg: 14, rate: 16, mag: 30, spread: 0.04, range: 60, price: 5200, ammoPrice: 4, slot: 3, oneHand: true, auto: true, reload: 1.4,
+    recoil: 0.006, recoilH: 0.011, bloom: 0.004, bloomMax: 0.06, bloomRecover: 0.16, adsMul: 0.7, flash: 0.55, shell: 'pistol',
+  },
+  cifte: {
+    name: 'Kesik Çifte', type: 'gun', sound: 'sawed', dmg: 15, pellets: 11, rate: 3, mag: 2, spread: 0.14, range: 24, price: 4200, ammoPrice: 12, slot: 4, reload: 2.1,
+    recoil: 0.06, recoilH: 0.02, bloom: 0.01, bloomMax: 0.03, bloomRecover: 0.1, adsMul: 0.9, flash: 1.7, shell: false, stagger: 1.5,
+  },
+  tufan: {
+    name: 'Tufan Makineli', type: 'gun', sound: 'lmg', dmg: 30, rate: 11, mag: 100, spread: 0.028, range: 150, price: 42000, ammoPrice: 10, slot: 5, auto: true, reload: 4.6,
+    recoil: 0.01, recoilH: 0.012, bloom: 0.003, bloomMax: 0.06, bloomRecover: 0.1, adsMul: 0.55, flash: 1.1, shell: 'rifle',
+  },
+  bozkurt: {
+    name: 'Bozkurt Nişancı', type: 'gun', sound: 'dmr', dmg: 72, rate: 2.8, mag: 10, spread: 0.004, range: 260, price: 26000, ammoPrice: 30, slot: 6, scope: true, reload: 2.4,
+    recoil: 0.03, recoilH: 0.008, bloom: 0.012, bloomMax: 0.03, bloomRecover: 0.12, adsMul: 1, hipSpread: 0.025, flash: 1.0, shell: 'rifle',
+  },
+  simsek: {
+    name: 'Şimşek 40 Bombaatar', type: 'launcher', lob: true, sound: 'gl', dmg: 160, radius: 6, rate: 1.1, mag: 6, spread: 0.006, range: 200, price: 48000, ammoPrice: 600, slot: 7, reload: 3.4,
+    recoil: 0.04, recoilH: 0.01, bloom: 0, bloomMax: 0, adsMul: 0.6, flash: 0.9, shell: false,
+  },
 };
-export const WEAPON_ORDER = ['fists', 'knife', 'bat', 'pistol', 'revolver', 'uzi', 'shotgun', 'ak', 'm4', 'sniper', 'rpg', 'grenade'];
+export const WEAPON_ORDER = ['fists', 'knife', 'bat', 'pistol', 'kilic', 'revolver', 'kartal', 'uzi', 'akrep', 'shotgun', 'cifte', 'ak', 'm4', 'tufan', 'sniper', 'bozkurt', 'rpg', 'simsek', 'grenade'];
 
 // ---------------- malzemeler (tembel oluşturulur) ----------------
 let M = null;
@@ -464,6 +493,116 @@ const DEFS = {
     return { parts: { olive: [war], blued: [...fins, nozzle] }, muzzle: [0, 0, -0.35], ejector: null };
   },
 };
+
+// ---- [savaş: yeni silah modelleri] ----
+Object.assign(DEFS, {
+  kilic() {
+    // polimer gövdeli köşeli sürgü (kurgusal)
+    const slide = rbox(0.025, 0.031, 0.19, 0, 0.042, 0.053, 0.003);
+    const serr = [];
+    for (let i = 0; i < 6; i++) serr.push(box(0.026, 0.024, 0.0018, 0, 0.041, -0.03 + i * 0.0045));
+    const frame = profile([[-0.042, 0.004], [0.14, 0.004], [0.145, 0.014], [0.145, 0.027], [-0.042, 0.027]], 0.022, 0.002);
+    const grip = profile([[-0.046, 0.008], [0.004, 0.008], [0.008, -0.03], [0.004, -0.09], [-0.046, -0.09], [-0.056, -0.03], [-0.06, 0.01]], 0.029, 0.004);
+    grip.rotateX(0.3); grip.translate(0, 0, 0.012);
+    const guard = triggerGuard(-0.004, 0.06, 0.006, -0.028, 0.011);
+    const trig = box(0.005, 0.016, 0.004, 0, -0.006, 0.018);
+    const sights = [box(0.016, 0.007, 0.008, 0, 0.061, -0.035), box(0.004, 0.007, 0.006, 0, 0.061, 0.14)];
+    const bore = cyl(0.0045, 0.004, 0, 0.042, 0.149, 10);
+    return { parts: { polymer: [frame, grip, guard, ...sights, bore], gunmetal: [slide, ...serr], steel: [trig] }, muzzle: [0, 0.042, 0.152], ejector: [0.01, 0.058, 0.05] };
+  },
+  kartal() {
+    // iri krom gövde, üst kanal, kauçuk kabza
+    const slide = profile([[-0.055, 0.026], [0.2, 0.026], [0.2, 0.06], [0.19, 0.072], [-0.045, 0.072], [-0.055, 0.062]], 0.032, 0.003);
+    const ribTop = box(0.012, 0.006, 0.2, 0, 0.075, 0.08);
+    const frame = profile([[-0.05, 0.004], [0.19, 0.004], [0.19, 0.027], [-0.05, 0.027]], 0.028, 0.002);
+    const grip = profile([[-0.05, 0.008], [0.006, 0.008], [0.01, -0.03], [0.006, -0.1], [-0.05, -0.1], [-0.06, -0.03], [-0.066, 0.012]], 0.034, 0.004);
+    grip.rotateX(0.22); grip.translate(0, 0, 0.012);
+    const guard = triggerGuard(-0.002, 0.07, 0.006, -0.03, 0.012);
+    const trig = box(0.006, 0.017, 0.005, 0, -0.007, 0.022);
+    const hammer = box(0.01, 0.016, 0.01, 0, 0.075, -0.055);
+    const bore = cyl(0.007, 0.004, 0, 0.048, 0.201, 10);
+    return { parts: { chrome: [slide, ribTop, frame, hammer], rubber: [grip], blued: [guard, bore], steel: [trig] }, muzzle: [0, 0.048, 0.205], ejector: [0.012, 0.068, 0.06] };
+  },
+  akrep() {
+    // kısa makineli: kutu gövde, susturucu, dikey ön tutamak, katlanır dipçik
+    const recv = rbox(0.034, 0.05, 0.22, 0, 0.042, 0.06, 0.004);
+    const top = rail(0.18, 0, 0.069, 0.05, 10, 0.018);
+    const barrel = cyl(0.008, 0.05, 0, 0.044, 0.19, 10);
+    const supp = cyl(0.014, 0.06, 0, 0.044, 0.24, 12);
+    const grip = profile([[-0.02, 0.018], [0.02, 0.018], [0.022, -0.05], [0.018, -0.09], [-0.022, -0.09], [-0.026, -0.05]], 0.028, 0.004);
+    grip.rotateX(0.12);
+    const vgrip = vcyl(0.011, 0.07, 0, -0.018, 0.14, 10);
+    const mag = rbox(0.022, 0.1, 0.03, 0, -0.04, 0.085, 0.002);
+    const guard = triggerGuard(0.02, 0.07, 0.017, -0.026, 0.012);
+    const stock = [box(0.004, 0.01, 0.16, 0.019, 0.04, -0.12), box(0.036, 0.05, 0.008, 0, 0.034, -0.2)];
+    return { parts: { polymer: [recv, grip, vgrip, guard, ...stock], blued: [barrel, mag], gunmetal: [supp], steel: top }, muzzle: [0, 0.044, 0.272], ejector: [0.02, 0.05, 0.07] };
+  },
+  cifte() {
+    // kesik namlulu çifte: yan yana iki kısa namlu, kısaltılmış ahşap kabza
+    const b1 = cyl(0.011, 0.3, 0.0115, 0.05, 0.2, 12), b2 = cyl(0.011, 0.3, -0.0115, 0.05, 0.2, 12);
+    const rib = box(0.008, 0.004, 0.3, 0, 0.063, 0.2);
+    const recv = rbox(0.046, 0.05, 0.1, 0, 0.035, 0.0, 0.004);
+    const fore = profile([[0.06, 0.03], [0.25, 0.034], [0.25, 0.018], [0.06, 0.012]], 0.04, 0.004);
+    const grip = profile([[-0.05, 0.05], [-0.05, 0.01], [-0.08, -0.03], [-0.1, -0.075], [-0.14, -0.075], [-0.12, -0.02], [-0.11, 0.05]], 0.036, 0.006);
+    const guard = triggerGuard(-0.01, 0.04, 0.008, -0.026, 0.012);
+    const hammers = [box(0.006, 0.014, 0.012, 0.012, 0.066, -0.04), box(0.006, 0.014, 0.012, -0.012, 0.066, -0.04)];
+    return { parts: { blued: [b1, b2, rib, recv, guard, ...hammers], wood: [fore, grip] }, muzzle: [0, 0.05, 0.352], ejector: null };
+  },
+  tufan() {
+    // hafif makineli: kalın namlu, delikli ceket, taşıma kolu, kutu şarjör, iki ayak
+    const recv = profile([[-0.08, 0.0], [0.22, 0.0], [0.22, 0.07], [-0.07, 0.07], [-0.08, 0.05]], 0.044, 0.003);
+    const cover = box(0.046, 0.012, 0.22, 0, 0.076, 0.07);
+    const barrel = cyl(0.011, 0.5, 0, 0.045, 0.47, 12);
+    const jacket = cyl(0.02, 0.22, 0, 0.045, 0.33, 12);
+    const holes = [];
+    for (let i = 0; i < 5; i++) holes.push(box(0.042, 0.006, 0.012, 0, 0.045, 0.24 + i * 0.04));
+    const handle = [box(0.01, 0.04, 0.012, 0, 0.1, 0.12), box(0.01, 0.012, 0.12, 0, 0.12, 0.1)];
+    const box1 = rbox(0.07, 0.09, 0.1, 0.0, -0.05, 0.08, 0.006);
+    const grip = profile([[-0.022, 0.0], [0.016, 0.0], [0.012, -0.08], [-0.026, -0.085], [-0.032, -0.04]], 0.03, 0.004);
+    grip.rotateX(0.2);
+    const guard = triggerGuard(-0.004, 0.05, 0.0, -0.03, 0.012);
+    const stock = profile([[-0.08, 0.06], [-0.08, -0.004], [-0.36, -0.03], [-0.38, -0.03], [-0.38, 0.07], [-0.2, 0.07]], 0.04, 0.005);
+    const bipod = [box(0.006, 0.006, 0.22, 0.014, 0.025, 0.55), box(0.006, 0.006, 0.22, -0.014, 0.025, 0.55)];
+    const hider = cyl(0.014, 0.05, 0, 0.045, 0.74, 10);
+    return { parts: { parker: [recv, cover, barrel, jacket, hider], polymer: [...holes, grip, guard, stock], olive: [box1], steel: [...handle, ...bipod] }, muzzle: [0, 0.045, 0.765], ejector: [0.024, 0.05, 0.07] };
+  },
+  bozkurt() {
+    // yarı otomatik nişancı tüfeği: ince uzun namlu, dürbün, kısa şarjör
+    const recv = profile([[-0.07, 0.01], [0.2, 0.01], [0.2, 0.06], [-0.06, 0.06], [-0.07, 0.05]], 0.034, 0.002);
+    const barrel = lathe([[0.0001, 0.0], [0.011, 0.0], [0.009, 0.5], [0.0001, 0.501]], 0, 0.045, 0.2, 12);
+    const brake = cyl(0.013, 0.05, 0, 0.045, 0.72, 12);
+    const hg = rbox(0.04, 0.045, 0.3, 0, 0.04, 0.35, 0.006);
+    const scope = lathe([[0.0001, -0.1], [0.017, -0.1], [0.017, -0.06], [0.012, -0.04], [0.012, 0.11], [0.02, 0.15], [0.021, 0.2], [0.0001, 0.2]], 0, 0.1, 0.04, 16);
+    const rings = [rbox(0.026, 0.03, 0.012, 0, 0.078, -0.01, 0.004), rbox(0.026, 0.03, 0.012, 0, 0.078, 0.12, 0.004)];
+    const mag = rbox(0.024, 0.07, 0.05, 0, -0.025, 0.08, 0.003);
+    const grip = profile([[-0.022, 0.012], [0.016, 0.012], [0.012, -0.07], [-0.026, -0.075], [-0.032, -0.03]], 0.03, 0.004);
+    grip.rotateX(0.22);
+    const guard = triggerGuard(-0.004, 0.05, 0.008, -0.028, 0.012);
+    const stock = profile([[-0.07, 0.06], [-0.07, 0.0], [-0.38, -0.04], [-0.4, -0.04], [-0.4, 0.08], [-0.25, 0.085], [-0.12, 0.07]], 0.04, 0.006);
+    const lensF = lathe([[0.0001, 0.0], [0.019, 0.0], [0.0001, 0.001]], 0, 0.1, 0.2405, 16);
+    return { parts: { blued: [recv, barrel, brake, scope, ...rings, mag, guard], fde: [hg, stock], polymer: [grip], glass: [lensF] }, muzzle: [0, 0.045, 0.745], ejector: [0.018, 0.055, 0.07] };
+  },
+  simsek() {
+    // altı atımlık tamburlu bombaatar
+    const tube = cyl(0.024, 0.3, 0, 0.06, 0.22, 14);
+    const bore = cyl(0.02, 0.004, 0, 0.06, 0.371, 12);
+    const drum = cyl(0.06, 0.12, 0, 0.04, 0.02, 12);
+    const flutes = [];
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; flutes.push(cyl(0.012, 0.122, Math.cos(a) * 0.05, 0.04 + Math.sin(a) * 0.05, 0.02, 8)); }
+    const frame = box(0.03, 0.03, 0.34, 0, 0.11, 0.12);
+    const grip = profile([[-0.03, 0.0], [0.01, 0.0], [0.006, -0.08], [-0.032, -0.085], [-0.038, -0.04]], 0.03, 0.004);
+    grip.rotateX(0.15); grip.translate(0, -0.02, -0.06);
+    const fgrip = vcyl(0.013, 0.08, 0, 0.0, 0.25, 10);
+    const stock = profile([[-0.08, 0.1], [-0.08, 0.02], [-0.3, -0.01], [-0.32, -0.01], [-0.32, 0.1]], 0.036, 0.005);
+    const sight = box(0.03, 0.04, 0.03, 0, 0.14, 0.2);
+    return { parts: { olive: [tube, drum, frame], gunmetal: [...flutes, bore, sight], polymer: [grip, fgrip, stock] }, muzzle: [0, 0.06, 0.375], ejector: null };
+  },
+  // 40 mm bomba mermisi (uçuşta)
+  gl40() {
+    const body = lathe([[0.0001, -0.03], [0.02, -0.03], [0.02, 0.01], [0.016, 0.03], [0.0001, 0.04]], 0, 0, 0, 12);
+    return { parts: { brass: [body] }, muzzle: [0, 0, 0], ejector: null };
+  },
+});
 
 // Birleştirilmiş geometri önbelleği: id -> [{geo, mat}], muzzle, ejector
 const CACHE = new Map();

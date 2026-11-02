@@ -118,10 +118,36 @@ export class Military {
   spawnGarrison() {
     const g = this.g;
     const pts = this.roadPoints();
-    const n = Math.min(10, 4 + Math.floor(pts.length));
-    for (let i = 0; i < n; i++) {
-      const a = pts[i % pts.length], b = pts[(i + 1) % pts.length];
-      const s = g.npcs.add('soldier', a.x + (Math.random() - 0.5) * 3, a.z + (Math.random() - 0.5) * 3, soldierLook(), { state: 'patrol', baseState: 'patrol', patrol: [a, b], persistent: true, name: 'Er' });
+    const MB = MAP[BASE_KEY] || {};
+    // [savaş] dünya verisi: devriye rotaları ve nöbet noktaları (yoksa yol noktaları / doğma noktaları)
+    const routes = Array.isArray(MB.patrolRoutes) && MB.patrolRoutes.length ? MB.patrolRoutes.map((r) => (r.points || r).map((q) => (Array.isArray(q) ? { x: q[0], z: q[1] } : { x: q.x, z: q.z }))).filter((r) => r.length >= 2) : null;
+    if (routes && routes.length) {
+      routes.forEach((r, i) => {
+        for (let k = 0; k < (r.length > 4 ? 2 : 1); k++) {
+          const st = r[(k * 2) % r.length];
+          const s = g.npcs.add('soldier', st.x + (Math.random() - 0.5) * 2, st.z + (Math.random() - 0.5) * 2, soldierLook(), { state: 'patrol', baseState: 'patrol', patrol: r, persistent: true, name: 'Er' });
+          s.patrolIdx = (k * 2 + 1) % r.length; s.walkSpeed = 1.2;
+          this.soldiers.push(s);
+        }
+        void i;
+      });
+    } else {
+      const n = Math.min(10, 4 + Math.floor(pts.length));
+      for (let i = 0; i < n; i++) {
+        const a = pts[i % pts.length], b = pts[(i + 1) % pts.length];
+        const s = g.npcs.add('soldier', a.x + (Math.random() - 0.5) * 3, a.z + (Math.random() - 0.5) * 3, soldierLook(), { state: 'patrol', baseState: 'patrol', patrol: [a, b], persistent: true, name: 'Er' });
+        this.soldiers.push(s);
+      }
+    }
+    const posts = Array.isArray(MB.guardPosts) && MB.guardPosts.length ? MB.guardPosts
+      : (MB.gate ? [{ x: MB.gate.x - 5, z: MB.gate.z - 2, heading: Math.atan2(MB.gate.nx || 0, MB.gate.nz || 1) }, { x: MB.gate.x + 5, z: MB.gate.z - 2, heading: Math.atan2(MB.gate.nx || 0, MB.gate.nz || 1) }] : []);
+    for (const q of posts.slice(0, 12)) {
+      const x = Array.isArray(q) ? q[0] : q.x, z = Array.isArray(q) ? q[1] : q.z, h = Array.isArray(q) ? q[2] : q.heading;
+      const y = (q && q.y) || 0;
+      const s = g.npcs.add('soldier', x, z, soldierLook(), { state: 'guard', home: new THREE.Vector3(x, y, z), persistent: true, name: 'Nöbetçi' });
+      if (y) s.pos.y = y;
+      s.faceYaw = h !== undefined ? h : Math.atan2(x - this.cx, z - this.cz);
+      s.gatePost = true;
       this.soldiers.push(s);
     }
     // kule nöbetçileri
@@ -159,13 +185,16 @@ export class Military {
     const d = this.distTo(p.pos.x, p.pos.z);
     if (d < 220 && !this.active) { this.active = true; this.spawnGarrison(); }
     else if (d > 320 && this.active) { this.active = false; this.despawn(); }
-    if (this.alertT > 0) { this.alertT -= dt; if (this.alertT <= 0 && !this.inZone(p.pos.x, p.pos.z, 20)) this.alert = false; }
-    // yasak bölge uyarısı
-    if (this.inZone(p.pos.x, p.pos.z) && !this.alert && !(g.missions.active && g.missions.active.stealthBase && !g.missions.s.spotted)) {
-      if (!this.warned) { this.warned = true; this.warnT = 6; g.ui.bigMessage('ASKERİ BÖLGE', 'Geri çekil! 6 saniye içinde çıkmazsan ateş açılacak.', 'red', 3); const s = this.nearestSoldier(); if (s) g.ui.bark(s, 'Askeri bölge! Geri çekil!'); }
-      this.warnT -= dt;
-      if (this.warnT <= 0) this.raiseAlert('İzinsiz giriş — ateş serbest!');
-    } else if (!this.inZone(p.pos.x, p.pos.z, 15)) this.warned = false;
+    // [savaş] alarm: bölge dışında geri sayar; bitince askerler devriyeye döner
+    if (this.alertT > 0) {
+      if (!this.inWarn(p.pos.x, p.pos.z)) this.alertT -= dt;
+      else if (this.inLethal(p.pos.x, p.pos.z)) { this.lethalT = (this.lethalT || 0) + dt; if (this.lethalT > 20 && g.wanted.level < 5) { g.wanted.add(5 - g.wanted.heat, true); this.lethalT = 0; } }
+      if (this.alertT <= 0) this.calm();
+    }
+    // [savaş] kademeli uyarı: uyarı bölgesi -> son uyarı -> ateş
+    const stealth = g.missions.active && g.missions.active.stealthBase && !g.missions.s.spotted;
+    if (!this.alert && !stealth && !p.dead && this.active) this.updateWarnings(dt, p);
+    else if (!this.inWarn(p.pos.x, p.pos.z)) this.stage = 0;
     // 5 yıldız ve kışla yakını: askeri müdahale
     if (g.wanted.level >= 5 && d < 450) {
       this.responseT -= dt;
@@ -182,6 +211,62 @@ export class Military {
         }
       }
     }
+  }
+  // ---- [savaş: yasak bölge şekilleri] MAP.MILITARY_BASE.warnZone / lethalZone: {x0,x1,z0,z1} | {x,z,r} | {pad}
+  inShape(s, x, z, fallbackPad) {
+    if (!s) return this.inZone(x, z, fallbackPad);
+    if (s.r !== undefined && s.x !== undefined) return Math.hypot(x - s.x, z - s.z) < s.r;
+    if (s.x0 !== undefined) return x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1;
+    if (Array.isArray(s) && s.length >= 3) { // çokgen
+      let inside = false;
+      for (let i = 0, j = s.length - 1; i < s.length; j = i++) {
+        const xi = s[i].x ?? s[i][0], zi = s[i].z ?? s[i][1], xj = s[j].x ?? s[j][0], zj = s[j].z ?? s[j][1];
+        if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+      }
+      return inside;
+    }
+    return this.inZone(x, z, s.pad !== undefined ? s.pad : fallbackPad);
+  }
+  inWarn(x, z) { const MB = MAP[BASE_KEY] || {}; return this.inShape(MB.warnZone, x, z, 35); }
+  inLethal(x, z) { const MB = MAP[BASE_KEY] || {}; return this.inShape(MB.lethalZone, x, z, 0); }
+  warnSay(text) {
+    const s = this.nearestSoldier();
+    if (s) { s.barkT = 0; s.say(text); s.state !== 'attack' && (s.faceYaw = Math.atan2(this.g.player.pos.x - s.pos.x, this.g.player.pos.z - s.pos.z)); }
+    else this.g.audio.megaphone && this.g.audio.megaphone(text, this.cx, this.cz);
+  }
+  updateWarnings(dt, p) {
+    const g = this.g;
+    const inW = this.inWarn(p.pos.x, p.pos.z), inL = this.inLethal(p.pos.x, p.pos.z);
+    if (!inW && !inL) {
+      this.outT = (this.outT || 0) + dt;
+      if (this.outT > 3) { this.stage = 0; this.warned = false; }
+      return;
+    }
+    this.outT = 0;
+    if (!this.stage) {
+      this.stage = 1; this.stageT = 0; this.warned = true;
+      g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Dur! Yaklaşma! Geri çekil.', 'red', 3);
+      this.warnSay('Dur! Yaklaşma! Askeri yasak bölge!');
+    }
+    this.stageT += dt;
+    if (this.stage === 1 && (inL || this.stageT > 9)) {
+      this.stage = 2; this.stageT = 0;
+      g.ui.bigMessage('SON UYARI', 'Hemen geri çekil — ateş açılacak!', 'red', 2.5);
+      this.warnSay('Bu son uyarım, ateş açarım!');
+      for (const s of this.soldiers) if (!s.dead && Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) < 60) { s.aiming = true; s.faceYaw = Math.atan2(p.pos.x - s.pos.x, p.pos.z - s.pos.z); }
+    }
+    if (this.stage === 2 && this.stageT > (inL ? 3.5 : 6)) { this.stage = 3; this.raiseAlert('Uyarılara uyulmadı — ateş serbest!'); }
+  }
+  // alarm bitti: askerler devriye/nöbet yerine döner, takviye birlikler dağılır
+  calm() {
+    const g = this.g;
+    this.alert = false; this.alertT = 0; this.stage = 0; this.warned = false; this.lethalT = 0;
+    for (const s of this.soldiers) {
+      if (s.dead) continue;
+      s.hostile = false;
+      if (s.state === 'attack') { s.state = s.restState(); s.target = null; s.path = []; s.coverPt = null; }
+    }
+    g.ui.notify('Kışlada alarm sona erdi.', 'info');
   }
   nearestSoldier() {
     const p = this.g.player;
