@@ -218,7 +218,7 @@ export class NPC extends Actor {
     const dx = this.pos.x - F.x, dz = this.pos.z - F.z, d = Math.hypot(dx, dz) || 1;
     this.crawlT = (this.crawlT || 0) + dt;
     let speed = 0;
-    if (d < 25 && Math.sin(this.crawlT * 1.3 + this.id) > -0.4) { this.steerMove(this.pos.x + dx / d * 2, this.pos.z + dz / d * 2, 0.32, dt, false); speed = this.speed; }
+    if (d < 25 && !this.cuffed && !this.treated && Math.sin(this.crawlT * 1.3 + this.id) > -0.4) { this.steerMove(this.pos.x + dx / d * 2, this.pos.z + dz / d * 2, 0.32, dt, false); speed = this.speed; }
     else this.speed = 0;
     this.speed = speed;
     if (Math.random() < dt * 0.12) this.say(['Yardım edin...', 'Ah...', 'Nefes alamıyorum...'], 0.6);
@@ -236,9 +236,12 @@ export class NPC extends Actor {
       if (this.ally) return false;
       if (this.faction === 'police') return g.wanted.level > 0;
       if (this.faction === 'military') return this.hostile || !!(g.military && g.military.alert);
-      if (this.faction === 'gang') return this.hostile || g.gangHostile(this.gang);
+      // [kanun] yalnız düşman çete tanır ve saldırır; diğerleri ancak provoke edilirse (çarpma, omuz, vurma, nişan)
+      if (this.faction === 'gang') return this.hostile || g.gangHostile(this.gang) || this.provokedT > 0;
       return false;
     }
+    // [kanun] polis: ateş açan / saldıran çeteciye müdahale eder (yerdeki yaralıya değil)
+    if (this.faction === 'police' && a.lawT > 0 && a.faction === 'gang' && !a.downed && !a.ally) return true;
     if (this.ally) return a.hostile || (a.state === 'attack' && a.target && (a.target.isPlayer || a.target.ally)) || (a.faction === 'gang' && !a.ally && g.gangHostile(a.gang));
     if (a.ally) return this.hostile || (this.faction === 'gang' && g.gangHostile(this.gang));
     return false;
@@ -258,17 +261,21 @@ export class NPC extends Actor {
 
   hearThreat(source, d) {
     if (this.dead || (this.static && this.kind === 'shopkeeper')) return;
-    if (!source) return;
+    if (!source || this.medic) return; // [kanun] sağlıkçıyı ambulans modülü yönetir
     const g = this.game;
     if (this.faction === 'police') {
+      if (this.passengerOf || this.cargoOf || this.state === 'ext') return;
       if (source.isPlayer && g.wanted.level > 0) {
         if (g.wanted.level >= 2 || this.state !== 'arrest') this.engage(source);
         if (d < 18) this.suppress = Math.min(1, this.suppress + 0.25);
+      } else if (!source.isPlayer && source.lawT > 0 && d < 50 && !(this.state === 'attack' && this.target && !this.target.dead)) {
+        this.engage(source, 0.9); // [kanun] silah sesine koşar
       }
       return;
     }
     if (this.faction === 'military') {
-      if (source.isPlayer && g.military && g.military.inZone && g.military.inZone(source.pos.x, source.pos.z, 60)) { g.military.raiseAlert('Ateş açıldı!'); this.engage(source, 0.6); }
+      // [kanun] üs yakınında ateş: içeride/duvar dibinde alarm, dışarıda önce son uyarı
+      if (source.isPlayer && g.military && g.military.inZone && g.military.inZone(source.pos.x, source.pos.z, 60)) { if (g.military.onPlayerShot(source.pos.x, source.pos.z)) this.engage(source, 0.6); }
       else if (source.isPlayer && this.hostileTo(source)) this.engage(source);
       return;
     }
@@ -277,7 +284,12 @@ export class NPC extends Actor {
         if (!source.isPlayer && this.hostileTo(source) && d < 40) this.engage(source);
         return;
       }
-      if (source.isPlayer && (this.hostile || g.gangHostile(this.gang) || d < 15)) { this.engage(source); if (d < 18) this.suppress = Math.min(1, this.suppress + 0.2); }
+      if (source.isPlayer && this.hostileTo(source)) { this.engage(source); if (d < 18) this.suppress = Math.min(1, this.suppress + 0.2); }
+      else if (source.isPlayer && d < 15 && this.state !== 'attack') {
+        // [kanun] tarafsız çete: yakındaki silah sesine diklenir ama saldırmaz
+        this.faceYaw = Math.atan2(source.pos.x - this.pos.x, source.pos.z - this.pos.z);
+        this.say(['Ne oluyor lan?', 'Ne sıkıyorsun orada?', 'Sakin ol birader!'], 0.3);
+      }
       return;
     }
     if (this.kind === 'resident' || this.kind === 'civilian' || this.kind === 'shopkeeper') {
@@ -316,7 +328,9 @@ export class NPC extends Actor {
       if (this.faction === 'police') { g.wanted.crime('assault_police'); this.engage(attacker, 0.4); if (this.hp < this.maxHp * 0.6) { this.say(BARKS.backup, 0.5); g.wanted.requestBackup && g.wanted.requestBackup(this.pos); } }
       else if (this.faction === 'military') { if (g.military) g.military.raiseAlert('Askere ateş açıldı!'); g.wanted.crime('assault_police'); this.engage(attacker, 0.3); }
       else if (this.faction === 'gang') {
-        g.angerGang(this.gang, this.pos);
+        // [kanun] araçla çarpma / yumruk: yerel kavga (grup); kurşun / patlama: çeteyle savaş
+        if (kind === 'car' || kind === 'melee') g.npcs.provokeGang(this, kind);
+        else { g.angerGang(this.gang, this.pos); g.npcs.provokeGang(this, kind); }
         this.engage(attacker, 0.4);
       } else {
         // kurban başına tek saldırı suçu (her mermi ayrı ihbar olmasın)
@@ -331,7 +345,7 @@ export class NPC extends Actor {
 
   // [mekanik tepki] kurşun yakından geçti (d: ışının NPC'ye en yakın uzaklığı, m)
   onNearMiss(attacker, d) {
-    if (this.downed || this.kdT > 0 || this.static || this.sitting && this.mission) return;
+    if (this.downed || this.kdT > 0 || this.static || this.sitting && this.mission || this.medic) return;
     const g = this.game;
     const close = 1 - d / 2.5;
     if (this.faction === 'civilian' && !this.ally && this.state !== 'attack' && this.state !== 'arrest') {
@@ -742,6 +756,7 @@ export class NPC extends Actor {
     }
     tmp2.set(ax - tmp.x, ay - ey, az - tmp.z).normalize();
     if (this.tryFire(tmp, tmp2)) {
+      if (this.faction === 'gang' || this.faction === 'civilian') g.wanted.onNpcGunfire && g.wanted.onNpcGunfire(this); // [kanun]
       if (def.auto) {
         if (this.burst <= 0) this.burst = 2 + Math.floor(Math.random() * 4);
         this.burst--;
@@ -761,7 +776,10 @@ export class NPC extends Actor {
       this.sync();
       return;
     }
-    if (this.vehicle || this.passengerOf) return; // yolcu koltuğundaysa konumu araç yönetir
+    if (this.vehicle || this.cargoOf) return; // [kanun] kasada (görünmez) taşınan ekip
+    if (this.passengerOf) { if (full && this.lawUnit && this.model.root.visible) this.model.animate(dt, this.animState()); return; } // yolcu koltuğundaysa konumu araç yönetir
+    if (this.lawT > 0) this.lawT -= dt; // [kanun] suç işleyen çeteci: polis müdahale süresi
+    if (this.provokedT > 0) this.provokedT -= dt;
     if (this.downed) { this.updateDowned(dt, full); return; } // [savaş]
     const player = g.player;
     this.thinkT -= dt;
@@ -880,6 +898,13 @@ export class NPC extends Actor {
         }
         break;
       }
+      case 'ext': {
+        // [kanun] dış betik (ambulans, gasp, ev sahibi, ekibin araca binmesi): this.ext(dt, npc) hız döndürür
+        speed = this.ext ? this.ext(dt, this) || 0 : 0;
+        if (!this.ext) this.state = this.restState();
+        crouch = !!this.extCrouch;
+        break;
+      }
       case 'gone': {
         // bir kapıdan içeri girdi: kaldır
         this.removeMe = true;
@@ -963,16 +988,45 @@ export class NPC extends Actor {
     const pd = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
     if (!player.dead && sameRoom) {
       const lvl = g.wanted.level;
-      if (this.faction === 'police' && lvl > 0 && pd < 60 && this.state !== 'attack' && this.state !== 'arrest') {
-        if (lvl >= 2) this.engage(player); else { this.state = 'arrest'; this.target = player; this.static = false; }
+      // [kanun] polis oyuncuyu ancak GÖRÜRSE tanır (her düşünmede tek ışın, yalnız yakındaysa)
+      if (this.faction === 'police' && lvl > 0 && pd < 55 && this.state !== 'attack' && this.state !== 'arrest' && this.state !== 'ext' && !this.passengerOf) {
+        const sees = pd < 4 || g.physics.lineOfSight(this.pos.x, this.pos.y + 1.6, this.pos.z, player.pos.x, player.pos.y + 1.4, player.pos.z);
+        if (sees) {
+          g.wanted.spotted();
+          if (lvl >= 2 || this.rbGuard) this.engage(player); else { this.state = 'arrest'; this.target = player; this.static = false; }
+          this.say(lvl >= 2 ? BARKS.cop : ['Dur! Polis!', 'Teslim ol!'], 0.6);
+        }
+      }
+      // [kanun] polis: çevrede ateş açan çeteci varsa müdahale
+      if (this.faction === 'police' && g.npcs.lawCrim > 0 && !this.passengerOf && this.state !== 'ext' && (this.state !== 'attack' || !this.target || this.target.dead || (this.target.isPlayer && lvl === 0))) {
+        const c = g.npcs.nearestHostile(this, 45);
+        if (c && g.physics.lineOfSight(this.pos.x, this.pos.y + 1.6, this.pos.z, c.pos.x, c.pos.y + 1.3, c.pos.z)) { this.engage(c, 0.6); this.say(['Polis! Silahı bırak!', 'Ateşi kes!'], 0.7); }
       }
       if (this.faction === 'police' && lvl >= 2 && this.state === 'arrest') this.engage(player, 0.5);
       if (this.faction === 'police' && this.state === 'attack' && this.target === player && lvl === 1 && !player.aiming) { this.state = 'arrest'; }
       if ((this.faction === 'gang' || this.faction === 'military') && !this.ally && this.state !== 'attack' && pd < (this.faction === 'military' ? 45 : 28) && this.hostileTo(player)) {
         if (g.physics.lineOfSight(this.pos.x, this.pos.y + 1.6, this.pos.z, player.pos.x, player.pos.y + 1.6, player.pos.z)) {
           this.engage(player);
-          this.say(this.faction === 'military' ? BARKS.soldier : BARKS.gang, 0.35);
+          if (this.faction === 'gang' && !this.mission && !this.hostile && !(this.provokedT > 0)) g.npcs.recognize(this);
+          else this.say(this.faction === 'military' ? BARKS.soldier : BARKS.gang, 0.35);
         }
+      }
+      // [kanun] tarafsız çeteye silah doğrultmak: önce uyarı, sürerse kavga
+      if (this.faction === 'gang' && !this.ally && !this.mission && this.state !== 'attack' && !this.hostileTo(player)) {
+        let aimed = false;
+        if (player.aiming && player.wdef && player.wdef.type === 'gun' && pd < 22 && !player.vehicle) {
+          if (player.aimTarget === this) aimed = true;
+          else { const fx = Math.sin(player.camYaw), fz = Math.cos(player.camYaw); aimed = ((this.pos.x - player.pos.x) * fx + (this.pos.z - player.pos.z) * fz) / (pd || 1) > 0.985; }
+        }
+        if (aimed) {
+          if (!this.aimedAt) { this.barkT = 0; this.say(['İndir o silahı!', 'Bana mı doğrultuyorsun lan?!', 'Silahı indir, yoksa...']); this.faceYaw = Math.atan2(player.pos.x - this.pos.x, player.pos.z - this.pos.z); }
+          this.aimedAt = (this.aimedAt || 0) + 0.5;
+          if (this.aimedAt > 1.6) { this.aimedAt = 0; g.npcs.provokeGang(this, 'aim'); }
+        } else if (this.aimedAt) this.aimedAt = Math.max(0, this.aimedAt - 0.5);
+      }
+      // [kanun] yerel kavga bitti ve oyuncu uzaklaştı: sakinleş
+      if (this.faction === 'gang' && this.provokedT !== undefined && this.provokedT <= 0 && this.state === 'attack' && this.target === player && !this.hostile && !g.gangHostile(this.gang) && pd > 30) {
+        this.provokedT = undefined; this.state = this.restState(); this.target = null; this.coverPt = null; this.path = [];
       }
       // müttefikler ve düşmanlar arası hedefleme
       if ((this.ally || this.hostile || this.faction === 'military') && (this.state !== 'attack' || !this.target || this.target.isPlayer)) {
@@ -980,7 +1034,7 @@ export class NPC extends Actor {
         if (t && (!this.target || this.ally || Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z) < pd * 0.6)) this.engage(t, 0.8);
       }
       // oyuncu silah doğrultuyorsa siviller korkar
-      if (this.faction === 'civilian' && player.aiming && player.weapon !== 'fists' && pd < 15 && this.state !== 'flee' && this.state !== 'cower' && !this.static) {
+      if (this.faction === 'civilian' && player.aiming && player.weapon !== 'fists' && pd < 15 && this.state !== 'flee' && this.state !== 'cower' && this.state !== 'ext' && !this.static) {
         const fx = Math.sin(player.camYaw), fz = Math.cos(player.camYaw);
         const dx = this.pos.x - player.pos.x, dz = this.pos.z - player.pos.z;
         if ((dx * fx + dz * fz) / (pd || 1) > 0.85) { this.state = 'handsup'; this.handsUpT = 4; this.sitting = false; this.say(BARKS.cower, 0.6); }
@@ -1012,9 +1066,24 @@ export class NPC extends Actor {
     if (this.losT <= 0) { this.losT = 0.2 + Math.random() * 0.15; this.los = g.physics.lineOfSight(this.pos.x, ey, this.pos.z, t.pos.x, t.pos.y + 1.2, t.pos.z); }
     const los = this.los;
     if (los) { if (!this.lastSeen) this.lastSeen = new THREE.Vector3(); this.lastSeen.copy(t.pos); this.aimT += dt; } else this.aimT = Math.max(0, this.aimT - dt * 2);
-    if (this.alertT > 0) { this.alertT -= dt; this.heading = dampAngle(this.heading, want, 6, dt); if (d > 30) { this.navTo(t.pos.x, t.pos.z, 3.5, dt, true); out.speed = this.speed; } return out; }
+    // [kanun] yerdeki yaralı şüpheliye polis ateş etmez: gidip kelepçeler
+    if (t.downed && !t.isPlayer && this.faction === 'police') {
+      if (d > 1.2) { this.navTo(t.pos.x, t.pos.z, d > 8 ? 4.6 : 2.2, dt, true); out.speed = this.speed; if (d < 10) this.aiming = this.wdef.type !== 'melee'; }
+      else {
+        out.crouch = true;
+        this.cuffT = (this.cuffT || 0) + dt;
+        if (this.cuffT > 1.4) {
+          this.cuffT = 0;
+          if (!t.cuffed) { t.cuffed = true; t.lawT = 0; g.wanted.lawLog.arrests++; this.barkT = 0; this.say(['Kelepçelendin! Kıpırdama.', 'Gözaltındasın. Ambulans geliyor.', 'Merkez, şüpheli etkisiz, gözaltına alındı.']); }
+          this.state = this.restState(); this.target = null; this.coverPt = null;
+        }
+      }
+      return out;
+    }
+    const cp = this.chasePt(t, los);
+    if (this.alertT > 0) { this.alertT -= dt; this.heading = dampAngle(this.heading, want, 6, dt); if (d > 30) { this.navTo(cp.x, cp.z, 3.5, dt, true); out.speed = this.speed; } return out; }
     if (this.state === 'arrest') {
-      if (d > 1.3) { this.navTo(t.pos.x, t.pos.z, d > 6 ? 4.8 : 2.4, dt, true); out.speed = this.speed; }
+      if (d > 1.3 || !los) { this.navTo(cp.x, cp.z, d > 6 ? 4.8 : 2.4, dt, true); out.speed = this.speed; }
       else this.heading = dampAngle(this.heading, want, 10, dt);
       if (d < 14) this.say(BARKS.arrest, dt * 3);
       if (d < 10) { this.aiming = this.wdef.type !== 'melee'; }
@@ -1117,8 +1186,7 @@ export class NPC extends Actor {
       if (d > RG[2] + 10 || !los) { this.tac = 'engage'; this.tacT = 0.5; }
     } else if (d > RG[2] || !los) {
       // etkili menzil dışında / görüş yok: yaklaş
-      let tx = t.pos.x, tz = t.pos.z;
-      if (!los && this.lastSeen) { tx = this.lastSeen.x; tz = this.lastSeen.z; }
+      const tx = cp.x, tz = cp.z;
       go(tx, tz, d > 30 ? 4.8 : 3.8, los); moving = true;
     } else if (d > ideal + 4) {
       // menzilde ama ideal mesafeden uzak: ateş ederek yürüyerek yaklaş
@@ -1145,6 +1213,12 @@ export class NPC extends Actor {
     }
     if (d > 130) { this.state = this.restState(); this.target = null; }
     return out;
+  }
+
+  // [kanun] takip noktası: kolluk görmediği oyuncunun gerçek yerini bilmez (telsizdeki son konum / arama noktası)
+  chasePt(t, los) {
+    if (!los && t.isPlayer && this.faction === 'police') return this.game.wanted.searchPoint(this);
+    return !los && this.lastSeen ? this.lastSeen : t.pos;
   }
 
   // [savaş: taktik] yürüyerek / yan adımla hedefe dönük hareket. Engel varsa -1 (çağıran yol bulmaya döner).
@@ -1237,7 +1311,7 @@ export class NPCManager {
       if (!arr) { arr = this.hashPool.pop() || []; H.set(k, arr); }
       arr.push(a);
     };
-    for (const n of this.list) if (!n.dead && !n.vehicle) add(n);
+    for (const n of this.list) if (!n.dead && !n.vehicle && !n.passengerOf && !n.cargoOf) add(n);
     const p = this.game.player;
     if (p && !p.vehicle && !p.dead) add(p);
   }
@@ -1392,7 +1466,7 @@ export class NPCManager {
   nearestHostile(me, r) {
     let best = null, bd = r * r;
     for (const o of this.list) {
-      if (o === me || o.dead || o.vehicle) continue;
+      if (o === me || o.dead || o.vehicle || o.cargoOf || o.passengerOf) continue;
       const dx = o.pos.x - me.pos.x, dz = o.pos.z - me.pos.z, d2 = dx * dx + dz * dz;
       if (d2 >= bd) continue;
       if (!me.hostileTo(o)) continue;
@@ -1480,17 +1554,6 @@ export class NPCManager {
     if (kind === 'civilian' && Math.random() < 0.15) n.walkSpeed *= 1.5; // aceleci işe gidenler
   }
 
-  spawnPoliceFoot(near) {
-    const g = this.game;
-    const p = g.player;
-    const c = near || p.pos;
-    const s = this.sidewalkSpot(c.x, c.z, near ? 8 : 35, near ? 25 : 70);
-    if (!s) return null;
-    const kind = g.wanted.level >= 4 && Math.random() < 0.5 ? 'swat' : 'police';
-    const n = this.add(kind, s.x, s.z, kind === 'swat' ? swatLook() : copLook());
-    if (g.wanted.level >= 2) n.engage(p); else { n.state = 'arrest'; n.target = p; }
-    return n;
-  }
   spawnSquad(kind, x, z, count, opts = {}) {
     const out = [];
     for (let i = 0; i < count; i++) {
@@ -1512,22 +1575,68 @@ export class NPCManager {
     this.voiceT = Math.max(1.5, dur + 0.8);
   }
 
-  dispatchPoliceCar(type = 'police') {
-    const g = this.game;
-    const p = g.player;
-    const v = g.vehicles.spawnTraffic(p.pos.x, p.pos.z, type);
-    if (!v) return null;
-    v.ai.mode = 'chase';
-    v.ai.cruise = v.def.maxSpeed * 0.8;
-    v.sirenOn = true;
-    v.police = true;
-    v.crew = type === 'swat' ? 4 : 2;
-    return v;
+  calmPolice() {
+    const W = this.game.wanted;
+    if (W && W.standDown) W.standDown(); // [kanun] araçlı birimler toparlanıp devriyeye döner
+    for (const n of this.list) {
+      if (n.faction !== 'police' || n.dead || n.passengerOf || n.cargoOf) continue;
+      if (n.state === 'attack' && n.target && !n.target.isPlayer && !n.target.dead) continue; // çeteyle çatışan devam eder
+      if (n.state === 'ext') continue;
+      n.state = n.rbGuard ? 'guard' : 'walk'; n.target = null; n.path = []; n.cur = null; n.coverPt = null;
+    }
+    for (const v of this.game.vehicles.list) if (v.ai && v.ai.mode === 'chase') { v.ai.mode = 'traffic'; v.ai.cruise = 12; v.ai.goal = null; v.sirenOn = false; }
   }
 
-  calmPolice() {
-    for (const n of this.list) if (n.faction === 'police' && !n.dead) { n.state = 'walk'; n.target = null; n.path = []; n.cur = null; n.coverPt = null; }
-    for (const v of this.game.vehicles.list) if (v.ai && v.ai.mode === 'chase') { v.ai.mode = 'traffic'; v.ai.cruise = 12; v.sirenOn = false; }
+  // [kanun] düşman çete oyuncuyu tanıdı: grup uyarısı (tek ağızdan, seyrek)
+  recognize(n) {
+    const now = this.game.wanted.clockT || 0;
+    if ((this.recogAt || -99) + 10 > now) return;
+    this.recogAt = now;
+    n.barkT = 0;
+    n.say(['Babanın oğlu bu, yakalayın!', 'Bu Reis\'in adamı! Vurun!', 'Babanın oğlu! Kaçırmayın!']);
+    for (const o of this.list) {
+      if (o === n || o.dead || o.gang !== n.gang || o.ally || o.state === 'attack') continue;
+      if (Math.abs(o.pos.x - n.pos.x) < 20 && Math.abs(o.pos.z - n.pos.z) < 20) o.engage(this.game.player, 1.2);
+    }
+  }
+  // [kanun] tarafsız çete provoke edildi (çarpma, omuz atma, yumruk, nişan): yalnız o grup kavgaya girer
+  provokeGang(n, why) {
+    const g = this.game, p = g.player;
+    if (!n || n.ally || n.faction !== 'gang' || n.gang === 'family') return;
+    const fresh = !(n.provokedT > 0);
+    for (const o of this.list) {
+      if (o.dead || o.ally || o.faction !== 'gang' || o.gang !== n.gang) continue;
+      if (o !== n && (Math.abs(o.pos.x - n.pos.x) > 15 || Math.abs(o.pos.z - n.pos.z) > 15)) continue;
+      o.provokedT = 45;
+      if (o.state !== 'attack') o.engage(p, o === n ? 0.5 : 0.9);
+    }
+    if (fresh) {
+      n.barkT = 0;
+      n.say(why === 'aim' ? ['Silah mı çekiyorsun bize?!', 'Sen kimsin lan? Vurun!'] : why === 'car' ? ['Arabayla mı çarpıyorsun lan?!', 'İn aşağı! Seni gebertirim!'] : why === 'bump' ? ['Sen kime omuz atıyorsun lan?!', 'Ağzını burnunu kırarım!'] : ['Hesabını vereceksin!', 'Vurun şunu!']);
+    }
+    this.provokes = (this.provokes || 0) + 1;
+  }
+  // [kanun] oyuncu omuz attı (koşarak çarptı): çeteci önce uyarır, tekrarında kavga
+  onBump(n) {
+    const now = this.game.wanted.clockT || 0;
+    if ((n.bumpAt || -9) + 1.2 > now) return;
+    const again = (n.bumpAt || -99) + 10 > now;
+    n.bumpAt = now;
+    if (n.faction === 'gang' && !n.ally && !n.mission && n.state !== 'attack') {
+      if (again) this.provokeGang(n, 'bump');
+      else { n.barkT = 0; n.say(['Önüne baksana lan!', 'Ne çarpıyorsun be?!', 'Bir daha çarparsan görürsün!']); n.faceYaw = Math.atan2(this.game.player.pos.x - n.pos.x, this.game.player.pos.z - n.pos.z); }
+    } else if (n.faction === 'civilian' && !n.mission && n.state !== 'flee' && Math.random() < 0.6) n.say(BARKS.bump, 1);
+  }
+  checkBumps() {
+    const p = this.game.player;
+    if (!p || p.vehicle || p.dead || p.inInterior || (p.speed || 0) < 2.4) return;
+    const nb = this.neighbors(p.pos.x, p.pos.z);
+    for (let i = 0; i < nb.length; i++) {
+      const n = nb[i];
+      if (n === p || n.dead || n.downed || !n.kind) continue;
+      const dx = n.pos.x - p.pos.x, dz = n.pos.z - p.pos.z;
+      if (dx * dx + dz * dz < 0.8 * 0.8) this.onBump(n);
+    }
   }
 
   // sivil laf atmaları: kıyafet, aranma, silah, saygınlık
@@ -1569,6 +1678,13 @@ export class NPCManager {
       else if (!n.mission || !n.scriptKill) g.wanted.crime(kind === 'car' ? 'hit_ped' : 'kill_civilian', n.pos);
       g.missions.onKill(n);
     } else g.missions.onKill(n);
+    // [kanun] polis müdahalesinde ölen çeteci kayda geçer (ambulans cesedi alır)
+    if (n.faction === 'gang' && !n.ally && ((attacker && attacker.faction === 'police') || n.lawT > 0)) {
+      n.recorded = true; g.wanted.lawLog.recorded++;
+      let cop = null, bd = 40;
+      for (const o of this.list) if (o.faction === 'police' && !o.dead && !o.passengerOf && !o.cargoOf) { const dd = Math.hypot(o.pos.x - n.pos.x, o.pos.z - n.pos.z); if (dd < bd) { bd = dd; cop = o; } }
+      if (cop) { cop.barkT = 0; cop.say(['Merkez, şüpheli etkisiz hâle getirildi.', 'Bir şüpheli öldü, kayda geçin.', 'Olay yeri, ambulans istiyorum.']); }
+    }
     // çevredekiler paniğe kapılır
     for (const o of this.list) {
       if (o === n || o.dead) continue;
@@ -1605,8 +1721,9 @@ export class NPCManager {
     if (this.voiceT > 0) this.voiceT -= dt;
     this.slotT -= dt;
     if (this.slotT <= 0) { this.slotT = 0.5; this.assignSlots(); }
-    let civCount = 0;
-    for (const n of this.list) if (!n.dead && !n.mission) civCount++;
+    let civCount = 0, crim = 0;
+    for (const n of this.list) { if (!n.dead && !n.mission) civCount++; if (n.lawT > 0 && !n.dead) crim++; }
+    this.lawCrim = crim; // [kanun] polisin müdahale edeceği çeteci sayısı
     if (!p.inInterior) {
       this.spawnT -= dt;
       const maxPed = g.settings.quality === 'low' ? 22 : g.settings.quality === 'medium' ? 32 : 42;
@@ -1623,7 +1740,7 @@ export class NPCManager {
       if (d > 140 && !n.mission && !n.persistent) { if (n.model.root.visible) n.model.root.visible = false; continue; }
       // kalabalık LOD: uzaktakiler seyrek, 60 m ötesinde animasyonsuz
       const busy = n.state === 'attack' || n.state === 'arrest' || n.state === 'move' || n.mission;
-      const vis = (d < 130 || !!n.mission) && !n.vehicle;
+      const vis = (d < 130 || !!n.mission) && !n.vehicle && !n.cargoOf;
       if (n.model.root.visible !== vis) n.model.root.visible = vis;
       if (d > 60 && !(busy && d < 100)) {
         n.lodAcc += dt;
@@ -1637,6 +1754,7 @@ export class NPCManager {
       n.update(dt, true);
     }
     this.carHits();
+    this.checkBumps();
   }
 
   // araç - yaya çarpışması: OBB (aracın içine girilmez), süpürülmüş test, bekleme süresiyle tek darbe

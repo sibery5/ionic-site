@@ -27,6 +27,7 @@ import * as MAPDATA from './world/map.js';
 import { Combat } from './game/combat.js';
 import { Pickups } from './game/pickups.js';
 import { Wanted } from './game/wanted.js';
+import { Law } from './game/law.js'; // [kanun]
 import { Missions } from './game/missions.js';
 import { Interiors, placeName } from './game/interiors.js';
 import { WEAPONS } from './game/weapons.js';
@@ -199,6 +200,7 @@ class Game {
     this.npcs = new NPCManager(this);
     this.pickups = new Pickups(this);
     this.wanted = new Wanted(this);
+    this.law = new Law(this); // [kanun] ambulans, gasp, trafik cezası, ev sahibi
     this.interiors = new Interiors(this);
     this.missions = new Missions(this);
     this.life = new Life(this);
@@ -1010,7 +1012,7 @@ class Game {
     let promptKey = 'E', promptText = it ? it.label : null;
     if (!it && !p.vehicle && !p.inInterior && !blocked) {
       const v = this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 2.5);
-      if (v) { promptKey = 'F'; promptText = (v.ai && !v.ai.empty && !v.parked ? 'Aracı gasp et: ' : 'Araca bin: ') + v.def.name; }
+      if (v) { promptKey = 'F'; promptText = (v.ai && !v.ai.empty && !v.parked ? (v.speed > 1.2 && !(v.ai.jackStop > 0) ? 'Hareket halinde — önüne geç / silah doğrult: ' : 'Aracı gasp et: ') : 'Araca bin: ') + v.def.name; } // [kanun]
     }
     this.ui.prompt(promptText, promptKey); // yalnızca metin değişince DOM'a yazar
     if (it && input.hit('KeyE')) { audio.click(); it.action(); }
@@ -1020,7 +1022,7 @@ class Game {
         if (Math.abs(v.fs) < 8) { this.vehicles.ejectDriver(v); v.controls.throttle = 0; v.controls.handbrake = true; }
       } else if (!p.inInterior) {
         const v = this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 2.5);
-        if (v) this.enterVehicle(v);
+        if (v && !this.law.carjack.tryEnter(v)) this.enterVehicle(v); // [kanun] hareket eden araca ışınlanma yok
       }
     }
     // oyuncu
@@ -1051,6 +1053,7 @@ class Game {
     this.particles.update(dt);
     this.pickups.update(dt);
     this.wanted.update(dt);
+    this.law.update(dt); // [kanun]
     this.missions.update(dt);
     this.social.update(dt);
     // yakalanırsa kaçak mallar
