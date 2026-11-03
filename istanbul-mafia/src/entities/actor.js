@@ -137,11 +137,12 @@ export class Actor {
     return true;
   }
 
-  takeDamage(amount, attacker, kind = 'bullet', headshot = false) {
+  // [savaş] resolved: hasar game/body.js'te bölge/kask/yelek kuralıyla çözüldü (başa çarpan ve zırh yeniden uygulanmaz)
+  takeDamage(amount, attacker, kind = 'bullet', headshot = false, resolved = false) {
     if (this.dead) return 0;
     if (this.god) return 0;
-    let dmg = amount * (headshot ? 2.5 : 1);
-    if (this.armor > 0 && kind !== 'fall') {
+    let dmg = amount * (headshot && !resolved ? 2.5 : 1);
+    if (!resolved && this.armor > 0 && kind !== 'fall' && kind !== 'bleed') {
       const absorb = Math.min(this.armor, dmg * 0.7);
       this.armor -= absorb; dmg -= absorb;
     }
@@ -178,6 +179,7 @@ export class Actor {
       else this.model.die();
     }
     this.deadT = 0; this.kdT = 0;
+    const cb = this.game.combat; if (cb && cb.onActorDeath) cb.onActorDeath(this, attacker, kind); // [savaş] ölüm stili + ceset yerleşmesi
     this.onDeath && this.onDeath(attacker, kind);
   }
 

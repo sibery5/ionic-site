@@ -287,6 +287,7 @@ export class CharacterModel {
       this.bones[i].quaternion.identity();
     }
     this.rest = this.bones.map((b) => b.position.clone());
+    this.settled = false; // [savaş] yeniden kurulan ceset T-pozunda kalmasın: son ölüm pozu bir kez daha uygulanır
     this.hipX = R.hipX;
     if (this.lod < 0) {
       // ilk LOD tahmini: son kamera konumuna uzaklık (sonraki çizimde düzeltilir)
@@ -487,7 +488,7 @@ export class CharacterModel {
       if (this.deadT > 3.2) this.settled = true;
       return;
     }
-    if (this.deadT > 0) { this.deadT = 0; this.deathDir = null; this.settled = false; }
+    if (this.deadT > 0) { this.deadT = 0; this.deathDir = null; this.settled = false; this.deathStyle = null; } // [savaş] dirilince stil sıfırlanır
     if (st.downed) { this.kd = null; this.poseDowned(dt, st); return; } // [savaş kancası] yaralı, yerde sürünüyor
     // [mekanik tepki] yere savrulma: düşüş (ölüm pozunun ilk 0.9 sn'si), yatış, ters yönde kalkış
     if (this.kd) {
@@ -1131,20 +1132,30 @@ export class CharacterModel {
     leg.an.quaternion.slerp(G.qi, w);
   }
 
+  // [savaş] ölüm pozu: deathStyle (combat.onActorDeath) isabete göre yığılma biçimini seçer:
+  //  head: dizler çözülür, beden olduğu yere çöker sonra devrilir · torso (önden): geriye sendeleyip sırtüstü
+  //  shoulder: omuz darbesiyle kendi ekseninde dönerek yana · leg: önce dizinin üstüne, sonra yüzüstü
+  //  bleed/prone: yavaş çöküş · wall: duvara sırtını verip aşağı kayar, oturur. Stil yoksa eski genel düşüş.
   poseDeath(P, T) {
     const d = this.deathDir || { x: 0, z: -1 };
-    const fx = d.x, fz = d.z;
-    const buckle = sm(T / 0.25);
-    const fu = clamp((T - 0.1) / 0.55, 0, 1);
+    const S = this.deathStyle, zone = S ? S.zone : 'torso';
+    if (zone === 'wall' && !this.kd) { this.poseWallSlump(P, T, d, S); return; }
+    let fx = d.x, fz = d.z;
+    const delay = zone === 'head' ? (S.heavy ? 0.08 : 0.24) : zone === 'leg' ? 0.42 : zone === 'bleed' || zone === 'prone' ? 0.3 : 0;
+    if (zone === 'leg' || zone === 'bleed') { fx *= 0.35; fz = 0.9; const l = Math.hypot(fx, fz); fx /= l; fz /= l; } // önce dize, sonra öne kapaklanır
+    const Tt = Math.max(0, T - delay);
+    const buckle = sm(T / (0.25 + delay));
+    const fu = clamp((Tt - 0.1) / (zone === 'head' && !S.heavy ? 0.7 : 0.55), 0, 1);
     let th = (Math.PI / 2) * fu * fu;
-    if (fu >= 1) { const tb = T - 0.65; th -= 0.1 * Math.exp(-tb * 7) * Math.abs(Math.sin(tb * 14)); }
-    const settle = sm((T - 0.35) / 0.7);
+    if (fu >= 1) { const tb = Tt - 0.65; th -= 0.1 * Math.exp(-tb * 7) * Math.abs(Math.sin(tb * 14)); }
+    const settle = sm((Tt - 0.35) / 0.7);
     const Q = this.Q; Q.fill(0);
     const wb = Math.max(0, -fz), wf = Math.max(0, fz), ws = Math.abs(fx);
     const tot = wb + wf + ws || 1;
     const b = wb / tot, f = wf / tot, s = ws / tot;
     const sg = this.seed % 2 > 1 ? 1 : -1;
-    setJ(Q, J.shL, -0.3 * b - 0.6 * f - 1.0 * s, 0, 1.3 * b + 1.0 * f + 0.4 * s); setJ(Q, J.shR, -0.3 * b - 0.4 * f - 0.6 * s, 0, 1.1 * b + 0.6 * f + 0.2 * s);
+    const limp = zone === 'head' ? 0.55 : 1; // başından vurulan: kollar savrulmaz, gevşek düşer
+    setJ(Q, J.shL, (-0.3 * b - 0.6 * f - 1.0 * s) * limp, 0, (1.3 * b + 1.0 * f + 0.4 * s) * limp); setJ(Q, J.shR, (-0.3 * b - 0.4 * f - 0.6 * s) * limp, 0, (1.1 * b + 0.6 * f + 0.2 * s) * limp);
     setJ(Q, J.elL, -0.5 * b - 1.2 * f - 0.6 * s, 0, 0); setJ(Q, J.elR, -0.3 * b - 0.4 * f - 0.9 * s, 0, 0);
     setJ(Q, J.hipL, -0.05 * b - 0.5 * s, 0, 0.14 * b + 0.1 * f); setJ(Q, J.hipR, -0.35 * b - 0.2 * s, 0, 0.1);
     setJ(Q, J.knL, 0.15 * b + 0.9 * s + 0.1 * f, 0, 0); setJ(Q, J.knR, 0.7 * b + 0.5 * s + 0.4 * f, 0, 0);
@@ -1153,13 +1164,40 @@ export class CharacterModel {
     setJ(Q, J.neck, -0.05 * b + 0.04 * f, 0.3 * sg * (b + f), 0.12 * s);
     setJ(Q, J.spine, 0.2 * s, 0, 0);
     for (let i = 0; i < HP; i++) P[i] = this.D0[i] + (Q[i] - this.D0[i]) * clamp(settle + 0.08 * Math.sin(settle * Math.PI) * Math.sin(T * 9), 0, 1.05);
+    // dizden çökme: başta derin (kafa/bacak), sonra devrilme
+    const ck = zone === 'head' ? 1.45 : zone === 'leg' ? 1.5 : zone === 'bleed' || zone === 'prone' ? 1.2 : 0.8;
     const crumple = buckle * (1 - fu);
-    addJ(P, J.knL, 0.8 * crumple, 0, 0); addJ(P, J.knR, 0.8 * crumple, 0, 0); addJ(P, J.hipL, -0.4 * crumple, 0, 0); addJ(P, J.hipR, -0.4 * crumple, 0, 0);
-    addJ(P, J.spine, 0.3 * crumple * (f - b), 0, 0); addJ(P, J.head, 0.4 * crumple * (f - b), 0, 0);
+    let kL = ck, kR = ck;
+    if (zone === 'leg') { if (S.side > 0) kL *= 0.45; else kR *= 0.45; } // vurulan bacak önce yere
+    addJ(P, J.knL, kL * crumple, 0, 0); addJ(P, J.knR, kR * crumple, 0, 0); addJ(P, J.hipL, -0.5 * kL * crumple, 0, 0); addJ(P, J.hipR, -0.5 * kR * crumple, 0, 0);
+    addJ(P, J.spine, 0.3 * crumple * (f - b) + (zone === 'head' ? 0.25 * crumple : 0), 0, 0); addJ(P, J.head, 0.4 * crumple * (f - b) + (zone === 'head' ? 0.35 * crumple : 0), 0, 0);
     P[J.hips * 3] = th * fz; P[J.hips * 3 + 1] = 0; P[J.hips * 3 + 2] = -th * fx;
-    const H = 0.82 - 0.2 * crumple;
+    // omuz isabeti: kendi ekseninde dönerek düşer
+    if (zone === 'shoulder') P[J.hips * 3 + 1] = (S.side > 0 ? -1 : 1) * (1.0 + 0.6 * S.seed) * sm(T / 0.75);
+    const H = 0.82 - (zone === 'head' || zone === 'leg' ? 0.36 : 0.2) * crumple;
     P[HP] = fx * H * Math.sin(th); P[HP + 2] = fz * H * Math.sin(th);
+    // önden gövde isabeti: devrilmeden önce bir-iki adım geriye sendeler
+    if (zone === 'torso' && fz < -0.3) { const st = 0.32 * sm(T / 0.4) * (S.heavy ? 1.4 : 1); P[HP] += fx * st; P[HP + 2] += fz * st; }
     P[HP + 1] = 0.13 + H * Math.cos(th) - RIG.hips;
+  }
+  // [savaş] duvara yaslanıp kayma: sırt duvarda (deathDir = duvara doğru), kalça yere iner, bacaklar öne uzanır
+  poseWallSlump(P, T, d, S) {
+    const Q = this.Q; Q.fill(0);
+    const k = sm(T / 1.1), kn = sm(T / 0.35);
+    const sd = S.side > 0 ? 1 : -1, r = S.seed;
+    setJ(Q, J.hips, -0.32, Math.atan2(-d.x, -d.z), 0);
+    setJ(Q, J.hipL, -1.2 + 0.25 * r, 0, 0.18); setJ(Q, J.hipR, -1.05 - 0.3 * r, 0, 0.14);
+    setJ(Q, J.knL, 0.35 + 0.9 * r, 0, 0); setJ(Q, J.knR, 0.25 + 0.5 * (1 - r), 0, 0);
+    setJ(Q, J.anL, 0.25, 0, 0); setJ(Q, J.anR, 0.2, 0, 0);
+    setJ(Q, J.spine, 0.12, 0, 0.05 * sd); setJ(Q, J.chest, 0.2, 0.08 * sd, 0.06 * sd);
+    setJ(Q, J.neck, 0.3, 0.2 * sd, 0.1 * sd); setJ(Q, J.head, 0.42, 0.35 * sd, 0.22 * sd);
+    setJ(Q, J.shL, -0.12, 0, 0.22); setJ(Q, J.shR, -0.18, 0, 0.18); setJ(Q, J.elL, -0.35, 0, 0); setJ(Q, J.elR, -0.5, 0, 0);
+    for (let i = 0; i < HP; i++) P[i] = this.D0[i] + (Q[i] - this.D0[i]) * k;
+    // önce dizler çözülür (kayışın başı), sonra sırt duvarda aşağı iner
+    addJ(P, J.knL, 0.7 * kn * (1 - k), 0, 0); addJ(P, J.knR, 0.7 * kn * (1 - k), 0, 0);
+    const back = Math.max(0, (S.wall || 0.5) - 0.24) * k;
+    P[HP] = d.x * back; P[HP + 2] = d.z * back;
+    P[HP + 1] = (0.2 - RIG.hips) * sm(T / 1.0);
   }
 
   // ölüm sonrası yere yerleşme: uçlar (baş, eller, ayaklar, dizler) yerden yüksekse ebeveyn eklemini yere doğru döndür,
@@ -1177,6 +1215,7 @@ export class CharacterModel {
       bone.getWorldPosition(DTMP);
       const h = DTMP.y - gy - rad;
       if (Math.abs(h) < 0.015) continue;
+      if (h > 0 && this.deathStyle && this.deathStyle.zone === 'wall') continue; // [savaş] duvara yaslanan: yalnız gömülmeyi düzelt
       // sayısal türev: kanal +eps ile yüksekliğin değişimi
       const jb = this.joints[ch], k = ch * 3 + ax, s = SIDE[ch] || 1;
       const eps = 0.05;

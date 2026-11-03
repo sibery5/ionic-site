@@ -5,13 +5,19 @@ import { audio } from '../core/audio.js';
 import { buildWeaponModel, buildRocketModel, WEAPONS } from './weapons.js';
 import { inBridge, WATER_Y } from '../world/map.js';
 import { BI } from '../entities/charParts.js';
+import { resolveBullet, playerIncoming, playerBal, capBurst, knockHelmetOff, syncPlayerGear } from './body.js';
+import { GlassFx } from './glassfx.js';
 
-// NPC mermilerinin oyuncuya verdiği hasar çarpanı (denge: 3 yıldızda birkaç saniyede ölmemek için)
-const NPC_TO_PLAYER_DMG = 0.45;
+// NPC mermilerinin oyuncuya verdiği hasar: zorluk tablosu body.js PLAYER_BAL (mermi/patlama çarpanı, ani hasar tavanı)
 // [savaş] oyuncu kanaması: seviye başına saniyede can kaybı, alt sınır; kısmi kendiliğinden iyileşme üst sınırı (maxHp oranı)
-const PLAYER_BLEED_DPS = 0.45, PLAYER_BLEED_FLOOR = 8, PLAYER_REGEN_CAP = 0.4;
+const PLAYER_BLEED_DPS = 0.45, PLAYER_BLEED_FLOOR = 8;
 const HEAL_TIME = 1.6, FIRST_AID_HEAL = 40;
-const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3();
+const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3(), _wl = new THREE.Vector3();
+// [savaş] çarpışma kutusu etiketi -> mermi isabet yüzeyi
+const SURF_TAG = {
+  pole: 'metal', rail: 'metal', container: 'metal', crane: 'metal', hangar: 'metal', fender: 'metal', gatepost: 'metal', booth: 'metal',
+  anchor: 'metal', playground: 'metal', guardtower: 'concrete', cabin: 'wood', fisher: 'wood', bench: 'wood', hedge: 'dirt', tree: 'wood', crate: 'wood',
+};
 
 const tmp = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -144,6 +150,10 @@ export class Combat {
     // [savaş] ek hedefler, oyuncu sağlık zamanlayıcıları
     this.targets = [];
     this.healT = 0; this.hbT = 0; this.pDrip = 0;
+    // [savaş: beden] oyun saati, uçan kasklar, yerleşen cesetler, isabet istatistiği, delip geçme vektörleri, cam efektleri
+    this.clock = 0; this.loose = []; this.corpses = []; this._penO = [];
+    this.stats = { hits: 0, head: 0, pen: 0 };
+    this.glass = new GlassFx(game);
     // ayak sesi yüzeyi kancası (audio.step bunu kullanır)
     audio.surfaceAt = (x, z) => this.surfaceAt(x, z);
     this.attach(game.scene);
@@ -156,6 +166,7 @@ export class Combat {
     scene.add(this.arc); scene.add(this.arcMark);
     for (const f of this.flashes) scene.add(f.m);
     for (const p of this.projectiles) scene.add(p.mesh);
+    if (this.glass) this.glass.attach(scene);
   }
   clearTransient() {
     for (let i = 0; i < this.tracerMax; i++) { this.tracerData[i].on = false; this.tracers.setMatrixAt(i, ZERO_M); }
@@ -165,6 +176,9 @@ export class Combat {
     for (const f of this.flashes) f.m.visible = false;
     this.pools.length = 0;
     this.bleeding.length = 0;
+    for (const L of this.loose) L.o.parent && L.o.parent.remove(L.o);
+    this.loose.length = 0; this.corpses.length = 0;
+    if (this.glass) this.glass.clear();
   }
   reset() {
     for (const p of this.projectiles) p.mesh.parent && p.mesh.parent.remove(p.mesh);
@@ -231,12 +245,12 @@ export class Combat {
   }
 
   // ---------------- ışın testleri ----------------
-  rayActors(origin, dir, maxD, ignore) {
+  rayActors(origin, dir, maxD, ignore, skip = null) {
     let best = null, bt = maxD, head = false, bk = 1;
     const list = this.actors();
     for (let n = 0; n < list.length; n++) {
       const a = list[n];
-      if (a === ignore || a.dead || a.vehicle || a.inInteriorOther) continue;
+      if (a === ignore || a === skip || a.dead || a.vehicle || a.inInteriorOther) continue;
       const cr = a.crouch ? 0.3 : 0;
       // [savaş] yerde sürünen / yere savrulmuş: tek alçak küre (gövde)
       const low = a.downed || a.kdT > 0.5;
@@ -301,12 +315,15 @@ export class Combat {
     this.game.ui.hitMarker && this.game.ui.hitMarker();
   }
 
-  hitscan(attacker, origin, dir, def, muzzle) {
+  hitscan(attacker, origin, dir, def, muzzle) { this.trace(attacker, origin, dir, def, muzzle, 1, 0, null); }
+
+  // [savaş] Tek mermi izi. k: hasar oranı (delip geçen mermide düşer), depth: kaçıncı beden, skip: delinen beden.
+  trace(attacker, origin, dir, def, muzzle, k, depth, skip) {
     const g = this.game;
-    const maxD = def.range;
+    const maxD = depth ? Math.min(def.range, 40) : def.range;
     const st = g.physics.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxD);
     let t = st ? st.t : maxD;
-    const ah = this.rayActors(origin, dir, t, attacker);
+    const ah = this.rayActors(origin, dir, t, attacker, skip);
     if (ah) t = ah.t;
     const vh = this.rayVehicles(origin, dir, t, attacker.vehicle);
     if (vh) t = vh.t;
@@ -315,47 +332,122 @@ export class Combat {
     if (xh) {
       t = xh.t;
       const hp2 = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
-      this.addTracer(muzzle || origin, hp2, 0.02);
+      if (!depth) this.addTracer(muzzle || origin, hp2, 0.02);
       _n.copy(dir).negate();
       g.particles.impact(hp2, _n, 'metal', dir);
       if (this.sndBudget-- > 0) audio.impactMetal(hp2.x, hp2.z);
-      xh.target.onHit(def.dmg * (attacker.isPlayer ? (g.settings.damageDealt || 1) : 1), attacker, hp2);
+      xh.target.onHit(def.dmg * k * (attacker.isPlayer ? (g.settings.damageDealt || 1) : 1), attacker, hp2);
       if (attacker.isPlayer) this.playerHit();
       return;
     }
     const hp = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
-    this.addTracer(muzzle || origin, hp, def.pellets ? 0.012 : def.sound === 'sniper' ? 0.03 : 0.02);
-    if (!attacker.isPlayer) this.whizCheck(origin, dir, t, def, ah && ah.actor.isPlayer);
-    this.nearMiss(origin, dir, t, attacker, ah && !vh ? ah.actor : null);
+    if (!depth) {
+      this.addTracer(muzzle || origin, hp, def.pellets ? 0.012 : def.sound === 'sniper' ? 0.03 : 0.02);
+      if (!attacker.isPlayer) this.whizCheck(origin, dir, t, def, ah && ah.actor.isPlayer);
+      this.nearMiss(origin, dir, t, attacker, ah && !vh ? ah.actor : null);
+    }
     const loud = this.sndBudget-- > 0;
     if (vh) {
-      vh.vehicle.damage(def.dmg * 1.2, attacker);
+      const v = vh.vehicle;
+      v.lastPaneHit = -1;
+      v.damage(def.dmg * 1.2 * k, attacker);
       _n.copy(dir).negate();
-      g.particles.impact(hp, _n, 'metal', dir);
-      if (loud) audio.impactMetal(hp.x, hp.z);
-      if (attacker.isPlayer) g.wanted.onAttackVehicle(vh.vehicle);
+      // [savaş cam] cama isabet: kıvılcım yok, cam tozu; kaporta: metal kıvılcımı
+      if (v.lastPaneHit >= 0) this.glass.impactPuff(hp, _n);
+      else { g.particles.impact(hp, _n, 'metal', dir); if (loud) audio.impactMetal(hp.x, hp.z); }
+      if (attacker.isPlayer) g.wanted.onAttackVehicle(v);
     } else if (ah) {
-      const target = ah.actor;
-      let dmg = def.dmg;
-      // zorluk ayarı: alınan / verilen hasar çarpanı
-      if (target.isPlayer && !attacker.isPlayer) dmg *= NPC_TO_PLAYER_DMG * (g.settings.damageTaken || 1);
-      else if (attacker.isPlayer) dmg *= g.settings.damageDealt || 1;
-      // [savaş] bölge çarpanı: kol/bacak daha az
-      dmg *= ah.zone === 'arm' ? 0.6 : ah.zone === 'leg' ? 0.7 : 1;
-      const dealt = target.takeDamage(dmg, attacker, 'bullet', ah.head);
-      this.fleshFx(target, hp, dir, ah.head ? 1.6 : 1, loud);
-      this.woundFx(target, ah.zone, ah.side, hp, dir, attacker, def, dealt);
-      if (attacker.isPlayer) this.playerHit();
-      if (target.isPlayer) { g.ui.damageFlash(attacker); this.playerHitFx(attacker, dir, dealt, ah.zone); }
+      this.bodyHit(attacker, ah, hp, dir, def, k, depth, loud);
     } else if (st) {
       _n.set(st.nx, st.ny, st.nz);
-      const surf = st.box === 'water' ? 'water' : st.box === 'ground' ? (this.surfaceAt(hp.x, hp.z) === 'grass' ? 'dirt' : 'concrete') : st.box === 'ceiling' ? 'concrete' : 'concrete';
+      const surf = this.surfaceOf(st.box, hp);
       g.particles.impact(hp, _n, surf, dir);
       if (surf !== 'water') g.particles.bulletHole(hp, _n, surf);
       if (loud) {
         if (surf === 'water') audio.splash(hp.x, hp.z, 0.25);
-        else { audio.impact(hp.x, hp.z, surf); if (Math.random() < 0.22) audio.ricochet(hp.x, hp.z); }
+        else if (surf === 'metal') { audio.impactMetal(hp.x, hp.z); if (Math.random() < 0.4) audio.ricochet(hp.x, hp.z); }
+        else { audio.impact(hp.x, hp.z, surf); if (surf === 'concrete' && Math.random() < 0.22) audio.ricochet(hp.x, hp.z); }
       }
+    }
+  }
+
+  // [savaş] çarpışma kutusu etiketinden yüzey türü (metal direk/konteyner kıvılcım, ahşap kıymık, çit yaprak)
+  surfaceOf(box, hp) {
+    if (box === 'water') return 'water';
+    if (box === 'ground') return this.surfaceAt(hp.x, hp.z) === 'grass' ? 'dirt' : 'concrete';
+    const tag = box && box.tag;
+    if (tag && SURF_TAG[tag]) return SURF_TAG[tag];
+    if (this.game.player && this.game.player.inInterior) return 'wood';
+    return 'concrete';
+  }
+
+  // [savaş] Mermi bedende: bölge/kask/yelek çözümü, giriş-çıkış yarası, delip geçme, ölüm stili
+  bodyHit(attacker, ah, hp, dir, def, k, depth, loud) {
+    const g = this.game, target = ah.actor, zone = ah.zone;
+    let raw = def.dmg * k, R;
+    if (target.isPlayer && !attacker.isPlayer) {
+      // helikopter kapı nişancısı: sallanan platform; mermilerin bir kısmı oyuncunun yanına düşer (zorluğa göre)
+      if (attacker.lawShooter && attacker.owner && !depth && Math.random() < playerBal(g).heliMiss) { this.deflectNear(target, dir, loud); return; }
+      R = playerIncoming(g, target, raw, zone, def, attacker);
+    } else {
+      if (attacker.isPlayer) raw *= g.settings.damageDealt || 1;
+      R = resolveBullet(target, raw, zone, def, attacker);
+    }
+    const lethal = R.lethal, pen = R.pen, blocked = R.blocked, helmetOff = R.helmetOff, plate = R.plate, dmg = R.dmg;
+    const L = target._lastHit || (target._lastHit = { zone: 'torso', side: 1, dx: 0, dz: 1, heavy: false, t: -9, lethal: false });
+    L.zone = zone; L.side = ah.side; L.dx = dir.x; L.dz = dir.z; L.heavy = (def.dmg || 0) * k >= 60; L.t = this.clock; L.lethal = lethal;
+    const dealt = target.takeDamage(dmg, attacker, 'bullet', zone === 'head', true);
+    _w2.copy(dir).negate();
+    if (blocked === 'helmet') {
+      // kask: kıvılcım + metal çınlaması, baş geriye savrulur; tükenince kask uçar
+      g.particles.sparks(hp, 5, _w2);
+      if (loud) audio.impactMetal(hp.x, hp.z);
+      if (helmetOff) knockHelmetOff(target, dir, g.activeScene(), this.loose);
+      if (dealt > 0 && target.dead) this.fleshFx(target, hp, dir, 1.2, false, false);
+    } else if (blocked === 'vest' && plate && pen <= 0.01) {
+      // plaka durdurdu: kumaş/seramik tozu, tok darbe; kan yok
+      g.particles.impact(hp, _w2, 'dirt', dir);
+      if (loud) audio.plateHit(hp.x, hp.z);
+    } else {
+      const exits = pen > 0.08;
+      this.fleshFx(target, hp, dir, zone === 'head' ? 1.6 : 1, loud, exits, zone);
+    }
+    if (blocked !== 'helmet' && !(blocked === 'vest' && plate && pen <= 0.01)) this.woundFx(target, zone, ah.side, hp, dir, attacker, def, dealt);
+    else if (!target.dead && target.model && target.model.hitZone) target.model.hitZone(zone, ah.side, Math.min(1.4, 0.6 + dealt / 30), dir.x, dir.z);
+    if (attacker.isPlayer) this.playerHit();
+    if (target.isPlayer) { g.ui.damageFlash(attacker); this.playerHitFx(attacker, dir, dealt, zone); }
+    this.stats.hits++;
+    if (zone === 'head') this.stats.head++;
+    // delip geçme: bedenden çıkan mermi arkadakine düşük hasarla devam eder
+    if (pen > 0.08 && depth < 2) {
+      const th = zone === 'head' ? 0.24 : zone === 'torso' ? 0.42 : 0.16;
+      const o = this._penO[depth] || (this._penO[depth] = new THREE.Vector3());
+      o.copy(hp).addScaledVector(dir, th);
+      this.exitFx(target, o, dir, zone, ah.side);
+      this.stats.pen++;
+      this.trace(attacker, o, dir, def, null, k * pen, depth + 1, target);
+    }
+  }
+  // helikopter mermisi oyuncunun yakınına (asfalt/duvar) isabet eder
+  deflectNear(p, dir, loud) {
+    const g = this.game;
+    const a = Math.random() * Math.PI * 2, r = 0.7 + Math.random() * 1.3;
+    _w1.set(p.pos.x + Math.cos(a) * r, (p.pos.y || 0) + 0.01, p.pos.z + Math.sin(a) * r);
+    _n.set(0, 1, 0);
+    const surf = this.surfaceAt(_w1.x, _w1.z) === 'grass' ? 'dirt' : 'concrete';
+    g.particles.impact(_w1, _n, surf, dir);
+    g.particles.bulletHole(_w1, _n, surf);
+    if (loud) audio.impact(_w1.x, _w1.z, surf);
+    this.whizT = 0; audio.whiz(0.8, Math.cos(a), Math.sin(a), true);
+  }
+  // çıkış yarası: sırtta/arkada daha büyük yara, ileri kan püskürmesi ve sis
+  exitFx(target, p, dir, zone, side) {
+    const g = this.game;
+    g.particles.bloodSpray(p, dir, 12, target.pos.y + 0.005, 1.5);
+    this.bloodMist(p, dir, 1.2);
+    if (target.model && target.model.addWound && (target.isPlayer || this.nearCamera(target.pos, 45))) {
+      _wl.copy(p).addScaledVector(dir, -0.06);
+      this.woundAt(target, zone, side, _wl, dir, 1.25);
     }
   }
 
@@ -394,20 +486,27 @@ export class Combat {
     if (A && A.onBullet && !g.player.inInterior) A.onBullet(origin, dir, t);
   }
 
-  // Et isabeti: yönlü kan, duvara sıçrayan kan, ses, ölüm halinde kan gölü
-  fleshFx(target, hp, dir, k = 1, loud = true) {
+  // Et isabeti: giriş deliği kanı; mermi çıktıysa (exits) ileri püskürme + arkadaki duvara kan. Islak et sesi.
+  fleshFx(target, hp, dir, k = 1, loud = true, exits = true, zone = 'torso') {
     const g = this.game;
     const fy = target.pos.y;
-    g.particles.bloodSpray(hp, dir, Math.round(9 * k), fy + 0.005, k);
-    // arkadaki duvara kan
-    const w = g.physics.raycast(hp.x, hp.y, hp.z, dir.x, dir.y, dir.z, 2.6);
-    if (w && w.box !== 'water') {
-      _a.set(hp.x + dir.x * w.t, hp.y + dir.y * w.t, hp.z + dir.z * w.t);
-      _b.set(w.nx, w.ny, w.nz);
-      g.particles.bloodSplat(_a, _b, 0.35 + Math.random() * 0.35 * k, w.ny > 0.5 ? 1 : 1.4);
+    // giriş: geri sıçrayan ince kan + kırmızı sis; çıkış yoksa ileri püskürme küçük kalır
+    g.particles.bloodSpray(hp, dir, Math.round((exits ? 9 : 4) * k), fy + 0.005, exits ? k : 0.5 * k);
+    if (exits) {
+      const w = g.physics.raycast(hp.x, hp.y, hp.z, dir.x, dir.y, dir.z, 2.6);
+      if (w && w.box !== 'water') {
+        _a.set(hp.x + dir.x * w.t, hp.y + dir.y * w.t, hp.z + dir.z * w.t);
+        _b.set(w.nx, w.ny, w.nz);
+        g.particles.bloodSplat(_a, _b, 0.35 + Math.random() * 0.35 * k, w.ny > 0.5 ? 1 : 1.4);
+      }
     }
-    if (loud) audio.bulletFlesh(hp.x, hp.z);
+    if (loud) audio.fleshImpact ? audio.fleshImpact(hp.x, hp.z, k, zone === 'head') : audio.bulletFlesh(hp.x, hp.z);
     if (target.dead) this.startPool(target);
+  }
+  // ince kan sisi (çıkış yarası, baş isabeti)
+  bloodMist(p, dir, k = 1) {
+    const N = this.game.particles.norm;
+    for (let i = 0; i < 4; i++) N.emit(p.x + dir.x * 0.08 * i, p.y + (Math.random() - 0.5) * 0.1, p.z + dir.z * 0.08 * i, dir.x * (1.6 + i * 0.5) + (Math.random() - 0.5) * 0.5, 0.1 + Math.random() * 0.3, dir.z * (1.6 + i * 0.5) + (Math.random() - 0.5) * 0.5, 0.45 + Math.random() * 0.3, (0.13 + 0.05 * i) * k, 0.42, 0.02, 0.02, 0.5, 1.6);
   }
 
   // ---------------- [savaş: yaralar, bölgesel tepkiler, oyuncu vuruş hissi] ----------------
@@ -425,38 +524,42 @@ export class Combat {
     return best ? { target: best, t: bt } : null;
   }
 
-  // Kemiğe yara izi + bölgeye göre tepki (topallama, silah düşürme, sendeleme, kanama, yere yığılma)
-  woundFx(target, zone, side, hp, dir, attacker, def, dealt = 0) {
-    const g = this.game;
-    if (!zone || !target.model) return;
+  // [savaş] yara izini kemiğe yerleştir: p = deliğin dünya konumu (giriş ya da çıkış), size: çıkışta daha büyük
+  woundAt(target, zone, side, p, dir, size = 1) {
+    const M = target.model;
     const S = side > 0 ? 'R' : 'L';
-    const yy = hp.y - target.pos.y;
+    const yy = p.y - target.pos.y;
     let bone, child = null, rad;
     if (target.downed) { bone = 'spine'; child = 'chest'; rad = 0.14; }
     else if (zone === 'head') { bone = 'head'; rad = 0.095; }
     else if (zone === 'arm') { if (yy > 1.22) { bone = 'sh' + S; child = 'el' + S; } else { bone = 'el' + S; child = 'wr' + S; } rad = 0.05; }
     else if (zone === 'leg') { if (yy > 0.5) { bone = 'hip' + S; child = 'kn' + S; rad = 0.075; } else { bone = 'kn' + S; child = 'an' + S; rad = 0.055; } }
     else { if (yy > 1.22) { bone = 'chest'; child = 'neck'; } else { bone = 'spine'; child = 'chest'; } rad = 0.14; }
+    M.root.updateMatrixWorld(true);
+    const Bn = M.bones[BI[bone]];
+    Bn.getWorldPosition(_w1);
+    if (child) {
+      M.bones[BI[child]].getWorldPosition(_w2);
+      _s.subVectors(_w2, _w1);
+      const L2 = _s.lengthSq() || 1;
+      const u = Math.max(0.15, Math.min(0.85, ((p.x - _w1.x) * _s.x + (p.y - _w1.y) * _s.y + (p.z - _w1.z) * _s.z) / L2));
+      _w1.addScaledVector(_s, u);
+    } else _w1.y += 0.09 * (M.body.scale.x || 1);
+    _w3.set(p.x - _w1.x, (p.y - _w1.y) * 0.4, p.z - _w1.z);
+    if (_w3.lengthSq() < 1e-6) _w3.set(-dir.x, 0, -dir.z);
+    _w3.normalize();
+    _w2.copy(_w1).addScaledVector(_w3, rad);
+    const loc = Bn.worldToLocal(_wl.copy(_w2));
+    _w3.add(_w2); Bn.worldToLocal(_w3); _w3.sub(loc);
+    M.addWound(bone, loc, (0.8 + Math.random() * 0.5) * size, _w3);
+  }
+
+  // Kemiğe yara izi + bölgeye göre tepki (topallama, silah düşürme, sendeleme, kanama, yere yığılma)
+  woundFx(target, zone, side, hp, dir, attacker, def, dealt = 0) {
+    const g = this.game;
+    if (!zone || !target.model) return;
     const M = target.model;
-    if (M.addWound && (target.isPlayer || this.nearCamera(target.pos, 45))) {
-      M.root.updateMatrixWorld(true);
-      const Bn = M.bones[BI[bone]];
-      Bn.getWorldPosition(_w1);
-      if (child) {
-        M.bones[BI[child]].getWorldPosition(_w2);
-        _s.subVectors(_w2, _w1);
-        const L2 = _s.lengthSq() || 1;
-        const u = Math.max(0.15, Math.min(0.85, ((hp.x - _w1.x) * _s.x + (hp.y - _w1.y) * _s.y + (hp.z - _w1.z) * _s.z) / L2));
-        _w1.addScaledVector(_s, u);
-      } else _w1.y += 0.09 * (M.body.scale.x || 1);
-      _w3.set(hp.x - _w1.x, (hp.y - _w1.y) * 0.4, hp.z - _w1.z);
-      if (_w3.lengthSq() < 1e-6) _w3.set(-dir.x, 0, -dir.z);
-      _w3.normalize();
-      _w2.copy(_w1).addScaledVector(_w3, rad);
-      const loc = Bn.worldToLocal(_w2.clone());
-      _w3.add(_w2); Bn.worldToLocal(_w3); _w3.sub(loc);
-      M.addWound(bone, loc, 0.8 + Math.random() * 0.5, _w3);
-    }
+    if (M.addWound && (target.isPlayer || this.nearCamera(target.pos, 45))) this.woundAt(target, zone, side, hp, dir, 1);
     // giriş deliğinden geriye küçük kan pufu
     _w2.copy(dir).negate();
     g.particles.blood(hp, 3, _w2, target.pos.y + 0.005);
@@ -559,7 +662,11 @@ export class Combat {
         tmp.set(p.pos.x + (Math.random() - 0.5) * 0.25, p.pos.y + 0.85, p.pos.z + (Math.random() - 0.5) * 0.25);
         g.particles.blood(tmp, 2, null, p.pos.y + 0.005);
       }
-    } else if (p.lastHurtT > 8 && p.hp < p.maxHp * PLAYER_REGEN_CAP) p.hp = Math.min(p.maxHp * PLAYER_REGEN_CAP, p.hp + 1.6 * dt); // kısmi kendiliğinden iyileşme
+    } else {
+      // [savaş] kısmi kendiliğinden iyileşme: zorluğa göre gecikme, hız ve üst sınır (siperde nefes alınca toparlanır)
+      const B = playerBal(g), cap = p.maxHp * B.regenCap;
+      if (p.lastHurtT > B.regenDelay && p.hp < cap) p.hp = Math.min(cap, p.hp + B.regenRate * Math.min(1, (p.lastHurtT - B.regenDelay) / 2 + 0.3) * dt);
+    }
     // tam iyileşince (hastane, yemek...) kanama ve yaralar temizlenir
     if (p.hp >= p.maxHp - 0.5 && (p.bleed || p.limp || (p.model.wounds && p.model.wounds.length))) this.healPlayerWounds();
     if (p.hp < 30) { this.hbT -= dt; if (this.hbT <= 0) { this.hbT = 0.7 + p.hp / 50; audio.heartbeat(1 - p.hp / 60); } }
@@ -704,7 +811,10 @@ export class Combat {
       const d = Math.hypot(a.pos.x - x, a.pos.y + 1 - y, a.pos.z - z);
       if (d < radius) {
         const k = 1 - d / radius;
-        a.takeDamage(dmg * k, attacker, 'explosion');
+        let ed = dmg * k;
+        if (a.isPlayer) { const B = playerBal(g); ed = capBurst(a, ed * B.blast, B, k > 0.8); } // [savaş] oyuncu: zorluğa göre
+        if (a._lastHit) a._lastHit.t = -9;
+        a.takeDamage(ed, attacker, 'explosion');
         if (!a.dead) {
           const ux = (a.pos.x - x) / (d || 1), uz = (a.pos.z - z) / (d || 1);
           a.knock = { x: ux * 8 * k, z: uz * 8 * k, t: 0.3 };
@@ -859,6 +969,9 @@ export class Combat {
     this.updateProjectiles(dt);
     this.updateArc();
     this.updatePlayerHealth(dt); // [savaş] kanama, kısmi iyileşme, ilk yardım (B)
+    this.clock += dt;
+    this.updateBodies(dt);
+    this.glass.update(dt);
     // kanamalar
     for (let i = this.bleeding.length - 1; i >= 0; i--) {
       const b = this.bleeding[i];
@@ -884,6 +997,67 @@ export class Combat {
     if (g.env) g.particles.setLight(g.player && g.player.inInterior ? 0.8 : 1 - g.env.nightFactor);
     // ses: ortam, rüzgâr, lastik, dinleyici yönü (ses motorunun kare kancası)
     audio.update(dt, g);
+  }
+
+  // ---------------- [savaş: ölüm stili, ceset yerleşmesi, uçan kask] ----------------
+  // actor.die çağırır: son isabete göre yığılma biçimi (baş: dizden çökme, gövde önden: geriye, omuz: dönerek,
+  // bacak: dize düşüp kapaklanma, arkada duvar: duvara yaslanıp kayma). Oyuncu için de aynı.
+  onActorDeath(a, attacker, kind) {
+    const M = a.model;
+    if (!M) return;
+    const L = a._lastHit, fresh = L && this.clock - L.t < 0.25 && kind === 'bullet';
+    let zone = fresh ? L.zone : kind === 'explosion' ? 'blast' : kind === 'bleed' ? 'bleed' : kind === 'melee' ? 'torso' : 'torso';
+    const dx = fresh ? L.dx : M.deathDir ? 0 : 0, dz = fresh ? L.dz : 0;
+    // mermi yönünde (beden o yöne düşer) yakın duvar var mı? (göğüs ve bel hizası)
+    let wall = 0;
+    if (fresh && !a.downed && !a.swimming && kind !== 'explosion') {
+      const l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
+      const h1 = this.game.physics.raycast(a.pos.x, a.pos.y + 1.1, a.pos.z, ux, 0, uz, 1.25);
+      const h2 = h1 && this.game.physics.raycast(a.pos.x, a.pos.y + 0.55, a.pos.z, ux, 0, uz, 1.35);
+      if (h1 && h2 && h1.box !== 'ground' && Math.abs(h1.ny) < 0.5) wall = Math.max(0.25, Math.min(h1.t, h2.t));
+    }
+    if (zone === 'arm') zone = 'shoulder';
+    const S = M.deathStyle || (M.deathStyle = { zone: 'torso', side: 1, wall: 0, heavy: false, seed: 0 });
+    S.zone = a.downed ? 'prone' : zone; S.side = fresh ? L.side : Math.random() < 0.5 ? 1 : -1; S.wall = wall; S.heavy = !!(fresh && L.heavy); S.seed = Math.random();
+    // duvara yaslanma: beden duvara doğru (sırtı duvarda) — yalnız geriye düşüşte; kök yönünü duvara sırt verecek şekilde hizala
+    if (wall) {
+      const l = Math.hypot(dx, dz) || 1;
+      const back = Math.atan2(-dx / l, -dz / l); // yüz mermiye (duvarın tersine) dönük
+      const d = Math.atan2(Math.sin(back - a.heading), Math.cos(back - a.heading));
+      if (Math.abs(d) < 1.3) { S.zone = 'wall'; S.yaw0 = d; } else S.wall = 0;
+    }
+    this.corpses.push(a);
+  }
+  updateBodies(dt) {
+    const g = this.game;
+    if (g.player) syncPlayerGear(g.player);
+    // cesetler zemine oturur (havada / basamakta ölen: yere iner). Kısa süre izlenir, sonra bırakılır.
+    for (let i = this.corpses.length - 1; i >= 0; i--) {
+      const a = this.corpses[i];
+      a._settleT = (a._settleT || 0) + dt;
+      if (!a.dead || a._settleT > 4 || a.vehicle || a.passengerOf) { a._settleT = 0; this.corpses[i] = this.corpses[this.corpses.length - 1]; this.corpses.pop(); continue; }
+      if (a.swimming || g.physics.inWater(a.pos.x, a.pos.z)) continue;
+      const h = g.physics.raycastShared(a.pos.x, a.pos.y + 0.4, a.pos.z, 0, -1, 0, 60);
+      const floor = h ? a.pos.y + 0.4 - h.t : g.physics.groundAt(a.pos.x, a.pos.z);
+      if (a.pos.y > floor + 0.01) { a._cvy = (a._cvy || 0) - 18 * dt; a.pos.y = Math.max(floor, a.pos.y + a._cvy * dt); }
+      else { a._cvy = 0; if (a.pos.y < floor - 0.01 && floor - a.pos.y < 0.45) a.pos.y = floor; }
+      if (a.model) a.model.root.position.y = a.pos.y;
+    }
+    // başından fırlayan kasklar
+    for (let i = this.loose.length - 1; i >= 0; i--) {
+      const L = this.loose[i], o = L.o;
+      L.life -= dt;
+      if (L.life <= 0) { o.parent && o.parent.remove(o); this.loose.splice(i, 1); continue; }
+      if (L.rest) continue;
+      L.vy -= 16 * dt;
+      o.position.x += L.vx * dt; o.position.y += L.vy * dt; o.position.z += L.vz * dt;
+      o.rotation.x += L.wx * dt; o.rotation.z += L.wz * dt;
+      if (o.position.y < L.floor) {
+        o.position.y = L.floor;
+        if (L.vy < -2) { L.vy *= -0.3; L.vx *= 0.5; L.vz *= 0.5; L.wx *= 0.4; L.wz *= 0.4; if (this.sndBudget-- > 0) audio.impactMetal(o.position.x, o.position.z); }
+        else { L.rest = true; o.rotation.x = Math.PI * (Math.random() < 0.5 ? 0 : 1) + (Math.random() - 0.5) * 0.4; o.rotation.z = (Math.random() - 0.5) * 0.5; }
+      }
+    }
   }
 
   updateShells(dt) {
