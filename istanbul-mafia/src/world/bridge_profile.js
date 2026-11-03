@@ -9,6 +9,7 @@
 //
 // DECK_TOP = 0 yapılırsa köprü eski düz (y=0) hâline döner; gemiler de köprü önünde döner (ships.js).
 import { BRIDGES, WATER_Y } from './map.js';
+import { terrainHeight, terrainSlope } from './terrain.js';
 
 export const DECK_TOP = 20;
 export const GALATA_TOP = 4.2;
@@ -48,6 +49,8 @@ export function galataDeckSlope(z) {
 export function bridgeHeightAt(x, z) {
   if (BOS && x >= BOS.x0 && x <= BOS.x1 && z >= BOS.z0 && z <= BOS.z1) return bosphorusDeckY(x);
   if (GAL && x >= GAL.x0 && x <= GAL.x1 && z >= GAL.z0 && z <= GAL.z1) return galataDeckY(z);
+  // dağ arazisi ve dağ yolu (terrain.js): araçlar/trafik aynı zemin profilini izler
+  if (x > 900) return terrainHeight(x, z);
   return null;
 }
 // Yol eğimi (dy/dx, dy/dz) — araç burun açısı için: ileri (sin h, cos h) yönünde eğim = sx*sin(h) + sz*cos(h)
@@ -55,6 +58,7 @@ export function bridgeSlopeAt(x, z, out = { x: 0, z: 0 }) {
   out.x = 0; out.z = 0;
   if (BOS && x >= BOS.x0 && x <= BOS.x1 && z >= BOS.z0 && z <= BOS.z1) out.x = bosphorusDeckSlope(x);
   else if (GAL && x >= GAL.x0 && x <= GAL.x1 && z >= GAL.z0 && z <= GAL.z1) out.z = galataDeckSlope(z);
+  else if (x > 900) terrainSlope(x, z, out);
   return out;
 }
 // Gemiler için: Boğaz köprüsü altındaki serbest yükseklik (su seviyesinden, tabliye altı ~2.6 m kalın)

@@ -4,6 +4,7 @@
 // Kırılabilir küçük eşyalar (çöp kovası, baba, levha...) `b.brk` taşır: araç çarpınca enkaza dönüşür.
 import { isLand, WATER_Y } from './map.js';
 import { NavGrid } from './navgrid.js';
+import { terrainHeight, terrainRay } from './terrain.js';
 
 const CELL = 16;
 export const SHAPE_AABB = 0, SHAPE_OBB = 1, SHAPE_CIRCLE = 2;
@@ -205,6 +206,8 @@ export class Physics {
   // Zemin yüksekliği (kara 0, su yüzeyi)
   groundAt(x, z) {
     if (this.interiorMode) return 0;
+    // dağ arazisi (yükseklik alanı)
+    if (x > 900) { const th = terrainHeight(x, z); if (th !== null) return th; }
     return isLand(x, z) ? 0 : WATER_Y - 4;
   }
   inWater(x, z) { return !this.interiorMode && !isLand(x, z); }
@@ -270,6 +273,11 @@ export class Physics {
           if (tw > 0 && tw < best) { best = tw; nx = 0; ny = 1; nz = 0; found = 'water'; }
         }
       }
+    }
+    // dağ arazisi: ışın yükseklik alanından geçiyorsa yürü
+    if (!this.interiorMode && (ox > 900 || ox + dx * best > 900)) {
+      const tt = terrainRay(ox, oy, oz, dx, dy, dz, best);
+      if (tt >= 0 && tt < best) { best = tt; nx = 0; ny = 1; nz = 0; found = 'ground'; }
     }
     if (this.interiorMode && dy > 1e-4) {
       const t = (3.4 - oy) / dy; // tavan

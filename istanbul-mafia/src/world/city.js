@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, HARBOR, districtAt } from './map.js';
 import { RNG } from '../core/util.js';
+import { MOUNTAIN, initMountain } from './terrain.js';
 import { oceanNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
 import { SHARED, OCEAN, oceanMaterial, oceanGeometry, oceanObstacle, terrainMaterial, pbrMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
 import { NearInstancer, ChunkInstancer, ChunkMerger } from './instancer.js';
@@ -228,8 +229,11 @@ export class City {
     this.maskTex = maskTex;
 
     // zemin: yalnız kara parçaları (su altında zemin yok)
-    const lands = [[-1000, -1000, 200, 70], [-1000, 70, -850, 190], [-1000, 190, 200, 820], [420, -1000, 1000, 820]];
-    const parts = lands.map(([x0, z0, x1, z1]) => { const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.ceil((x1 - x0) / 100), Math.ceil((z1 - z0) / 100)); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2); return g; });
+    // Anadolu yakası: dağ alanı (terrain.js) düz zeminden kesilir, kendi ağıyla çizilir
+    initMountain();
+    const MX = MOUNTAIN.ready ? MOUNTAIN.x0 : 1000, MZ0 = MOUNTAIN.ready ? MOUNTAIN.z0 : 820, MZ1 = MOUNTAIN.ready ? MOUNTAIN.z1 : 820;
+    const lands = [[-1000, -1000, 200, 70], [-1000, 70, -850, 190], [-1000, 190, 200, 820], [420, -1000, 1000, MZ0], [420, MZ0, MX, MZ1], [420, MZ1, 1000, 820]].filter(([x0, z0, x1, z1]) => x1 - x0 > 0.5 && z1 - z0 > 0.5);
+    const parts = lands.map(([x0, z0, x1, z1]) => { const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.max(1, Math.ceil((x1 - x0) / 100)), Math.max(1, Math.ceil((z1 - z0) / 100))); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2); return g; });
     const ground = new THREE.Mesh(mergeGeometries(parts), terrainMaterial(maskTex, this.quality));
     ground.receiveShadow = true;
     ground.onBeforeRender = (r, s, cam) => { if (cam && cam.isPerspectiveCamera) this.camPos.copy(cam.position); };

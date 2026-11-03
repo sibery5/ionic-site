@@ -205,7 +205,8 @@ export class CityMap {
     // Anadolu yakası
     const axs = genLines(r, 435, 985, [435, 800, 985]).filter((v) => v >= 435);
     // orman: son Anadolu sütunu, 250 caddesinin güneyi (bu sütunun blokları blok listesinin sonundadır)
-    { const xl = axs[axs.length - 2]; const ZB2 = 5.5 + 3.2; Object.assign(FOREST.lines, { x0: xl, x1: 985 }); Object.assign(FOREST, { x0: xl + ZB2, x1: 985 - ZB2, z0: 250 + 8 + 3.2, z1: 810 - 8 - 3.2 }); }
+    // dağ (terrain.js) harita kenarına (x=1000) kadar uzanır: x=985 caddesinin orman kesimi kaldırılır
+    { const xl = axs[axs.length - 2]; const ZB2 = 5.5 + 3.2; Object.assign(FOREST.lines, { x0: xl, x1: 1000 }); Object.assign(FOREST, { x0: xl + ZB2, x1: 995, z0: 250 + 8 + 3.2, z1: 810 - 8 - 3.2 }); }
     const az = genLines(r, -985, 810, [-985, -450, -380, 250, 810]).filter((v) => v <= 810);
     this.mainX = new Set([-860, -500, -150, 190, 435]);
     this.mainZ = new Set([-450, 60, 200, 810, 250]);
