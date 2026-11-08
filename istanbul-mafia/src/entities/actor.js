@@ -119,11 +119,8 @@ export class Actor {
       const n = def.pellets || 1;
       // [savaş entegrasyonu] sapma: taban + birikmiş bloom, nişan çarpanı (adsMul), hareket/çömelme
       let spread;
-      if (this.isPlayer) {
-        const base = this.aiming ? def.spread * (def.adsMul || 0.6) : (def.hipSpread || def.spread);
-        spread = (base + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
-        if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
-      } else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
+      if (this.isPlayer) spread = this.spreadNow(def);
+      else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
       this.bloom = Math.min(def.bloomMax || 0, this.bloom + (def.bloom || 0));
       for (let i = 0; i < n; i++) {
         const d = dir.clone();
@@ -138,6 +135,16 @@ export class Actor {
   }
 
   // [savaş] resolved: hasar game/body.js'te bölge/kask/yelek kuralıyla çözüldü (başa çarpan ve zırh yeniden uygulanmaz)
+  // [savaş] oyuncunun anlık sapması (radyan civarı): nişan, bloom, çömelme, hareket, yaralı kol. Nişangâh da bunu gösterir.
+  spreadNow(def = this.wdef) {
+    if (!def || def.type === 'melee') return 0;
+    const ads = this.adsK !== undefined ? this.adsK : this.aiming ? 1 : 0;
+    const hip = def.hipSpread || def.spread || 0, aim = (def.spread || 0) * (def.adsMul || 0.6);
+    let spread = (hip + (aim - hip) * ads + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
+    if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
+    return spread;
+  }
+
   takeDamage(amount, attacker, kind = 'bullet', headshot = false, resolved = false) {
     if (this.dead) return 0;
     if (this.god) return 0;

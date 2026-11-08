@@ -7,6 +7,7 @@ import { inBridge, WATER_Y } from '../world/map.js';
 import { BI } from '../entities/charParts.js';
 import { resolveBullet, playerIncoming, playerBal, capBurst, knockHelmetOff, syncPlayerGear } from './body.js';
 import { GlassFx } from './glassfx.js';
+import { Reticle } from '../ui/reticle.js';
 
 // NPC mermilerinin oyuncuya verdiği hasar: zorluk tablosu body.js PLAYER_BAL (mermi/patlama çarpanı, ani hasar tavanı)
 // [savaş] oyuncu kanaması: seviye başına saniyede can kaybı, alt sınır; kısmi kendiliğinden iyileşme üst sınırı (maxHp oranı)
@@ -154,6 +155,8 @@ export class Combat {
     this.clock = 0; this.loose = []; this.corpses = []; this._penO = [];
     this.stats = { hits: 0, head: 0, pen: 0 };
     this.glass = new GlassFx(game);
+    this.WEAPONS = WEAPONS; // testler ve araçlar için
+    this.reticle = typeof document !== 'undefined' ? new Reticle(game) : null; // [savaş nişan] nişangâh + dürbün
     // ayak sesi yüzeyi kancası (audio.step bunu kullanır)
     audio.surfaceAt = (x, z) => this.surfaceAt(x, z);
     this.attach(game.scene);
@@ -972,6 +975,7 @@ export class Combat {
     this.clock += dt;
     this.updateBodies(dt);
     this.glass.update(dt);
+    if (this.reticle) this.reticle.update();
     // kanamalar
     for (let i = this.bleeding.length - 1; i >= 0; i--) {
       const b = this.bleeding[i];

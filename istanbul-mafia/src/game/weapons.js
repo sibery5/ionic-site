@@ -14,6 +14,8 @@ import { woodTexture } from '../core/textures.js';
 //  flash             : namlu alevi boyutu, shell: kovan türü ('pistol'|'rifle'|'shotgun'|false)
 //  shellDelay        : kovanın atılma gecikmesi (pompa / sürgü hareketi)
 //  stab/slash/backstab/bleed : bıçak saldırıları (dürtme, kesme, arkadan ×3, kanama)
+//  zoom              : [savaş] sağ tık yakınlaştırması (tabanca az, tüfek orta, dürbün yüksek)
+//  pen               : [savaş] bedeni delip geçme oranı (0 = delmez; body.js)
 export const WEAPONS = {
   fists: { name: 'Yumruk', type: 'melee', dmg: 9, range: 1.6, rate: 2.5, price: 0, slot: 0 },
   knife: {
@@ -22,65 +24,65 @@ export const WEAPONS = {
   },
   bat: { name: 'Beyzbol Sopası', type: 'melee', dmg: 34, range: 2.2, rate: 1.4, price: 600, slot: 1, knockback: 5 },
   pistol: {
-    name: 'Tabanca 9mm', type: 'gun', sound: 'pistol', dmg: 24, rate: 4, mag: 15, spread: 0.012, range: 90, price: 1500, ammoPrice: 6, slot: 2, oneHand: true, reload: 1.3,
+    name: 'Tabanca 9mm', type: 'gun', zoom: 1.25, pen: 0.3, sound: 'pistol', dmg: 24, rate: 4, mag: 15, spread: 0.012, range: 90, price: 1500, ammoPrice: 6, slot: 2, oneHand: true, reload: 1.3,
     recoil: 0.012, recoilH: 0.006, bloom: 0.008, bloomMax: 0.04, bloomRecover: 0.12, adsMul: 0.55, flash: 0.7, shell: 'pistol',
   },
   revolver: {
-    name: 'Altıpatlar', type: 'gun', sound: 'revolver', dmg: 60, rate: 1.6, mag: 6, spread: 0.008, range: 110, price: 3800, ammoPrice: 15, slot: 2, oneHand: true, reload: 2.2,
+    name: 'Altıpatlar', type: 'gun', zoom: 1.3, pen: 0.5, sound: 'revolver', dmg: 60, rate: 1.6, mag: 6, spread: 0.008, range: 110, price: 3800, ammoPrice: 15, slot: 2, oneHand: true, reload: 2.2,
     recoil: 0.03, recoilH: 0.012, bloom: 0.02, bloomMax: 0.05, bloomRecover: 0.1, adsMul: 0.5, flash: 1.15, shell: false,
   },
   uzi: {
-    name: 'Uzi', type: 'gun', sound: 'smg', dmg: 15, rate: 13, mag: 32, spread: 0.035, range: 70, price: 6500, ammoPrice: 4, slot: 3, oneHand: true, auto: true, reload: 1.6,
+    name: 'Arı 9', type: 'gun', zoom: 1.4, pen: 0.2, sound: 'smg', dmg: 15, rate: 13, mag: 32, spread: 0.035, range: 70, price: 6500, ammoPrice: 4, slot: 3, oneHand: true, auto: true, reload: 1.6,
     recoil: 0.007, recoilH: 0.009, bloom: 0.004, bloomMax: 0.05, bloomRecover: 0.15, adsMul: 0.7, flash: 0.6, shell: 'pistol',
   },
   shotgun: {
-    name: 'Pompalı Tüfek', type: 'gun', sound: 'shotgun', dmg: 13, pellets: 9, rate: 1.2, mag: 8, spread: 0.09, range: 40, price: 8500, ammoPrice: 20, slot: 4, reload: 2.6,
+    name: 'Pompalı Tüfek', type: 'gun', zoom: 1.3, pen: 0, sound: 'shotgun', dmg: 13, pellets: 9, rate: 1.2, mag: 8, spread: 0.09, range: 40, price: 8500, ammoPrice: 20, slot: 4, reload: 2.6,
     recoil: 0.04, recoilH: 0.015, bloom: 0.01, bloomMax: 0.03, bloomRecover: 0.1, adsMul: 0.8, flash: 1.45, shell: 'shotgun', shellDelay: 0.42,
   },
   ak: {
-    name: 'Kalaşnikof', type: 'gun', sound: 'rifle', dmg: 32, rate: 9, mag: 30, spread: 0.02, range: 150, price: 16000, ammoPrice: 10, slot: 5, auto: true, reload: 2.3,
+    name: 'Bozkır 47', type: 'gun', zoom: 1.65, pen: 0.6, sound: 'rifle', dmg: 32, rate: 9, mag: 30, spread: 0.02, range: 150, price: 16000, ammoPrice: 10, slot: 5, auto: true, reload: 2.3,
     recoil: 0.012, recoilH: 0.01, bloom: 0.006, bloomMax: 0.05, bloomRecover: 0.14, adsMul: 0.5, flash: 1.0, shell: 'rifle',
   },
   m4: {
-    name: 'Taarruz Tüfeği', type: 'gun', sound: 'rifle', dmg: 28, rate: 11, mag: 30, spread: 0.015, range: 160, price: 22000, ammoPrice: 12, slot: 5, auto: true, reload: 2.0,
+    name: 'Taarruz Tüfeği', type: 'gun', zoom: 1.75, pen: 0.5, sound: 'rifle', dmg: 28, rate: 11, mag: 30, spread: 0.015, range: 160, price: 22000, ammoPrice: 12, slot: 5, auto: true, reload: 2.0,
     recoil: 0.008, recoilH: 0.006, bloom: 0.004, bloomMax: 0.035, bloomRecover: 0.16, adsMul: 0.45, flash: 0.85, shell: 'rifle',
   },
   sniper: {
-    name: 'Keskin Nişancı', type: 'gun', sound: 'sniper', dmg: 150, rate: 0.8, mag: 5, spread: 0.001, range: 400, price: 30000, ammoPrice: 60, slot: 6, scope: true, reload: 3.2,
+    name: 'Keskin Nişancı', type: 'gun', zoom: 6, pen: 0.8, sound: 'sniper', dmg: 150, rate: 0.8, mag: 5, spread: 0.001, range: 400, price: 30000, ammoPrice: 60, slot: 6, scope: true, reload: 3.2,
     recoil: 0.05, recoilH: 0.01, bloom: 0.02, bloomMax: 0.03, bloomRecover: 0.05, adsMul: 1, hipSpread: 0.03, flash: 1.3, shell: 'rifle', shellDelay: 0.6,
   },
   rpg: {
-    name: 'Roketatar', type: 'launcher', sound: 'rpg', dmg: 250, radius: 8, rate: 0.6, mag: 1, spread: 0.005, range: 300, price: 65000, ammoPrice: 1500, slot: 7, reload: 3.0,
+    name: 'Roketatar', type: 'launcher', zoom: 1.5, pen: 0, sound: 'rpg', dmg: 250, radius: 8, rate: 0.6, mag: 1, spread: 0.005, range: 300, price: 65000, ammoPrice: 1500, slot: 7, reload: 3.0,
     recoil: 0.03, recoilH: 0.01, bloom: 0, bloomMax: 0, adsMul: 0.6, flash: 1.6, shell: false,
   },
   grenade: { name: 'El Bombası', type: 'throw', dmg: 180, radius: 7, rate: 1, mag: 1, price: 900, ammoPrice: 900, slot: 8 },
   // ---- [savaş: yeni silahlar] (kurgusal adlar). stagger: vurulanı sendeletme çarpanı ----
   kilic: {
-    name: 'Kılıç 17', type: 'gun', sound: 'pistol2', dmg: 22, rate: 5, mag: 17, spread: 0.011, range: 90, price: 2400, ammoPrice: 6, slot: 2, oneHand: true, reload: 1.15,
+    name: 'Kılıç 17', type: 'gun', zoom: 1.25, pen: 0.3, sound: 'pistol2', dmg: 22, rate: 5, mag: 17, spread: 0.011, range: 90, price: 2400, ammoPrice: 6, slot: 2, oneHand: true, reload: 1.15,
     recoil: 0.01, recoilH: 0.006, bloom: 0.007, bloomMax: 0.04, bloomRecover: 0.14, adsMul: 0.55, flash: 0.65, shell: 'pistol',
   },
   kartal: {
-    name: 'Boz Kartal .50', type: 'gun', sound: 'magnum', dmg: 78, rate: 1.7, mag: 7, spread: 0.01, range: 120, price: 9500, ammoPrice: 25, slot: 2, oneHand: true, reload: 1.9,
+    name: 'Boz Kartal .50', type: 'gun', zoom: 1.3, pen: 0.6, sound: 'magnum', dmg: 78, rate: 1.7, mag: 7, spread: 0.01, range: 120, price: 9500, ammoPrice: 25, slot: 2, oneHand: true, reload: 1.9,
     recoil: 0.05, recoilH: 0.016, bloom: 0.025, bloomMax: 0.06, bloomRecover: 0.1, adsMul: 0.5, flash: 1.35, shell: 'rifle', stagger: 1.4,
   },
   akrep: {
-    name: 'Akrep Kompakt', type: 'gun', sound: 'smg2', dmg: 14, rate: 16, mag: 30, spread: 0.04, range: 60, price: 5200, ammoPrice: 4, slot: 3, oneHand: true, auto: true, reload: 1.4,
+    name: 'Akrep Kompakt', type: 'gun', zoom: 1.4, pen: 0.2, sound: 'smg2', dmg: 14, rate: 16, mag: 30, spread: 0.04, range: 60, price: 5200, ammoPrice: 4, slot: 3, oneHand: true, auto: true, reload: 1.4,
     recoil: 0.006, recoilH: 0.011, bloom: 0.004, bloomMax: 0.06, bloomRecover: 0.16, adsMul: 0.7, flash: 0.55, shell: 'pistol',
   },
   cifte: {
-    name: 'Kesik Çifte', type: 'gun', sound: 'sawed', dmg: 15, pellets: 11, rate: 3, mag: 2, spread: 0.14, range: 24, price: 4200, ammoPrice: 12, slot: 4, reload: 2.1,
+    name: 'Kesik Çifte', type: 'gun', zoom: 1.2, pen: 0, sound: 'sawed', dmg: 15, pellets: 11, rate: 3, mag: 2, spread: 0.14, range: 24, price: 4200, ammoPrice: 12, slot: 4, reload: 2.1,
     recoil: 0.06, recoilH: 0.02, bloom: 0.01, bloomMax: 0.03, bloomRecover: 0.1, adsMul: 0.9, flash: 1.7, shell: false, stagger: 1.5,
   },
   tufan: {
-    name: 'Tufan Makineli', type: 'gun', sound: 'lmg', dmg: 30, rate: 11, mag: 100, spread: 0.028, range: 150, price: 42000, ammoPrice: 10, slot: 5, auto: true, reload: 4.6,
+    name: 'Tufan Makineli', type: 'gun', zoom: 1.6, pen: 0.6, sound: 'lmg', dmg: 30, rate: 11, mag: 100, spread: 0.028, range: 150, price: 42000, ammoPrice: 10, slot: 5, auto: true, reload: 4.6,
     recoil: 0.01, recoilH: 0.012, bloom: 0.003, bloomMax: 0.06, bloomRecover: 0.1, adsMul: 0.55, flash: 1.1, shell: 'rifle',
   },
   bozkurt: {
-    name: 'Bozkurt Nişancı', type: 'gun', sound: 'dmr', dmg: 72, rate: 2.8, mag: 10, spread: 0.004, range: 260, price: 26000, ammoPrice: 30, slot: 6, scope: true, reload: 2.4,
+    name: 'Bozkurt Nişancı', type: 'gun', zoom: 4, pen: 0.65, sound: 'dmr', dmg: 72, rate: 2.8, mag: 10, spread: 0.004, range: 260, price: 26000, ammoPrice: 30, slot: 6, scope: true, reload: 2.4,
     recoil: 0.03, recoilH: 0.008, bloom: 0.012, bloomMax: 0.03, bloomRecover: 0.12, adsMul: 1, hipSpread: 0.025, flash: 1.0, shell: 'rifle',
   },
   simsek: {
-    name: 'Şimşek 40 Bombaatar', type: 'launcher', lob: true, sound: 'gl', dmg: 160, radius: 6, rate: 1.1, mag: 6, spread: 0.006, range: 200, price: 48000, ammoPrice: 600, slot: 7, reload: 3.4,
+    name: 'Şimşek 40 Bombaatar', type: 'launcher', zoom: 1.5, pen: 0, lob: true, sound: 'gl', dmg: 160, radius: 6, rate: 1.1, mag: 6, spread: 0.006, range: 200, price: 48000, ammoPrice: 600, slot: 7, reload: 3.4,
     recoil: 0.04, recoilH: 0.01, bloom: 0, bloomMax: 0, adsMul: 0.6, flash: 0.9, shell: false,
   },
 };
