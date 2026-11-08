@@ -414,6 +414,8 @@ export class SideContent {
       const pay = Math.round(c.pay * (1 + (c.ok ? cond.bonus : 0)));
       this.reward(pay, 25, `Kontrat tamam: ${c.name}.${cond.bonus && !c.ok ? ' (Şart tutmadı, bonus yok)' : ''}`);
       g.state.contracts.done.push(c.id);
+      // [hikâye] kontratlar Reis'in adamlarınca izlenir: güven kazandırır
+      if (this.M.baba && !(this.M.flags && this.M.flags.babaDown)) this.M.baba.adjust(3, 0, 'Kontrat temiz bitti');
       this.endContract();
     } else if (c.t > 600) { g.ui.notify('Kontrat süresi doldu. Hedef şehri terk etti.', 'warn'); this.endContract(); }
   }

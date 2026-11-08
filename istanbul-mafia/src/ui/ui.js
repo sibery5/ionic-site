@@ -12,6 +12,7 @@ import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES_ALL, HAIR_STYLE_NAMES, BEARDS_ALL,
 import { Life } from '../game/life.js';
 import { ShopMethods } from './shops.js';
 import { PhoneMethods } from './phone.js';
+import { MapMethods } from './bigmap.js';
 import { JournalMethods } from './journal.js';
 import { SettingsMethods, applyExtendedSettings, withDefaults } from './settings.js';
 import { districtAt, DISTRICTS } from '../world/map.js';
@@ -366,7 +367,7 @@ export class UI {
       c.restore();
       return;
     }
-    const src = g.city.minimapCanvas;
+    const src = g._mapBase || g.city.minimapCanvas; // stilize taban (bigmap.js) hazırsa onu kullan
     const k = src.width / 2000;
     const range = p.vehicle ? 260 : 160; // metre yarıçap
     const scale = (R / range); // px/m
@@ -723,12 +724,13 @@ export class UI {
 
   // ======================= YÜKLEME =======================
   showLoading() {
-    const l = el('div', 'loading');
+    // [hikâye] index.html'deki anında görünen yükleme ekranı varsa onu doldur (pencere boş beklemez)
+    const l = $('#loading') || el('div', 'loading');
     l.id = 'loading';
     l.innerHTML = `<div class="ld-grain"></div><div class="ld-center"><div class="logo-big">${ICONS.logo}</div><h1 class="title"><span>İSTANBUL</span><em>MAFYA</em></h1>
       <div class="bar"><i id="loadBar"></i></div><div class="ld-row"><p id="loadText">Şehir kuruluyor...</p><b id="loadPct">0%</b></div></div>
       <p class="tip">${TIPS[Math.floor(Math.random() * TIPS.length)]}</p>`;
-    this.root.appendChild(l);
+    if (!l.parentNode) this.root.appendChild(l);
   }
   setLoading(p, text) {
     const b = $('#loadBar'); if (b) b.style.transform = `scaleX(${Math.max(0.001, p)})`;
@@ -1022,113 +1024,7 @@ export class UI {
   }
 
   // ======================= HARİTA =======================
-  mapScreen() {
-    const g = this.game;
-    const p = el('div', 'mapscreen');
-    p.innerHTML = `<canvas id="bigmap" width="1600" height="1600"></canvas><div class="legend"></div><div class="map-help">Sol tık: rota işaretle · Sağ tık: rotayı sil · Teker: yakınlaştır · Sürükle: kaydır · ESC/M: kapat</div>`;
-    const m = this.openModal(p, { cls: 'full', opaque: true });
-    const cv = $('#bigmap', p);
-    const ctx = cv.getContext('2d');
-    const leg = $('.legend', p);
-    const types = [['konak', 'Reis Konağı'], ['safehouse', 'Güvenli Ev'], ['gun', 'Silahçı'], ['clothes', 'Butik'], ['food', 'Bakkal'], ['trade', 'Karaborsa'], ['dealer', 'Oto Galeri'], ['bank', 'Banka'], ['hospital', 'Hastane'], ['police', 'Emniyet'], ['estate', 'Emlakçı'], ['cafe', 'Çay Ocağı'], ['club', 'Gece Kulübü'], ['garage', 'Oto Tamir'], ['property', 'Mülkün'], ['job', 'Yasal iş'], ['crimejob', 'Kirli iş']];
-    leg.innerHTML = '<h3>LEJANT</h3>' + types.map(([t, l]) => `<div>${svgImg(PIN_FOR[t], PIN_COLOR[t], 20)} ${l}</div>`).join('') +
-      '<h3>BÖLGELER</h3>' + DISTRICTS.map((d) => `<div><i class="gdot" style="background:${g.state.territories[d.gang] ? '#d4af37' : GANGS[d.gang] ? GANGS[d.gang].color : '#888'}"></i>${d.name} — ${g.state.territories[d.gang] ? 'SENİN' : GANGS[d.gang] ? GANGS[d.gang].name : ''}</div>`).join('');
-    let zoom = this.mapZoom, cx = g.player.pos.x, cz = g.player.pos.z, drag = null;
-    const draw = () => {
-      const W = 1600;
-      ctx.fillStyle = '#0f2a3d'; ctx.fillRect(0, 0, W, W);
-      const sc = (W / 2000) * zoom;
-      const tx = (x) => W / 2 + (x - cx) * sc, tz = (z) => W / 2 + (z - cz) * sc;
-      ctx.drawImage(g.city.minimapCanvas, tx(-1000), tz(-1000), 2000 * sc, 2000 * sc);
-      // bölge sınırları
-      ctx.lineWidth = 3; ctx.setLineDash([12, 8]);
-      for (const d of DISTRICTS) {
-        ctx.strokeStyle = g.state.territories[d.gang] ? 'rgba(212,175,55,0.8)' : GANGS[d.gang] ? GANGS[d.gang].color + 'aa' : '#8888';
-        ctx.strokeRect(tx(d.x0), tz(d.z0), (d.x1 - d.x0) * sc, (d.z1 - d.z0) * sc);
-        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `bold ${Math.max(18, 26 * zoom)}px Georgia`; ctx.textAlign = 'center';
-        ctx.fillText(d.name, tx((d.x0 + d.x1) / 2), tz((d.z0 + d.z1) / 2));
-      }
-      ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(160,210,255,0.7)'; ctx.font = `italic ${Math.max(16, 22 * zoom)}px Georgia`;
-      ctx.save(); ctx.translate(tx(310), tz(-200)); ctx.rotate(-Math.PI / 2); ctx.fillText('İ S T A N B U L   B O Ğ A Z I', 0, 0); ctx.restore();
-      ctx.fillText('H A L İ Ç', tx(-450), tz(132));
-      ctx.fillText('M A R M A R A   D E N İ Z İ', tx(0), tz(910));
-      if (g.gpsPath && g.gpsPath.length) {
-        ctx.strokeStyle = '#c86aff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(tx(g.player.pos.x), tz(g.player.pos.z));
-        for (const n of g.gpsPath) ctx.lineTo(tx(n.x), tz(n.z));
-        ctx.stroke();
-      }
-      for (const b of g.map.specials) {
-        const pt = b.ownedProp ? 'property' : b.type;
-        const pin = PIN_FOR[pt]; if (!pin) continue;
-        const s = 30;
-        ctx.drawImage(iconBitmap(pin, PIN_COLOR[pt], 48), tx(b.door.x) - s / 2, tz(b.door.z) - s / 2, s, s);
-      }
-      if (g.career) {
-        for (const bd of g.career.boards) { const pt = JOB_PATH(bd.id) === 'crime' ? 'crimejob' : 'job'; ctx.drawImage(iconBitmap(PIN_FOR[pt], PIN_COLOR[pt], 48), tx(bd.x) - 13, tz(bd.z) - 13, 26, 26); }
-        for (const mk of g.career.markers) {
-          const pos = g.career.markerPos(mk);
-          ctx.fillStyle = '#' + new THREE.Color(mk.color).getHexString(); ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-          ctx.beginPath(); ctx.moveTo(tx(pos.x), tz(pos.z) - 16); ctx.lineTo(tx(pos.x) + 13, tz(pos.z)); ctx.lineTo(tx(pos.x), tz(pos.z) + 16); ctx.lineTo(tx(pos.x) - 13, tz(pos.z)); ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
-      }
-      const now = performance.now();
-      for (const mk of g.missions.markers) {
-        let x = mk.x, z = mk.z;
-        if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead) continue; }
-        if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
-        const col = '#' + new THREE.Color(mk.color).getHexString();
-        if (mk.blink || mk.story) {
-          const ph = (now % 1000) / 1000;
-          ctx.strokeStyle = col; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 5;
-          ctx.beginPath(); ctx.arc(tx(x), tz(z), 18 + ph * 30, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
-        }
-        if (mk.area) { ctx.fillStyle = col + '22'; ctx.strokeStyle = col + 'aa'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(tx(x), tz(z), mk.area * sc, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); }
-        if (mk.giver) ctx.drawImage(iconBitmap('pin_reis', '#d4af37', 48), tx(x) - 20, tz(z) - 20, 40, 40);
-        else if (mk.icon) ctx.drawImage(iconBitmap(mk.icon, col, 48), tx(x) - 18, tz(z) - 18, 36, 36);
-        else { ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(tx(x), tz(z), 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-        if (mk.label) { ctx.font = 'bold 22px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = '#000'; ctx.strokeText(mk.label, tx(x), tz(z) - 26); ctx.fillStyle = col; ctx.fillText(mk.label, tx(x), tz(z) - 26); }
-      }
-      for (const v of g.vehicles.list) if (v.owned && !v.destroyed) ctx.drawImage(iconBitmap('car', '#6ab8ff', 48), tx(v.pos.x) - 14, tz(v.pos.z) - 14, 28, 28);
-      if (g.waypoint) { ctx.fillStyle = '#c86aff'; ctx.beginPath(); ctx.moveTo(tx(g.waypoint.x), tz(g.waypoint.z)); ctx.lineTo(tx(g.waypoint.x) - 14, tz(g.waypoint.z) - 26); ctx.lineTo(tx(g.waypoint.x) + 14, tz(g.waypoint.z) - 26); ctx.fill(); }
-      // oyuncu
-      ctx.save(); ctx.translate(tx(g.player.pos.x), tz(g.player.pos.z));
-      const hd = g.player.vehicle ? g.player.vehicle.heading : g.player.heading;
-      ctx.rotate(Math.atan2(Math.cos(hd), Math.sin(hd)) + Math.PI / 2);
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(15, 16); ctx.lineTo(0, 8); ctx.lineTo(-15, 16); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.restore();
-    };
-    const toWorld = (e) => {
-      const r = cv.getBoundingClientRect();
-      const px = ((e.clientX - r.left) / r.width) * 1600, pz = ((e.clientY - r.top) / r.height) * 1600;
-      const sc = (1600 / 2000) * zoom;
-      return { x: cx + (px - 800) / sc, z: cz + (pz - 800) / sc };
-    };
-    cv.addEventListener('wheel', (e) => { zoom = clamp(zoom * (e.deltaY > 0 ? 0.85 : 1.18), 0.8, 8); this.mapZoom = zoom; draw(); });
-    cv.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY, cx, cz, moved: false, button: e.button }; });
-    cv.addEventListener('mousemove', (e) => {
-      if (!drag) return;
-      const r = cv.getBoundingClientRect();
-      const sc = (r.width / 2000) * zoom;
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-      cx = drag.cx - dx / sc; cz = drag.cz - dy / sc; draw();
-    });
-    cv.addEventListener('mouseup', (e) => {
-      if (drag && !drag.moved) {
-        if (e.button === 0) { const w = toWorld(e); g.setWaypoint(w.x, w.z); audio.click(); }
-        if (e.button === 2) { g.setWaypoint(null); }
-        draw();
-      }
-      drag = null;
-    });
-    cv.addEventListener('contextmenu', (e) => e.preventDefault());
-    draw();
-    // yanıp sönen hedefler için düşük hızda yeniden çiz (harita açıkken)
-    const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } if (!drag) draw(); }, 150);
-    void m;
-  }
+  // Büyük harita: bigmap.js (MapMethods.mapScreen)
 
   statsScreen() {
     const g = this.game, s = g.state;
@@ -1369,7 +1265,7 @@ export class UI {
   }
 }
 
-Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods, JournalMethods);
+Object.assign(UI.prototype, ShopMethods, PhoneMethods, SettingsMethods, JournalMethods, MapMethods);
 
 const JOB_PATH = (id) => (['chop', 'robbery', 'protection', 'hit'].includes(id) ? 'crime' : 'legal');
 

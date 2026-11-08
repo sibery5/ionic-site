@@ -27,6 +27,7 @@ import * as MAPDATA from './world/map.js';
 import { Combat } from './game/combat.js';
 import { Pickups } from './game/pickups.js';
 import { Wanted } from './game/wanted.js';
+import { Law } from './game/law.js'; // [kanun]
 import { Missions } from './game/missions.js';
 import { Interiors, placeName } from './game/interiors.js';
 import { WEAPONS } from './game/weapons.js';
@@ -36,6 +37,8 @@ import { Social } from './game/social.js';
 import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
+import { PhoneService } from './ui/phone.js';
+import { mapBase } from './ui/bigmap.js'; // [hikâye] harita tabanı boşta hazırlanır // [hikâye] game.phone.notify(başlık, metin)
 import { formatMoney, clamp } from './core/util.js';
 import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
 
@@ -163,8 +166,13 @@ class Game {
     this.active = this.scene;
     this.input = new Input(canvas);
     this.ui = new UI(this);
+    if (!this.phone) this.phone = new PhoneService(this); // [hikâye] telefon bildirimleri (Mesajlar)
     this.ui.showLoading();
-    const step = async (p, t) => { this.ui.setLoading(p, t); await new Promise((r) => setTimeout(r, 30)); };
+    // [hikâye] açılış profili: her aşamanın süresi window.__boot'a yazılır (testler ve rapor için)
+    const BOOT = window.__boot = { js: Math.round(performance.now()), phases: [], frames: [] };
+    let bootLast = performance.now(), bootLabel = 'Görüntü + arayüz';
+    const mark = (label) => { const n = performance.now(); BOOT.phases.push([bootLabel, Math.round(n - bootLast)]); bootLast = n; bootLabel = label; };
+    const step = async (p, t) => { mark(t); this.ui.setLoading(p, t); await new Promise((r) => setTimeout(r, 30)); };
 
     await step(0.02, 'İstanbul haritası çiziliyor...');
     this.map = new CityMap(1453);
@@ -199,6 +207,7 @@ class Game {
     this.npcs = new NPCManager(this);
     this.pickups = new Pickups(this);
     this.wanted = new Wanted(this);
+    this.law = new Law(this); // [kanun] ambulans, gasp, trafik cezası, ev sahibi
     this.interiors = new Interiors(this);
     this.missions = new Missions(this);
     this.life = new Life(this);
@@ -229,7 +238,22 @@ class Game {
     this.env.time = 18.3; this.env.update(0.01, new THREE.Vector3(-110, 0, 10));
     this.uniforms.uNight.value = this.env.nightFactor;
     await step(1, 'Hazır!');
+    mark('Gölgelendirici derleme');
     this.renderer.compile(this.scene, this.camera);
+    // [hikâye] ısınma karesi: son işlem geçişleri, gölge derinlik şaderleri ve doku/geometri yüklemeleri ilk
+    // menü karesinde değil, yükleme ekranı açıkken çok küçük bir çizim tamponunda yapılır (ilk kare sıçraması).
+    mark('Isınma karesi');
+    this.ui.setLoading(1, 'Gölgelendiriciler hazırlanıyor...');
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      const pr0 = this.renderer.getPixelRatio();
+      this.camera.position.set(480, 110, -120); this.camera.lookAt(60, 10, -40);
+      this.renderer.setPixelRatio(0.1); this.composer.setPixelRatio(0.1);
+      this.renderer.shadowMap.needsUpdate = true;
+      this.composer.render();
+      this.renderer.setPixelRatio(pr0); this.composer.setPixelRatio(pr0);
+    } catch (e) { console.error(e); }
+    mark('Menü');
     this.ui.hideLoading();
     this.mode = 'menu';
     this.applyPixelRatio();
@@ -259,6 +283,9 @@ class Game {
     this.last = performance.now();
     this.lastFrameT = this.last; this.lastMenuRender = 0;
     this.fpsAcc = 0; this.fpsN = 0;
+    mark('-'); BOOT.ready = Math.round(performance.now()); // [hikâye]
+    // [hikâye] büyük harita / mini harita tabanı: açılışı yavaşlatmasın diye menü göründükten sonra hazırlanır
+    setTimeout(() => { try { mapBase(this); BOOT.mapBaseMs = this._mapBaseMs; } catch (e) { console.error(e); } }, 1500);
     window.__ready = true;
     requestAnimationFrame(this._loop);
   }
@@ -664,7 +691,7 @@ class Game {
     }
     if (this.mode !== 'playing') return;
     if (e.code === 'KeyM' && !e.repeat) {
-      if (this.ui.modalStack.length && this.ui.modalStack[this.ui.modalStack.length - 1].wrap.querySelector('.mapscreen')) this.ui.closeModal();
+      if (this.ui.modalStack.length && this.ui.modalStack[this.ui.modalStack.length - 1].wrap.querySelector('.mapscreen, .bigmap')) this.ui.closeModal(); // [hikâye] yeni harita
       else if (!this.ui.blocking()) this.ui.mapScreen();
     }
     if (e.code === 'Tab' && !this.ui.blocking()) this.ui.statsScreen();
@@ -957,6 +984,9 @@ class Game {
       console.error(err);
     }
     if (drew) this.needsFrame = false;
+    // [hikâye] açılış profili: ilk karelerin süresi (gölgelendirici derleme sıçraması burada görünür)
+    const BF = window.__boot && window.__boot.frames;
+    if (BF && BF.length < 8 && drew) BF.push(Math.round(performance.now() - now));
     this.input.endFrame();
     // uyarlamalı çözünürlük: kare aralığı + bu karenin CPU iş süresi
     if (this.mode === 'playing') { this.perf.sample(raw * 1000, performance.now() - now); this.perf.update(dt); }
@@ -1010,7 +1040,7 @@ class Game {
     let promptKey = 'E', promptText = it ? it.label : null;
     if (!it && !p.vehicle && !p.inInterior && !blocked) {
       const v = this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 2.5);
-      if (v) { promptKey = 'F'; promptText = (v.ai && !v.ai.empty && !v.parked ? 'Aracı gasp et: ' : 'Araca bin: ') + v.def.name; }
+      if (v) { promptKey = 'F'; promptText = (v.ai && !v.ai.empty && !v.parked ? (v.speed > 1.2 && !(v.ai.jackStop > 0) ? 'Hareket halinde — önüne geç / silah doğrult: ' : 'Aracı gasp et: ') : 'Araca bin: ') + v.def.name; } // [kanun]
     }
     this.ui.prompt(promptText, promptKey); // yalnızca metin değişince DOM'a yazar
     if (it && input.hit('KeyE')) { audio.click(); it.action(); }
@@ -1020,7 +1050,7 @@ class Game {
         if (Math.abs(v.fs) < 8) { this.vehicles.ejectDriver(v); v.controls.throttle = 0; v.controls.handbrake = true; }
       } else if (!p.inInterior) {
         const v = this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 2.5);
-        if (v) this.enterVehicle(v);
+        if (v && !this.law.carjack.tryEnter(v)) this.enterVehicle(v); // [kanun] hareket eden araca ışınlanma yok
       }
     }
     // oyuncu
@@ -1051,6 +1081,7 @@ class Game {
     this.particles.update(dt);
     this.pickups.update(dt);
     this.wanted.update(dt);
+    this.law.update(dt); // [kanun]
     this.missions.update(dt);
     this.social.update(dt);
     // yakalanırsa kaçak mallar
