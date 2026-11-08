@@ -16,6 +16,14 @@ export const SPEAKERS = {
   'Sinan': { color: '#c8b48a', freq: 280 },
   'Topal Kemal': { color: '#b07a5a', freq: 230 },
   'Telsiz': { color: '#9ad08a', freq: 520 },
+  'Kasap Tahsin': { color: '#c86a4a', freq: 120 },
+  'Gözcü Rıza': { color: '#a0a8b0', freq: 250 },
+  'Terzi Nuri': { color: '#d8c090', freq: 270 },
+  'Zeynep': { color: '#ffb0c8', freq: 560 },
+  'Muhbir Cemil': { color: '#b8a070', freq: 240 },
+  'Şoför Yaşar': { color: '#8a8a8a', freq: 200 },
+  'Engerek': { color: '#7ae070', freq: 280 },
+  'Atilla': { color: '#e0e0ff', freq: 220 },
   'Sen': { color: '#efe6d2', freq: 240 },
 };
 const DEFAULT_SPK = { color: '#c9b88e', freq: 260 };
