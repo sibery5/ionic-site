@@ -103,7 +103,8 @@ module.exports = async (p, out) => {
     const cnt = (f) => g.npcs.list.filter((n) => !n.dead && f(n)).length;
     const out = {};
     W.set(1); sim(4);
-    out.l1 = { foot: cnt((n) => n.faction === 'police'), lvl: W.level };
+    // [kanun] 1★: yaya polis belirmez; devriye/ekip aracı (içindeki ekip dahil) yola çıkar
+    out.l1 = { foot: cnt((n) => n.faction === 'police') + W.units.length, lvl: W.level };
     W.set(2); W.dispatchT = 0; sim(8);
     out.l2 = { cars: g.vehicles.list.filter((v) => v.police && v.ai && (v.ai.mode === 'chase' || v.ai.mode === 'halt' || v.lawUnit)).length, shots };
     W.set(3); W.roadblockT = 0.1; sim(4);
@@ -118,7 +119,7 @@ module.exports = async (p, out) => {
     return out;
   });
   console.log('yükselme:', JSON.stringify(esc));
-  check(esc.l1.foot >= 1, '1★ yaya polis (' + esc.l1.foot + ')');
+  check(esc.l1.foot >= 1, '1★ devriye / ekip yolda (' + esc.l1.foot + ')');
   check(esc.l2.cars >= 1, '2★ ekip aracı takipte (' + esc.l2.cars + ')');
   check(esc.l3.rb >= 1, '3★ barikat (' + esc.l3.rb + ')');
   check(esc.l4.swat >= 1 && esc.l4.gear >= 1, '4★ kasklı özel harekât (' + esc.l4.swat + ')');

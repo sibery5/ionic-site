@@ -92,7 +92,7 @@ module.exports = async (p, out) => {
       // ilk 25 sn'de yaya olarak (araç dışında, 100 m içinde) doğan kolluk var mı
       const footSpawn = spawns.filter((s) => (s.n.faction === 'police' || s.n.kind === 'swat') && !s.n.lawUnit && !s.n.rbGuard && s.d < 100).length;
       const crewSpawned = spawns.filter((s) => s.n.lawUnit).length;
-      const uinfo = W.units.map((u) => u.phase + ':' + Math.round(L.d(u.v.pos, pl.pos)) + ':' + u.v.speed.toFixed(1) + ':' + (u.v.ai && u.v.ai.mode) + ':' + (u.v.ai && u.v.ai._dbg));
+      const uinfo = W.units.map((u) => u.phase + ':' + Math.round(L.d(u.v.pos, pl.pos)) + ':' + u.v.speed.toFixed(1) + ':' + (u.v.ai && u.v.ai.mode));
       g.npcs.add = oadd; W.dispatchUnit = odu;
       void pc;
       return { lvl0, copResp, patrolUnit, units: units.map((x) => ({ t: x.u.type, d: Math.round(x.d), los: x.los })), deployedAt, carSpeedAtDeploy, crewNearCar, footSpawn, crewSpawned, deployed: W.lawLog.deployed, responders: W.lawLog.responders, uinfo, lvl: W.level };
