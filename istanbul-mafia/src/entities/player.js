@@ -78,6 +78,8 @@ export class Player extends Actor {
     if (input.mouse.wheel && !input.down('ShiftLeft')) {
       if (!this.vehicle) this.cycleWeapon(input.mouse.wheel > 0 ? 1 : -1);
     }
+    // [kanun] betikli hareket (araç gaspı vb.): kontrol kilitli, konumu betik sürer
+    if (this.scriptCtl && !this.vehicle) { this.aiming = false; this.scriptCtl(dt); this.model.animate(dt, this.animState()); this.syncModel(); this.updateCamera(dt); return; }
     if (this.vehicle) this.updateDriving(dt, input);
     else this.updateOnFoot(dt, input);
     this.updateCamera(dt);

@@ -1491,6 +1491,46 @@ export class Vehicle {
     if (a.glassBreak) a.glassBreak(_v0.x, _v0.z, w.p.tag === 'g_ws' ? 1.2 : 1);
   }
 
+  // [kanun] kapı aç/kapa (araç gaspı, ekip inişi): kapı paneli ve camı menteşeli ayrı parçaya taşınır.
+  // tag 'doorL0' (sol ön = sürücü) gibi; ang radyan (0 kapalı .. ~1.2 açık). Kapı yoksa false.
+  setDoor(tag, ang) {
+    const T = this.T;
+    if (!T || !T.tags || !T.doors || this.kind !== 'car' || this.detached.has(tag)) return false;
+    const doors = this._doors || (this._doors = {});
+    let D = doors[tag];
+    if (!D) {
+      const dd = T.doors.find((x) => x.tag === tag);
+      if (!dd) return false;
+      const ud = this.mesh.userData, grp = new THREE.Group();
+      const hx = dd.s * T.S.hw((dd.y0 + dd.y1) / 2, dd.z1), hz = dd.z1;
+      let any = false;
+      for (const kind of ['paint', 'dark', 'chrome']) {
+        for (const r of T.tags[kind]) {
+          if (r.tag !== tag) continue;
+          const own = this.ownGeo(kind); if (!own) continue;
+          const sub = extractRange(own, r); collapseRange(own, r); sub.translate(-hx, 0, -hz);
+          grp.add(new THREE.Mesh(sub, kind === 'paint' ? ud.bodyMesh.material : kind === 'dark' ? darkMat : chromeMat));
+          any = true;
+        }
+      }
+      if (!any) return false;
+      const gl = this.ownGeo('glass');
+      if (gl) for (const w of this.windows) {
+        const c = w.p.c;
+        if (w.state >= 3 || Math.sign(c[0]) !== dd.s || c[2] >= dd.z1 || c[2] <= dd.z0) continue;
+        const sub = extractRange(gl, w.p.r); collapseRange(gl, w.p.r); sub.translate(-hx, 0, -hz);
+        const m = new THREE.Mesh(sub, ud.glassMesh.material); m.renderOrder = 2; grp.add(m);
+      }
+      for (const d of ud.decalMeshes || []) if (d.tag === tag) d.m.visible = false;
+      grp.position.set(hx, 0, hz);
+      ud.chassis.add(grp);
+      D = doors[tag] = { grp, s: dd.s, ang: 0 };
+    }
+    D.ang = ang;
+    D.grp.rotation.y = -D.s * ang;
+    return true;
+  }
+
   // Parça kopar (tampon/kaput/kapı/ayna): aralığı ayrı uçan parçaya taşı, gövdede çökert
   detach(tag, vx = 0, vy = 2, vz = 0, fire = 0) {
     const T = this.T;

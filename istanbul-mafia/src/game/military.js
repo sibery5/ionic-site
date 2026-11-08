@@ -195,19 +195,17 @@ export class Military {
     const stealth = g.missions.active && g.missions.active.stealthBase && !g.missions.s.spotted;
     if (!this.alert && !stealth && !p.dead && this.active) this.updateWarnings(dt, p);
     else if (!this.inWarn(p.pos.x, p.pos.z)) this.stage = 0;
-    // 5 yıldız ve kışla yakını: askeri müdahale
+    if (!this.trespass(p.pos.x, p.pos.z)) this.inTrespass = false;
+    // 5 yıldız ve kışla yakını: askeri müdahale — [kanun] birlik nizamiyeden kamyonla çıkar, gelir, iner
     if (g.wanted.level >= 5 && d < 450) {
       this.responseT -= dt;
       if (this.responseT <= 0) {
-        this.responseT = 20;
+        this.responseT = 25;
         const alive = this.soldiers.filter((s) => !s.dead).length;
-        if (alive < 14) {
-          const s = g.npcs.sidewalkSpot(p.pos.x, p.pos.z, 30, 60);
-          if (s) {
-            const sq = g.npcs.spawnSquad('soldier', s.x, s.z, 4, { persistent: false, name: 'Er' });
-            for (const n of sq) { n.hostile = true; n.engage(p, 1); this.soldiers.push(n); }
-            g.ui.notify('Askeri birlik müdahale ediyor!', 'warn');
-          }
+        const gate = (MAP[BASE_KEY] || {}).gate;
+        if (alive < 14 && g.wanted.dispatchUnit) {
+          const u = g.wanted.dispatchUnit('army', { from: gate ? { x: gate.x, z: gate.z + 12 } : { x: this.cx, z: this.cz }, minD: 90, maxD: 220 });
+          if (u) { for (const n of u.crew) this.soldiers.push(n); g.ui.notify('Askerî birlik kışladan çıktı!', 'warn'); }
         }
       }
     }
@@ -227,35 +225,84 @@ export class Military {
     }
     return this.inZone(x, z, s.pad !== undefined ? s.pad : fallbackPad);
   }
-  inWarn(x, z) { const MB = MAP[BASE_KEY] || {}; return this.inShape(MB.warnZone, x, z, 35); }
+  // [kanun] Kurallar: yoldan geçen yaya/araç (siviller gibi) asla vurulmaz. Uyarı yalnızca
+  //  (1) duvarların içine izinsiz girme, (2) nizamiye kapısına dayanma, (3) duvara tırmanma girişimi,
+  //  (4) üs yakınında ateş açma durumunda verilir; uyarıya uyulmazsa ateş serbest.
+  inWarn(x, z) { return this.inZone(x, z, 12); } // alarm geri sayımı: üsten uzaklaşınca söner
   inLethal(x, z) { const MB = MAP[BASE_KEY] || {}; return this.inShape(MB.lethalZone, x, z, 0); }
+  trespass(x, z) { return this.inZone(x, z, -0.4); } // duvarların içi
+  atGate(x, z) {
+    const gt = (MAP[BASE_KEY] || {}).gate;
+    if (!gt) return false;
+    return Math.abs(x - gt.x) < 8.5 && z > this.zone.z1 - 0.5 && z < this.zone.z1 + 7;
+  }
+  // dış duvara uzaklık (dışarıdan)
+  wallDist(x, z) {
+    const b = this.zone;
+    if (this.inZone(x, z, 0)) return 0;
+    const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
+    return Math.hypot(dx, dz);
+  }
   warnSay(text) {
     const s = this.nearestSoldier();
     if (s) { s.barkT = 0; s.say(text); s.state !== 'attack' && (s.faceYaw = Math.atan2(this.g.player.pos.x - s.pos.x, this.g.player.pos.z - s.pos.z)); }
     else this.g.audio.megaphone && this.g.audio.megaphone(text, this.cx, this.cz);
   }
+  // oyuncu üs yakınında ateş etti (npc.hearThreat çağırır)
+  onPlayerShot(x, z) {
+    const g = this.g;
+    if (this.alert || !this.active) return this.alert;
+    if (this.trespass(x, z) || this.wallDist(x, z) < 25) { this.raiseAlert('Ateş açıldı!'); return true; }
+    const now = g.wanted.clockT || 0;
+    const since = now - (this.shotWarnAt ?? -99);
+    if (since < 0.6) return false; // aynı atışı duyan diğer askerler
+    if (since < 12) { this.raiseAlert('Uyarıya rağmen ateş açıldı!'); return true; }
+    this.shotWarnAt = now;
+    this.stage = Math.max(this.stage || 0, 2); this.stageT = 0;
+    g.ui.bigMessage('SON UYARI', 'Ateşi kes! Askerî bölge — karşılık verilecek!', 'red', 2.5);
+    this.warnSay('Ateşi kes! Bir daha ateş edersen karşılık veririz!');
+    return false;
+  }
   updateWarnings(dt, p) {
     const g = this.g;
-    const inW = this.inWarn(p.pos.x, p.pos.z), inL = this.inLethal(p.pos.x, p.pos.z);
-    if (!inW && !inL) {
+    const x = p.pos.x, z = p.pos.z;
+    const inside = this.trespass(x, z), inL = this.inLethal(x, z);
+    const gate = !inside && this.atGate(x, z) && (!p.vehicle || p.vehicle.speed < 6);
+    // duvara tırmanma girişimi: duvarın dibinde zıplama / tırmanma
+    if (!inside && !p.vehicle && this.wallDist(x, z) < 1.6 && (p.vy > 1.5 || p.vault)) {
+      const now = g.wanted.clockT || 0;
+      if ((this.climbAt || -99) + 1.2 < now) {
+        this.climbN = (this.climbAt || -99) + 30 > now ? (this.climbN || 0) + 1 : 1;
+        this.climbAt = now;
+        if (this.climbN === 1) { this.stage = Math.max(this.stage || 0, 1); this.stageT = 0; g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Duvardan uzaklaş!', 'red', 2.5); this.warnSay('Duvardan in! Askeri bölge!'); }
+        else if (this.climbN === 2) { this.stage = 2; this.stageT = 0; g.ui.bigMessage('SON UYARI', 'Tırmanmaya kalkarsan ateş açılacak!', 'red', 2.5); this.warnSay('Son uyarı! Bir daha tırmanırsan vururum!'); }
+        else { this.stage = 3; this.raiseAlert('Duvara tırmanma girişimi — ateş serbest!'); return; }
+      }
+    }
+    if (!inside && !inL) {
+      if (gate && !this.stage) {
+        this.stage = 1; this.stageT = 0; this.warned = true;
+        g.ui.bigMessage('ASKERİ BÖLGE', 'Nizamiye: izinsiz giriş yasak. Geri çekil.', 'red', 2.5);
+        this.warnSay('Dur! Burası askeri bölge, geri çekil!');
+      }
       this.outT = (this.outT || 0) + dt;
-      if (this.outT > 3) { this.stage = 0; this.warned = false; }
+      if (this.outT > 4 && !gate && !((this.climbAt || -99) + 30 > (g.wanted.clockT || 0))) { this.stage = 0; this.warned = false; }
       return;
     }
+    // izinsiz giriş: uyarı -> son uyarı -> ateş
     this.outT = 0;
-    if (!this.stage) {
-      this.stage = 1; this.stageT = 0; this.warned = true;
-      g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Dur! Yaklaşma! Geri çekil.', 'red', 3);
-      this.warnSay('Dur! Yaklaşma! Askeri yasak bölge!');
+    if (!this.inTrespass) {
+      this.inTrespass = true;
+      if ((this.stage || 0) <= 1) { this.stage = 1; this.stageT = 0; this.warned = true; g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Dur! Yaklaşma! Geri çekil.', 'red', 3); this.warnSay('Dur! Yaklaşma! Askeri yasak bölge!'); }
     }
     this.stageT += dt;
-    if (this.stage === 1 && (inL || this.stageT > 9)) {
+    if (this.stage === 1 && (inL || this.stageT > 3.5)) {
       this.stage = 2; this.stageT = 0;
       g.ui.bigMessage('SON UYARI', 'Hemen geri çekil — ateş açılacak!', 'red', 2.5);
       this.warnSay('Bu son uyarım, ateş açarım!');
       for (const s of this.soldiers) if (!s.dead && Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) < 60) { s.aiming = true; s.faceYaw = Math.atan2(p.pos.x - s.pos.x, p.pos.z - s.pos.z); }
     }
-    if (this.stage === 2 && this.stageT > (inL ? 3.5 : 6)) { this.stage = 3; this.raiseAlert('Uyarılara uyulmadı — ateş serbest!'); }
+    if (this.stage === 2 && this.stageT > (inL ? 2.5 : 3)) { this.stage = 3; this.raiseAlert('Uyarılara uyulmadı — ateş serbest!'); }
   }
   // alarm bitti: askerler devriye/nöbet yerine döner, takviye birlikler dağılır
   calm() {
