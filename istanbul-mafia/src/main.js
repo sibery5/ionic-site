@@ -36,6 +36,8 @@ import { Social } from './game/social.js';
 import { SETTINGS_DEFAULTS, applyExtendedSettings } from './ui/settings.js';
 import { writeSave, readSave, loadSettings, storeSettings, latestSave } from './game/save.js';
 import { UI, goodsCount } from './ui/ui.js';
+import { PhoneService } from './ui/phone.js';
+import { mapBase } from './ui/bigmap.js'; // [hikâye] harita tabanı boşta hazırlanır // [hikâye] game.phone.notify(başlık, metin)
 import { formatMoney, clamp } from './core/util.js';
 import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
 
@@ -163,6 +165,7 @@ class Game {
     this.active = this.scene;
     this.input = new Input(canvas);
     this.ui = new UI(this);
+    if (!this.phone) this.phone = new PhoneService(this); // [hikâye] telefon bildirimleri (Mesajlar)
     this.ui.showLoading();
     // [hikâye] açılış profili: her aşamanın süresi window.__boot'a yazılır (testler ve rapor için)
     const BOOT = window.__boot = { js: Math.round(performance.now()), phases: [], frames: [] };
@@ -266,6 +269,8 @@ class Game {
     this.lastFrameT = this.last; this.lastMenuRender = 0;
     this.fpsAcc = 0; this.fpsN = 0;
     mark('-'); BOOT.ready = Math.round(performance.now()); // [hikâye]
+    // [hikâye] büyük harita / mini harita tabanı: açılışı yavaşlatmasın diye menü göründükten sonra hazırlanır
+    setTimeout(() => { try { mapBase(this); BOOT.mapBaseMs = this._mapBaseMs; } catch (e) { console.error(e); } }, 1500);
     window.__ready = true;
     requestAnimationFrame(this._loop);
   }
@@ -671,7 +676,7 @@ class Game {
     }
     if (this.mode !== 'playing') return;
     if (e.code === 'KeyM' && !e.repeat) {
-      if (this.ui.modalStack.length && this.ui.modalStack[this.ui.modalStack.length - 1].wrap.querySelector('.mapscreen')) this.ui.closeModal();
+      if (this.ui.modalStack.length && this.ui.modalStack[this.ui.modalStack.length - 1].wrap.querySelector('.mapscreen, .bigmap')) this.ui.closeModal(); // [hikâye] yeni harita
       else if (!this.ui.blocking()) this.ui.mapScreen();
     }
     if (e.code === 'Tab' && !this.ui.blocking()) this.ui.statsScreen();
