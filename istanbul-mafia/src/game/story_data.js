@@ -536,7 +536,7 @@ export const STORY = [
         update(M) { if (!P(M).inInterior) { M.g.wanted.add(2, true); return 'next'; } return null; },
       }),
       enter('safehouse', 'Güvenli eve dön (polis peşinde!)', { cp: 'Kaçış', place(M) { const w = M.special('warehouse', -40, 250); M.place(w.door.x, w.door.z + w.door.nz * 3, 0); M.g.wanted.add(2, true); }, near: [-300, -60] }),
-      step({ start(M) { M.g.player.giveWeapon('ak', 120); M.g.ui.notify('Kalaşnikof + 120 mermi', 'good'); }, update() { return 'next'; } }),
+      step({ start(M) { M.g.player.giveWeapon('ak', 120); M.g.ui.notify('Bozkır 47 + 120 mermi', 'good'); }, update() { return 'next'; } }),
     ],
   },
   {
