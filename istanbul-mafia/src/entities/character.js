@@ -8,7 +8,8 @@
 //   vuruş tepkisi, yönlü ölüm düşüşü ve yere yerleşme (kemik bazlı kısıt gevşetme).
 import * as THREE from 'three';
 import { buildWeaponModel, WEAPONS } from '../game/weapons.js';
-import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey } from './charParts.js';
+import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM } from './charParts.js';
+export { BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM };
 import { charMaterial, charDepthMaterial } from './charTex.js';
 
 export const SKIN_TONES = ['#f1d0b5', '#e0b493', '#c99572', '#a8754f', '#7d5236', '#5a3a26'];
@@ -135,7 +136,7 @@ function geoFor(L, lod) {
 // bağlama pozu ters matrisleri: vücut ölçüsü başına paylaşılır
 const invCache = new Map();
 function bindInverses(R) {
-  const k = [R.shX, R.hipX, R.hk].join('|');
+  const k = [R.shX, R.hipX, R.hk, BONES.length].join('|');
   if (invCache.has(k)) return invCache.get(k);
   const out = BONES.map((n) => new THREE.Matrix4().makeTranslation(-R.pos[n][0], -R.pos[n][1], -R.pos[n][2]));
   invCache.set(k, out);
@@ -196,6 +197,7 @@ const IK = { S: v3(), E: v3(), W: v3(), d: v3(), b: v3(), u: v3(), e: v3(), f: v
 const LG = { S: v3(), T: v3(), d: v3(), pole: v3(), bv: v3(), u: v3(), K: v3(), w: v3(), X: v3(), Y: v3(), Z: v3(), m: new THREE.Matrix4(), qT: q4(), qL: q4(), qK: q4(), qF: q4(), qi: q4(), e: new THREE.Euler() };
 const WV = { aim: v3(), fwd: v3(), right: v3(), dir: v3(), R: v3(), U: v3(), eye: v3(), shR: v3(), shL: v3(), G: v3(), F: v3(), t: v3(), x: v3(), y: v3(), z: v3(), wT: v3(), pole: v3(), mag: v3(), belt: v3(), qR: q4(), qL: q4() };
 const DTMP = v3();
+const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 // [savaş kancası] paylaşılan yara geometrisi/malzemesi (tembel), yüzüstü yatış yönü
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
@@ -266,7 +268,7 @@ export class CharacterModel {
       const S = s > 0 ? 'L' : 'R';
       const wr = B('wr' + S);
       const socket = new THREE.Object3D(); socket.position.set(-s * 0.004, -0.072, 0.004); wr.add(socket);
-      this.arms.push({ sh: B('sh' + S), el: B('el' + S), wr, socket, s, fi: B('fi' + S), fd: B('fd' + S), th: B('th' + S) });
+      this.arms.push({ sh: B('sh' + S), el: B('el' + S), fa: B('fa' + S), wr, socket, s, fi: B('fi' + S), fd: B('fd' + S), th: B('th' + S) });
       this.legs.push({ hip: B('hip' + S), kn: B('kn' + S), an: B('an' + S), toe: B('toe' + S), s });
     }
     this.joints = JB.map((n) => B(n));
@@ -1070,6 +1072,12 @@ export class CharacterModel {
       const s = SIDE[j] || 1;
       J3[j].rotation.set(P[j * 3], P[j * 3 + 1] * s, P[j * 3 + 2] * s);
     }
+    // ön kol burulması (pronasyon): dirsek ve bilek Y dönüşü ön kol kemiğine taşınır -> dirsek/bilek çökmez
+    for (let i = 0; i < 2; i++) {
+      const A = this.arms[i], e = i ? J.elR : J.elL, w = i ? J.wrR : J.wrL, s = i ? -1 : 1;
+      A.el.rotation.y = 0; A.wr.rotation.y = 0;
+      A.fa.rotation.set(0, (P[e * 3 + 1] + P[w * 3 + 1]) * s, 0);
+    }
     let y = hipsY + P[HP + 1];
     if (lock > 0) {
       const h = (a, k, z) => (LEN_T * Math.cos(a) + LEN_S * Math.cos(a + k)) * Math.cos(z);
@@ -1220,8 +1228,12 @@ export class CharacterModel {
     arm.el.quaternion.slerp(IK.q3, w);
     if (qWrist) {
       IK.q4.copy(IK.q1).multiply(arm.sh.quaternion).multiply(arm.el.quaternion).invert().multiply(qWrist);
-      arm.wr.quaternion.slerp(IK.q4, w);
-    }
+      // ön kol ekseni (Y) etrafındaki burulma ön kola, kalanı bileğe
+      const q = IK.q4, tw = TWQ.set(0, q.y, 0, q.w); if (tw.lengthSq() < 1e-8) tw.identity(); else tw.normalize();
+      arm.fa.quaternion.slerp(tw, w);
+      TWQ2.copy(arm.fa.quaternion).invert().multiply(q);
+      arm.wr.quaternion.slerp(TWQ2, w);
+    } else arm.fa.quaternion.slerp(TWQI, w);
     arm.wr.updateMatrixWorld(true);
   }
 

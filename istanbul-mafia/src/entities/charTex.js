@@ -169,11 +169,16 @@ export function headUV(dx, dy, dz) {
 }
 // göz küresi dokusu yüz dokusunun görünmeyen köşesinde (çene altı arkası)
 export const EYE_UV = { cx: 32 / 512, cy: 1 - 454 / 512, r: 28 / 512 };
+// etiket şeridi (yelek yazısı): kafa UV'sinin kullanmadığı alt şerit (v < 0.055), göz dokusunun sağı
+const LAB = { x0: 80, x1: 508, y0: 488, y1: 510 };
+export const LABEL_UV = { u0: LAB.x0 / 512, u1: LAB.x1 / 512, v0: 1 - LAB.y1 / 512, v1: 1 - LAB.y0 / 512 };
+const GEAR_LABELS = { swat: 'ÖZEL HAREKAT', police: 'POLİS', jandarma: 'JANDARMA', army: '' };
+export function gearLabel(look) { return look && look.vest ? (look.vestLabel !== undefined ? look.vestLabel : GEAR_LABELS[look.vest] || '') : ''; }
 const EYE_COLORS = ['#3b2414', '#5a3a1c', '#2e4a2a', '#3a5a7a', '#6a5030'];
 const texCache = new Map();
 export function faceKey(look) {
   const old = (look.age || 0) > 0.55 || ['#8a8a8a', '#aaaaaa', '#cccccc'].includes(look.hairColor);
-  return ['face2', look.skin, look.gender, look.beard, look.hairColor, look.eyeColor || EYE_COLORS[0], old, !!look.makeup].join('|');
+  return ['face2', look.skin, look.gender, look.beard, look.hairColor, look.eyeColor || EYE_COLORS[0], old, !!look.makeup, gearLabel(look)].join('|');
 }
 export function faceTexture(look) {
   const key = faceKey(look);
@@ -300,6 +305,13 @@ export function faceTexture(look) {
     for (let k = 0; k < 40; k++) { const a = (k / 40) * TAU; g.beginPath(); g.moveTo(cx + Math.cos(a) * ir * 0.38, cy + Math.sin(a) * ir * 0.38); g.lineTo(cx + Math.cos(a + 0.1) * ir * 0.9, cy + Math.sin(a + 0.1) * ir * 0.9); g.stroke(); }
     g.fillStyle = '#040302'; g.beginPath(); g.arc(cx, cy, ir * 0.38, 0, TAU); g.fill();
     g.fillStyle = 'rgba(255,255,255,0.95)'; g.beginPath(); g.arc(cx + ir * 0.32, cy - ir * 0.34, ir * 0.16, 0, TAU); g.fill();
+  }
+  // yelek yazısı: koyu zemin, açık renk büyük harf
+  const lab = gearLabel(look);
+  if (lab) {
+    g.fillStyle = '#121416'; g.fillRect(LAB.x0 - 4, LAB.y0 - 2, LAB.x1 - LAB.x0 + 8, LAB.y1 - LAB.y0 + 4);
+    g.fillStyle = '#e8e4d8'; g.font = 'bold 19px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(lab, (LAB.x0 + LAB.x1) / 2, (LAB.y0 + LAB.y1) / 2 + 1);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;

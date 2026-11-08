@@ -1482,6 +1482,15 @@ function buildHat(c) {
       }
       C.button(mb, 0.05, Math.PI / 2, 0.004, 0.016, M('#d4af37', 'flat', 0.3, 0.9), 8);
     }
+  } else if (kind === 'bandana') {
+    // bandana: alından enseye sıkı bağlı kumaş, arkada düğüm + iki uç
+    const bm = M(L.bandanaColor || hc, 'weave', 0.8);
+    shell(c, (x, y, z) => smooth(z > 0 ? 0.046 : 0.0, (z > 0 ? 0.046 : 0.0) + 0.008, y), () => T + 0.006, bm, ws, hs);
+    if (Q.detail) {
+      const kz = hb[2] + D.cz - D.rz - T - 0.012, ky = hb[1] + D.cy + 0.01;
+      ellip(mb, V(0, ky, kz), 0.018, 0.014, 0.012, 6, 4, bm, hw);
+      for (const sd of [-1, 1]) card(mb, [V(sd * 0.005, ky, kz - 0.004), V(sd * 0.02, ky - 0.045, kz - 0.016), V(sd * 0.03, ky - 0.09, kz - 0.02)], [V(1, 0, 0), V(1, 0, 0.3).normalize(), V(1, 0, 0.4).normalize()], (u) => 0.035 * (1 - 0.5 * u), M(L.bandanaColor || hc, 'weave', 0.8), () => hw);
+    }
   } else if (kind === 'basortusu') {
     // başörtüsü: yüz ovali dışında tüm kafa + boyun + omuza dökülen etek
     const sm2 = M(hc, 'weave', 0.85);
@@ -1561,6 +1570,30 @@ function buildExtras(c) {
       tube(mb, [V(0.12, 1.47, -0.02), V(0.05, 1.38, 0.13), V(-0.1, 1.12, 0.12), V(-0.18, 0.98, 0.02)], 0.01, 4, M('#111111', 'canvas', 0.8), (p) => tw(p));
       ellip(mb, V(-0.22, 0.95, 0.0), 0.05, 0.1, 0.14, 8, 6, bc, () => mixW(W(BI.hips), W(BI.hipR), 0.2));
     }
+  }
+  // boyun bandanası (çete): boyunda bağlı, önde üçgen
+  if (L.bandana === 'neck' && Q.detail) {
+    const bm = M(L.bandanaColor || '#8a1a1a', 'weave', 0.8);
+    T.patch(mb, -Math.PI / 2, Math.PI * 1.5, 1.475, 1.525, 0.014, bm, 18, 1);
+    T.patch(mb, (t) => Math.PI / 2 - 0.55 * smooth(1.38, 1.5, t), (t) => Math.PI / 2 + 0.55 * smooth(1.38, 1.5, t), 1.385, 1.5, (th, t) => (c.topSpec.off || 0) + 0.006 + 0.008 * smooth(1.42, 1.5, t), bm, 4, 4);
+  }
+  // küpe (kadın): kulak memesinde küçük halka/top
+  if (L.earrings && Q.detail) {
+    const em = M(L.earringColor || '#d4af37', 'flat', 0.2, 0.95), hw = W(BI.head);
+    for (const sd of [-1, 1]) {
+      const ec = V(hb[0] + sd * (D.rx + 0.004), hb[1] + D.cy - 0.034, hb[2] + D.cz - 0.01);
+      if (L.earrings === 'hoop') { const pts = []; for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; pts.push(V(ec.x + sd * 0.002, ec.y - 0.013 + Math.cos(a) * 0.012, ec.z + Math.sin(a) * 0.012)); } tube(mb, pts, 0.0013, 3, em, () => hw, true); }
+      else ellip(mb, ec.clone().add(V(0, -0.006, 0)), 0.0035, 0.0035, 0.0035, 5, 3, em, hw);
+    }
+  }
+  // el çantası (kadın): sağ omuzdan sarkan kayışlı çanta, kalça yanında
+  if ((L.bag === 'handbag' || L.bag === 'tote') && Q.detail) {
+    const bc = M(L.bagColor || '#3a2412', 'leather', 0.45, 0.04);
+    const tote = L.bag === 'tote', hx = -(R.hipX + 0.15), by = tote ? 1.0 : 1.04;
+    const bw = mixW(W(BI.hips), W(BI.hipR), 0.25);
+    boxP(mb, V(hx, by, 0.01), V(0, 0, 1), V(0, 1, 0), V(-1, 0, 0), tote ? 0.13 : 0.1, tote ? 0.12 : 0.075, 0.035, bc, bw);
+    tube(mb, [V(hx, by + (tote ? 0.12 : 0.075), 0.06), V(-0.17, 1.3, 0.07), V(-0.12, 1.47, 0.02), V(-0.12, 1.47, -0.04), V(-0.17, 1.3, -0.06), V(hx, by + (tote ? 0.12 : 0.075), -0.04)], 0.006, 4, M(L.bagColor || '#3a2412', 'leather', 0.5, 0, 0.8), (p) => (p.y > 1.2 ? tw(p) : bw));
+    if (Q.detail > 1) boxP(mb, V(hx - 0.036, by + 0.02, 0.01), V(0, 0, 1), V(0, 1, 0), V(-1, 0, 0), 0.015, 0.01, 0.003, M('#d4af37', 'flat', 0.25, 0.9), bw);
   }
   // fotoğraf makinesi (turist)
   if (L.camera && Q.detail) {
