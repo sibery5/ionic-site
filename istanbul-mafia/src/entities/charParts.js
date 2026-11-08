@@ -424,7 +424,7 @@ function camoMat(pal, tile, rough) {
 export function lookKey(L, lod) {
   return [lod, L.gender, L.build, L.height, L.shoulders, L.fat, L.age, L.muscle, L.body, L.skin, L.top, L.topStyle, L.topColor, L.shirtColor, L.accentColor, L.pants, L.pantsStyle, L.pantsColor, L.dressLen, L.shoes, L.shoesStyle, L.shoesColor,
     L.chain, L.chainStyle, L.chainColor, L.hair, L.hairColor, L.beard, L.hat, L.hatStyle, L.hatColor, L.glasses, L.glassesStyle, L.glassesColor, L.tieColor, L.tie, L.watch, L.watchColor, L.ring, L.tespih, L.bag, L.bagColor,
-    L.carry, L.apron, L.apronColor, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.tights, L.eyeColor].join('|');
+    L.carry, L.apron, L.apronColor, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.earringColor, L.tights, L.camo, L.eyeColor].join('|');
 }
 
 // ---------------- LOD kalite tablosu ----------------

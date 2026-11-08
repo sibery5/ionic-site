@@ -8,7 +8,7 @@ import { ICONS, PIN_FOR, PIN_COLOR, svgImg, iconBitmap } from './icons.js';
 import { formatMoney, pad2, clamp } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
 import { FOOD, GOODS, BUSINESSES, GANGS, rankOf, RANKS, LEGAL_RANKS, CRIME_RANKS, rankIn, garageCapacity, ensureLifeState } from '../game/economy.js';
-import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES, BEARDS, defaultLook } from '../entities/character.js';
+import { SKIN_TONES, HAIR_COLORS, HAIR_STYLES_ALL, HAIR_STYLE_NAMES, BEARDS_ALL, BEARD_NAMES, BODY_TYPE_NAMES, applyBodyType, defaultLook } from '../entities/character.js';
 import { Life } from '../game/life.js';
 import { ShopMethods } from './shops.js';
 import { PhoneMethods } from './phone.js';
@@ -808,13 +808,50 @@ export class UI {
         o.appendChild(b);
       });
     };
-    const presets = {
-      'Kabadayı': { top: 'leather', topColor: '#1c1c1c', pants: 'jeans', pantsColor: '#2a3550', shoes: 'boots', shoesColor: '#3a2412', hat: 'none', glasses: false },
-      'Takım Elbise': { top: 'suit', topColor: '#1d2440', shirtColor: '#f0f0f0', pants: 'slacks', pantsColor: '#1d2440', shoes: 'polished', shoesColor: '#0a0a0a', hat: 'none', glasses: true },
-      'Eşofmanlı': { top: 'track', topColor: '#1a1a1a', pants: 'track', pantsColor: '#1a1a1a', shoes: 'sneaker', shoesColor: '#eeeeee', hat: 'kasket', hatColor: '#2a2a2a', glasses: false },
-      'Paltolu': { top: 'coat', topColor: '#2a2a3a', shirtColor: '#e8e8e8', pants: 'slacks', pantsColor: '#111111', shoes: 'polished', shoesColor: '#0a0a0a', hat: 'fedora', hatColor: '#151515', glasses: false },
+    // seçenek satırı: [değer, etiket] listesi; get/set ile birden çok alanı yönetebilir
+    const opt = (label, list, get, set, swatch) => {
+      const o = row(label);
+      if (swatch) o.classList.add('swatches');
+      for (const [v, lb] of list) {
+        const b = el('button', 'chip' + (get() === v ? ' on' : ''), swatch ? '' : lb);
+        if (swatch) { b.style.background = v; b.classList.add('sw'); b.title = lb || v; }
+        b.addEventListener('click', () => { set(v); o.querySelectorAll('.chip').forEach((c) => c.classList.remove('on')); b.classList.add('on'); audio.click(); update(); });
+        o.appendChild(b);
+      }
+      return o;
     };
-    const CATS = [['id', 'Kimlik', 'user', 'body'], ['face', 'Yüz & Saç', 'face', 'face'], ['style', 'Tarz', 'c_top', 'body']];
+    const field = (k, d = null) => () => (look[k] === undefined ? d : look[k]);
+    const setF = (k, rerender) => (v) => { look[k] = v; if (rerender) setTimeout(render, 0); };
+    const COLS = ['#1a1a1a', '#e8e8e8', '#3a3a3a', '#1d2440', '#2a3550', '#5a6a8a', '#8a1a1a', '#c84a6a', '#5a2d5a', '#2d5a2d', '#2d8a3d', '#c9b48a', '#5a4a3a', '#b05a1a', '#c9a020', '#a8c8e8', '#e8c8c8', '#f0ece0'];
+    const colRow = (label, k) => opt(label, COLS.map((c) => [c, c]), field(k), setF(k), true);
+    const F = () => look.gender === 'f';
+    const TOPS = () => (F()
+      ? [['tshirt', 'Tişört'], ['crop', 'Crop'], ['tank', 'Askılı'], ['blouse', 'Bluz'], ['dress', 'Elbise'], ['sundress', 'Yazlık elbise'], ['sweater', 'Kazak'], ['hoodie', 'Kapüşonlu'], ['track', 'Eşofman'], ['jacket', 'Kot ceket'], ['leather', 'Deri ceket'], ['bomber', 'Bomber'], ['blazer', 'Blazer'], ['coat', 'Palto'], ['pardesu', 'Pardösü'], ['ferace', 'Ferace']]
+      : [['tshirt', 'Tişört'], ['polo', 'Polo'], ['shirt', 'Gömlek'], ['tank', 'Atlet'], ['hoodie', 'Kapüşonlu'], ['track', 'Eşofman'], ['sweater', 'Kazak'], ['jacket', 'Kot ceket'], ['leather', 'Deri ceket'], ['bomber', 'Bomber'], ['blazer', 'Spor ceket'], ['suit', 'Takım elbise'], ['tuxedo', 'Smokin'], ['coat', 'Palto'], ['vest', 'Yelek']]);
+    const PANTS = () => (F()
+      ? [['jeans', 'Kot'], ['leggings', 'Tayt'], ['slacks', 'Kumaş'], ['shorts', 'Şort'], ['minishort', 'Kısa şort'], ['mini', 'Mini etek'], ['skirt', 'Etek'], ['midi', 'Midi etek'], ['longskirt', 'Uzun etek'], ['track', 'Eşofman']]
+      : [['jeans', 'Kot'], ['chino', 'Chino'], ['slacks', 'Kumaş'], ['cargo', 'Kargo'], ['shorts', 'Şort'], ['track', 'Eşofman']]);
+    const SHOES = () => (F()
+      ? [['sneaker', 'Spor'], ['flats', 'Babet'], ['heels', 'Topuklu'], ['sandal', 'Sandalet'], ['boots', 'Bot'], ['loafer', 'Loafer']]
+      : [['sneaker', 'Spor'], ['hightop', 'Basket botu'], ['polished', 'Rugan'], ['loafer', 'Loafer'], ['boots', 'Bot'], ['sandal', 'Sandalet']]);
+    const setTop = (v) => { look.top = v; look.topStyle = v; if (v === 'suit') { look.pants = look.pantsStyle = 'slacks'; look.pantsColor = look.topColor; } setTimeout(render, 0); };
+    const presets = {
+      'Kabadayı': { top: 'leather', topStyle: 'leather', topColor: '#1c1c1c', pants: 'jeans', pantsStyle: 'jeans', pantsColor: '#2a3550', shoes: 'boots', shoesStyle: 'boots', shoesColor: '#3a2412', hat: 'none', hatStyle: 'none', glasses: false },
+      'Takım Elbise': { top: 'suit', topStyle: 'suit', topColor: '#1d2440', shirtColor: '#f0f0f0', tieColor: '#7a0f14', pants: 'slacks', pantsStyle: 'slacks', pantsColor: '#1d2440', shoes: 'polished', shoesStyle: 'polished', shoesColor: '#0a0a0a', hat: 'none', hatStyle: 'none', glasses: true, glassesStyle: 'glasses' },
+      'Eşofmanlı': { top: 'track', topStyle: 'track', topColor: '#1a1a1a', accentColor: '#f0f0f0', pants: 'track', pantsStyle: 'track', pantsColor: '#1a1a1a', shoes: 'sneaker', shoesStyle: 'sneaker', shoesColor: '#eeeeee', hat: 'kasket', hatStyle: 'kasket', hatColor: '#2a2a2a', glasses: false },
+      'Paltolu': { top: 'coat', topStyle: 'coat', topColor: '#2a2a3a', shirtColor: '#e8e8e8', pants: 'slacks', pantsStyle: 'slacks', pantsColor: '#111111', shoes: 'polished', shoesStyle: 'polished', shoesColor: '#0a0a0a', hat: 'fedora', hatStyle: 'fedora', hatColor: '#151515', glasses: false },
+      'Yazlık': { top: 'tank', topStyle: 'tank', topColor: '#e8e8e8', pants: 'shorts', pantsStyle: 'shorts', pantsColor: '#c9b48a', shoes: 'sandal', shoesStyle: 'sandal', shoesColor: '#5a3a20', hat: 'cap', hatStyle: 'cap', hatColor: '#1d3d6e', glasses: true, glassesStyle: 'glasses' },
+      'Sokak': { top: 'bomber', topStyle: 'bomber', topColor: '#2a3a2a', accentColor: '#c86a1a', pants: 'cargo', pantsStyle: 'cargo', pantsColor: '#2a2a2a', shoes: 'hightop', shoesStyle: 'hightop', shoesColor: '#eeeeee', hat: 'bere', hatStyle: 'bere', hatColor: '#1a1a1a', glasses: false },
+    };
+    const presetsF = {
+      'Şık': { top: 'blouse', topStyle: 'blouse', topColor: '#f0ece0', pants: 'midi', pantsStyle: 'midi', pantsColor: '#1a1a1a', shoes: 'heels', shoesStyle: 'heels', shoesColor: '#111111', bag: 'handbag', bagColor: '#3a2412', earrings: 'stud', hat: 'none', hatStyle: 'none' },
+      'Elbiseli': { top: 'dress', topStyle: 'dress', dressLen: 'knee', topColor: '#8a1a1a', accentColor: '#1a1a1a', shoes: 'heels', shoesStyle: 'heels', shoesColor: '#111111', bag: 'handbag', bagColor: '#111111', earrings: 'hoop', hat: 'none', hatStyle: 'none' },
+      'Deri & Kot': { top: 'leather', topStyle: 'leather', topColor: '#1c1c1c', pants: 'jeans', pantsStyle: 'jeans', pantsColor: '#1e2a40', shoes: 'boots', shoesStyle: 'boots', shoesColor: '#1a1a1a', glasses: true, glassesStyle: 'glasses', hat: 'none', hatStyle: 'none' },
+      'Yazlık': { top: 'crop', topStyle: 'crop', topColor: '#e8c8c8', pants: 'minishort', pantsStyle: 'minishort', pantsColor: '#5a6a8a', shoes: 'sandal', shoesStyle: 'sandal', shoesColor: '#c9a070', glasses: true, glassesStyle: 'glasses', hat: 'none', hatStyle: 'none' },
+      'Sporcu': { top: 'tank', topStyle: 'tank', topColor: '#1a1a1a', pants: 'leggings', pantsStyle: 'leggings', pantsColor: '#111111', shoes: 'sneaker', shoesStyle: 'sneaker', shoesColor: '#eeeeee', hat: 'none', hatStyle: 'none', watch: 'digital' },
+      'Kapalı': { top: 'ferace', topStyle: 'ferace', topColor: '#2a2a3a', pants: 'longskirt', pantsStyle: 'longskirt', pantsColor: '#1a1a1a', shoes: 'flats', shoesStyle: 'flats', shoesColor: '#111111', hat: 'basortusu', hatStyle: 'basortusu', hatColor: '#6a1a2a', bag: 'handbag', bagColor: '#1a1a1a' },
+    };
+    const CATS = [['id', 'Kimlik', 'user', 'body'], ['face', 'Yüz & Saç', 'face', 'face'], ['wear', 'Kıyafet', 'c_top', 'body'], ['acc', 'Aksesuar', 'c_hat', 'face'], ['style', 'Tarz', 'c_jewelry', 'body']];
     const render = () => {
       tabs.innerHTML = '';
       for (const [k, l, ic, view] of CATS) {
@@ -829,16 +866,49 @@ export class UI {
         const inp = el('input', 'txt'); inp.value = name; inp.maxLength = 16; inp.spellcheck = false;
         inp.addEventListener('input', () => { name = inp.value; update(); });
         nm.appendChild(inp);
-        choice('Cinsiyet', ['m', 'f'], 'gender', (v) => (v === 'm' ? 'Erkek' : 'Kadın'));
+        opt('Cinsiyet', [['m', 'Erkek'], ['f', 'Kadın']], field('gender'), (v) => {
+          if (look.gender === v) return;
+          look.gender = v; look.hair = v === 'f' ? 'uzun' : 'kisa'; look.beard = v === 'f' ? 'none' : 'stubble';
+          Object.assign(look, v === 'f' ? presetsF['Deri & Kot'] : presets['Kabadayı']);
+          setTimeout(render, 0);
+        });
         choice('Ten', SKIN_TONES, 'skin', null, true);
+        opt('Vücut', Object.entries(BODY_TYPE_NAMES), field('body', 'average'), (v) => applyBodyType(look, v));
+        opt('Boy', [[0.92, 'Kısa'], [0.97, 'Orta-kısa'], [1, 'Orta'], [1.04, 'Uzun'], [1.08, 'Çok uzun']], field('height', 1), setF('height'));
       } else if (cat === 'face') {
-        choice('Saç', HAIR_STYLES, 'hair', (v) => ({ kisa: 'Kısa', arkaya: 'Arkaya', kel: 'Kel', uzun: 'Uzun', kivircik: 'Kıvırcık', at_kuyrugu: 'At kuyruğu' }[v] || v));
+        const hs = HAIR_STYLES_ALL.filter((h) => (F() ? h !== 'asker' && h !== 'fade' : true));
+        opt('Saç', hs.map((h) => [h, HAIR_STYLE_NAMES[h] || h]), field('hair'), setF('hair'));
         choice('Saç rengi', HAIR_COLORS, 'hairColor', null, true);
-        choice('Sakal', BEARDS, 'beard', (v) => ({ none: 'Yok', stubble: 'Kirli', mustache: 'Bıyık', full: 'Gür' }[v] || v));
+        if (!F()) opt('Sakal', BEARDS_ALL.map((b) => [b, BEARD_NAMES[b] || b]), field('beard'), setF('beard'));
+        opt('Göz', [['#3b2414', 'Koyu kahve'], ['#5a3a1c', 'Kahve'], ['#2e4a2a', 'Yeşil'], ['#3a5a7a', 'Mavi'], ['#6a5030', 'Ela']], field('eyeColor'), setF('eyeColor'), true);
+        if (F()) opt('Makyaj', [[false, 'Yok'], [true, 'Var']], () => !!look.makeup, setF('makeup'));
+      } else if (cat === 'wear') {
+        const tl = TOPS(); if (!tl.find((x) => x[0] === (look.topStyle || look.top))) { look.top = look.topStyle = tl[0][0]; }
+        opt('Üst', tl, () => look.topStyle || look.top, setTop);
+        colRow('Üst rengi', 'topColor');
+        const dress = look.top === 'dress' || look.top === 'sundress';
+        if (dress) opt('Elbise boyu', [['mini', 'Mini'], ['knee', 'Diz'], ['midi', 'Midi'], ['long', 'Uzun']], field('dressLen', 'knee'), setF('dressLen'));
+        else {
+          opt('Alt', PANTS(), () => look.pantsStyle || look.pants, (v) => { look.pants = look.pantsStyle = v; });
+          colRow('Alt rengi', 'pantsColor');
+        }
+        if (F() && (dress || ['mini', 'skirt', 'midi', 'shorts', 'minishort'].includes(look.pants))) opt('Çorap', [[null, 'Yok'], ['#1a1418', 'Siyah'], ['#c9a890', 'Ten']], field('tights'), setF('tights'));
+        opt('Ayakkabı', SHOES(), () => look.shoesStyle || look.shoes, (v) => { look.shoes = look.shoesStyle = v; });
+        colRow('Ayakkabı rengi', 'shoesColor');
+      } else if (cat === 'acc') {
+        opt('Şapka', [['none', 'Yok'], ['cap', 'Kep'], ['kasket', 'Kasket'], ['bere', 'Bere'], ['fedora', 'Fötr'], ['panama', 'Panama'], ['bandana', 'Bandana']].concat(F() ? [['basortusu', 'Başörtüsü']] : []), () => look.hatStyle || look.hat || 'none', (v) => { look.hat = look.hatStyle = v; });
+        colRow('Şapka rengi', 'hatColor');
+        opt('Gözlük', [['none', 'Yok'], ['glasses', 'Güneş'], ['aviator', 'Pilot'], ['readers', 'Numaralı']], () => (look.glasses ? look.glassesStyle || 'glasses' : 'none'), (v) => { look.glasses = v !== 'none'; look.glassesStyle = v; if (v === 'aviator') look.glassesColor = '#d4af37'; });
+        opt('Saat', [[null, 'Yok'], ['digital', 'Dijital'], ['steelwatch', 'Çelik'], ['goldwatch', 'Altın']], field('watch'), setF('watch'));
+        opt('Zincir', [['none', 'Yok'], ['chain', 'Altın'], ['silverchain', 'Gümüş']], () => (look.chain ? look.chainStyle || 'chain' : 'none'), (v) => { look.chain = v !== 'none'; look.chainStyle = v; look.chainColor = v === 'silverchain' ? '#cfd2d6' : '#d4af37'; });
+        opt('Çanta', [[null, 'Yok'], ['bag1', 'Sırt'], ['duffel', 'Spor']].concat(F() ? [['handbag', 'El çantası'], ['tote', 'Omuz çantası']] : []), field('bag'), setF('bag'));
+        if (F()) opt('Küpe', [[null, 'Yok'], ['stud', 'Taş'], ['hoop', 'Halka']], field('earrings'), setF('earrings'));
+        opt('Tespih', [[false, 'Yok'], [true, 'Var']], () => !!look.tespih, setF('tespih'));
       } else {
         const pr = row('Hazır tarz'); pr.classList.remove('seg'); pr.classList.add('cr-cards');
-        for (const [k, v] of Object.entries(presets)) {
-          const b = this.btn(`<b>${k}</b><small>${v.top === 'suit' ? 'Şık ve tehlikeli' : v.top === 'coat' ? 'Eski usul baba' : v.top === 'track' ? 'Mahallenin delikanlısı' : 'Sokakların sesi'}</small>`, () => { Object.assign(look, v); update(); pr.querySelectorAll('.btn').forEach((x) => x.classList.toggle('on', x === b)); }, 'cr-card');
+        const SUB = { 'Takım Elbise': 'Şık ve tehlikeli', 'Paltolu': 'Eski usul baba', 'Eşofmanlı': 'Mahallenin delikanlısı', 'Kabadayı': 'Sokakların sesi', 'Yazlık': 'Boğaz sıcağı', 'Sokak': 'Gece mesaisi', 'Şık': 'İş toplantısı', 'Elbiseli': 'Gece daveti', 'Deri & Kot': 'Kimseye boyun eğmez', 'Sporcu': 'Sahilde koşu', 'Kapalı': 'Ağırbaşlı ve zarif' };
+        for (const [k, v] of Object.entries(F() ? presetsF : presets)) {
+          const b = this.btn(`<b>${k}</b><small>${SUB[k] || ''}</small>`, () => { Object.assign(look, v); update(); pr.querySelectorAll('.btn').forEach((x) => x.classList.toggle('on', x === b)); }, 'cr-card');
           pr.appendChild(b);
         }
         body.appendChild(el('p', 'hint', 'Kıyafetlerin tamamı oyunda butiklerden alınabilir.'));
@@ -855,7 +925,7 @@ export class UI {
     const foot = $('.cr-foot', p);
     foot.append(
       this.btn('GERİ', () => { this.closeAll(); g.exitCreator(); this.mainMenu(); }, 'ghost'),
-      this.btn('Rastgele', () => { look.skin = rnd(SKIN_TONES); look.hair = rnd(HAIR_STYLES); look.hairColor = rnd(HAIR_COLORS); if (look.gender !== 'f') look.beard = rnd(BEARDS); Object.assign(look, presets[rnd(Object.keys(presets))]); update(); render(); }, 'ghost'),
+      this.btn('Rastgele', () => { const f = look.gender === 'f'; look.skin = rnd(SKIN_TONES); look.hair = rnd(f ? ['uzun', 'dalgali', 'kare', 'at_kuyrugu', 'topuz', 'kivircik'] : HAIR_STYLES_ALL.filter((h) => h !== 'uzun')); look.hairColor = rnd(HAIR_COLORS); if (!f) look.beard = rnd(BEARDS_ALL); applyBodyType(look, rnd(Object.keys(BODY_TYPE_NAMES))); const P = f ? presetsF : presets; Object.assign(look, P[rnd(Object.keys(P))]); update(); render(); }, 'ghost'),
       this.btn('MACERAYA BAŞLA', () => { this.closeAll(); g.exitCreator(); g.newGame((name || '').trim() || 'Kemal', look); }, 'gold big-cta'),
     );
     render();
