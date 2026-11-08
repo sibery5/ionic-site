@@ -1593,7 +1593,7 @@ export class NPCManager {
     if ((this.recogAt || -99) + 10 > now) return;
     this.recogAt = now;
     n.barkT = 0;
-    n.say(['Babanın oğlu bu, yakalayın!', 'Bu Reis\'in adamı! Vurun!', 'Babanın oğlu! Kaçırmayın!']);
+    n.say(['Babanın oğlu bu, yakalayın!', 'Babanın oğlu bu! Yakalayın, kaçmasın!']);
     for (const o of this.list) {
       if (o === n || o.dead || o.gang !== n.gang || o.ally || o.state === 'attack') continue;
       if (Math.abs(o.pos.x - n.pos.x) < 20 && Math.abs(o.pos.z - n.pos.z) < 20) o.engage(this.game.player, 1.2);

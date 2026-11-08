@@ -396,6 +396,7 @@ export function driveVehicleAI(mgr, v, dt) {
   // yumuşak pedal (ani sarsıntı yok), acil frende hızlı
   const rate = acc < -6 ? 8 : 2.5;
   ctl.throttle = reverse ? -1 : ctl.throttle + clamp(thr - ctl.throttle, -rate * dt, rate * dt);
+  ai._dbg = [desired, gap, stopDist, acc, ai.reverseT, sp, ai.pedBlock, blocker && blocker.type].join(',');
   const stopped = Math.abs(sp) < 1.2 && (desired <= 0.05 || acc < -0.3 && (gap < 3 || stopDist < 2));
   ctl.handbrake = stopped && !reverse;
   if (ctl.handbrake && ctl.throttle > 0) ctl.throttle = 0;

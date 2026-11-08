@@ -289,7 +289,12 @@ export class Ambulance {
         const d = Math.hypot(n.pos.x - me.pos.x, n.pos.z - me.pos.z);
         if (n.dead || n.downed) { n.ext = null; done(); return 0; }
         me.heading = Math.atan2(n.pos.x - me.pos.x, n.pos.z - me.pos.z);
-        if (d > 1.6) { t += dt; if (t > 15) { n.ext = null; n.state = 'walk'; done(); } return 0; }
+        if (d > 1.6) {
+          // yaralıyla ortada buluş (yürüyemeyecek kadar yavaşsa sağlıkçı gider)
+          t += dt; if (t > 20) { n.ext = null; n.state = 'walk'; done(); return 0; }
+          if (n.state !== 'ext') { n.state = 'ext'; n.ext = (dt2, w) => { const dd = w.navTo(me.pos.x, me.pos.z, 1.4, dt2, true); return dd > 1.3 ? w.speed : 0; }; }
+          me.navTo(n.pos.x, n.pos.z, 1.3, dt, true); return me.speed;
+        }
         stage += dt;
         if (stage > 2.0) {
           n.hp = Math.max(n.hp, n.maxHp * 0.9); n.treated = true;

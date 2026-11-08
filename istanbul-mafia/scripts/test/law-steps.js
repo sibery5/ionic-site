@@ -33,6 +33,7 @@ module.exports = async (p, out) => {
         g.ambulance.fire.length = 0;
         for (const k of Object.keys(g.state.gangRel)) delete g.state.gangRel[k];
         g.input.mouse.right = false; g.player.aiming = false;
+        g.ui.closeAll(); g.ui.dialogEl.classList.add('hidden'); g.mode = 'playing'; // açılan hikâye diyaloğu girişi kilitlemesin
         g.onBusted = () => { L.busted = (L.busted || 0) + 1; }; // testte gözaltı ekranı açılmasın
         L.barks.length = 0;
       },
@@ -91,7 +92,7 @@ module.exports = async (p, out) => {
       // ilk 25 sn'de yaya olarak (araç dışında, 100 m içinde) doğan kolluk var mı
       const footSpawn = spawns.filter((s) => (s.n.faction === 'police' || s.n.kind === 'swat') && !s.n.lawUnit && !s.n.rbGuard && s.d < 100).length;
       const crewSpawned = spawns.filter((s) => s.n.lawUnit).length;
-      const uinfo = W.units.map((u) => u.phase + ':' + Math.round(L.d(u.v.pos, pl.pos)) + ':' + u.v.speed.toFixed(1) + ':' + (u.v.ai && u.v.ai.mode));
+      const uinfo = W.units.map((u) => u.phase + ':' + Math.round(L.d(u.v.pos, pl.pos)) + ':' + u.v.speed.toFixed(1) + ':' + (u.v.ai && u.v.ai.mode) + ':' + (u.v.ai && u.v.ai._dbg));
       g.npcs.add = oadd; W.dispatchUnit = odu;
       void pc;
       return { lvl0, copResp, patrolUnit, units: units.map((x) => ({ t: x.u.type, d: Math.round(x.d), los: x.los })), deployedAt, carSpeedAtDeploy, crewNearCar, footSpawn, crewSpawned, deployed: W.lawLog.deployed, responders: W.lawLog.responders, uinfo, lvl: W.level };
@@ -378,7 +379,7 @@ module.exports = async (p, out) => {
       const thug3 = g.npcs.add('gang', R.at(60, 8.5).x, R.at(60, 8.5).z, null, { gang: 'kurtlar', weapon: 'pistol', state: 'idle' }); thug3.maxHp = thug3.hp = 9999;
       const civ3 = g.npcs.add('civilian', R.at(75, 8.5).x, R.at(75, 8.5).z, null, { state: 'idle' }); civ3.maxHp = civ3.hp = 9999;
       thug3.engage(civ3, 0.1);
-      sim(9);
+      sim(14);
       const incUnit = W.units.find((u) => u.incident);
       // karakol önü: istasyon polisleri çatışmaya girer
       for (const n of g.npcs.list.slice()) if (!n.mission) g.npcs.remove(n);
@@ -392,8 +393,9 @@ module.exports = async (p, out) => {
       t4.engage(c4, 0.1);
       sim(4);
       const stationEngaged = sc ? sc.cops.filter((c) => !c.dead && c.target === t4).length : -1;
+      window.__st = { cops: sc ? sc.cops.map((c) => c.state + ':' + Math.round(L.d(c.pos, t4.pos)) + ':' + (c.target === t4)) : null, lawT: t4.lawT, tst: t4.state, ttgt: t4.target === c4, crim: g.npcs.lawCrim };
       W.reset();
-      return { neutralCalm, warnAim, aimFight, relAfterAim, b1, b2, carFight, enemyAtk, recog, copOnThug, thugCrim, cuffed, arrests, recorded, incUnit: !!incUnit, incVeh: incUnit ? incUnit.v.type : null, stationEngaged };
+      return { neutralCalm, warnAim, aimFight, relAfterAim, b1, b2, carFight, enemyAtk, recog, copOnThug, thugCrim, cuffed, arrests, recorded, incUnit: !!incUnit, incVeh: incUnit ? incUnit.v.type : null, stationEngaged, st: window.__st };
     });
     console.log('6 çeteler:', JSON.stringify(r));
     check(r.neutralCalm, '6a Tarafsız çete oyuncuya da sivile de saldırmadı');
@@ -426,6 +428,7 @@ module.exports = async (p, out) => {
         if (i % 20 === 0) A.noteGunfire(q1.x, q1.z);
         const U = A.unit;
         if (U && U.phase === 'hold') { held = true; holdDist = Math.max(holdDist, L.d(U.v.pos, q1)); }
+        if (U && i % 60 === 0) (window.__amb = window.__amb || []).push(U.phase + ':' + Math.round(L.d(U.v.pos, q1)) + ':' + Math.round(L.d(U.wait, q1)) + ':' + U.v.speed.toFixed(1) + ':' + A.unsafe(q1.x, q1.z));
         if (U) medicsOutWhileFire = Math.max(medicsOutWhileFire, U.medics.filter((m) => !m.passengerOf && !m.cargoOf).length);
       });
       const dispatched = A.stats.dispatched;
@@ -443,7 +446,7 @@ module.exports = async (p, out) => {
       sim(10);
       const U = A.unit;
       const drove = U ? Math.round(L.d(U.v.pos, q1)) : 999;
-      return { dispatched, held, holdDist: Math.round(holdDist), medicsOutWhileFire, medicsOut, doorsOpened, stats: s, tamam, wUp, hurtHp: Math.round(hurt.hp / hurt.maxHp * 100), bodyGone, t, drove };
+      return { amb: window.__amb, dispatched, held, holdDist: Math.round(holdDist), medicsOutWhileFire, medicsOut, doorsOpened, stats: s, tamam, wUp, hurtHp: Math.round(hurt.hp / hurt.maxHp * 100), bodyGone, t, drove };
     });
     console.log('7 ambulans:', JSON.stringify(r));
     check(r.dispatched >= 1, '7a Çatışma sonrası ambulans çağrıldı');
@@ -535,7 +538,7 @@ module.exports = async (p, out) => {
       g.interiors.exit();
       sim(1);
       const gone = !g.npcs.list.includes(owner) && !pl.inInterior;
-      return { said, approach, attacking, gone, stats: g.law.home.stats };
+      return { said, approach, attacking, ost: owner.state, otg: owner.target === pl, odead: owner.dead, gone, stats: g.law.home.stats };
     });
     console.log('9 ev sahibi:', JSON.stringify(r));
     check(r.said && r.approach, '9a "Sen kimsin? Evimden çık!"');
