@@ -50,7 +50,7 @@ export class TrafficLaw {
     this.fines++;
     if (g.wanted.lawLog) g.wanted.lawLog.fines++;
     const text = `Kırmızı ışık ihlali — ${formatMoney(fine)} ceza`;
-    if (g.ui.phoneNotify) g.ui.phoneNotify('Trafik Denetim', text);
+    if (g.phone && g.phone.notify) g.phone.notify('Trafik Denetim', text, { from: 'Trafik Denetim', kind: 'fine' });
     else this.toast('Trafik Denetim', text);
     if (g.audio.tone) g.audio.tone({ freq: 1320, dur: 0.12, type: 'sine', gain: 0.06 });
   }
