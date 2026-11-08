@@ -254,7 +254,9 @@ export class Military {
     if (this.alert || !this.active) return this.alert;
     if (this.trespass(x, z) || this.wallDist(x, z) < 25) { this.raiseAlert('Ateş açıldı!'); return true; }
     const now = g.wanted.clockT || 0;
-    if ((this.shotWarnAt || -99) + 12 > now) { this.raiseAlert('Uyarıya rağmen ateş açıldı!'); return true; }
+    const since = now - (this.shotWarnAt ?? -99);
+    if (since < 0.6) return false; // aynı atışı duyan diğer askerler
+    if (since < 12) { this.raiseAlert('Uyarıya rağmen ateş açıldı!'); return true; }
     this.shotWarnAt = now;
     this.stage = Math.max(this.stage || 0, 2); this.stageT = 0;
     g.ui.bigMessage('SON UYARI', 'Ateşi kes! Askerî bölge — karşılık verilecek!', 'red', 2.5);

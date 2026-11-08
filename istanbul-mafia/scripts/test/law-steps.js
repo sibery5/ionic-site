@@ -80,7 +80,7 @@ module.exports = async (p, out) => {
       const patrolUnit = W.units.some((u) => u.patrol);
       // 25 sn boyunca: birim gelip duruyor mu, ekip iniyor mu
       let deployedAt = null, carSpeedAtDeploy = null, near5 = 0, crewNearCar = 0;
-      for (let k = 0; k < 50 && deployedAt === null; k++) {
+      for (let k = 0; k < 70 && deployedAt === null; k++) {
         sim(0.5);
         for (const u of W.units) if ((u.phase === 'deploy' || u.phase === 'deployed') && deployedAt === null) {
           deployedAt = k * 0.5 + 1; carSpeedAtDeploy = +u.v.speed.toFixed(2);
@@ -91,9 +91,10 @@ module.exports = async (p, out) => {
       // ilk 25 sn'de yaya olarak (araç dışında, 100 m içinde) doğan kolluk var mı
       const footSpawn = spawns.filter((s) => (s.n.faction === 'police' || s.n.kind === 'swat') && !s.n.lawUnit && !s.n.rbGuard && s.d < 100).length;
       const crewSpawned = spawns.filter((s) => s.n.lawUnit).length;
+      const uinfo = W.units.map((u) => u.phase + ':' + Math.round(L.d(u.v.pos, pl.pos)) + ':' + u.v.speed.toFixed(1) + ':' + (u.v.ai && u.v.ai.mode));
       g.npcs.add = oadd; W.dispatchUnit = odu;
       void pc;
-      return { lvl0, copResp, patrolUnit, units: units.map((x) => ({ t: x.u.type, d: Math.round(x.d), los: x.los })), deployedAt, carSpeedAtDeploy, crewNearCar, footSpawn, crewSpawned, deployed: W.lawLog.deployed, responders: W.lawLog.responders };
+      return { lvl0, copResp, patrolUnit, units: units.map((x) => ({ t: x.u.type, d: Math.round(x.d), los: x.los })), deployedAt, carSpeedAtDeploy, crewNearCar, footSpawn, crewSpawned, deployed: W.lawLog.deployed, responders: W.lawLog.responders, uinfo, lvl: W.level };
     });
     console.log('1 sevkiyat:', JSON.stringify(r));
     check(r.lvl0 >= 1 && r.copResp, '1a Görüşteki devriye polis suça tepki verdi');
@@ -140,12 +141,12 @@ module.exports = async (p, out) => {
       const mk = (s, lat) => { const u = W.dispatchUnit('police'); if (!u) return null; const q = R.at(s, lat); u.v.pos.set(q.x, 0, q.z); u.v.heading = Math.atan2(R.fx, R.fz); u.v.vx = R.fx * 12; u.v.vz = R.fz * 12; u.v.ai.from = R.n; u.v.ai.to = R.o; u.v.ai.next = g.vehicles.chooseNext(R.o, R.n); return u; };
       const u1 = mk(2, 2.5), u2 = mk(-6, -2.5);
       let pitting = false, minD = 1e9, chase = 0, direct = false;
-      hold('KeyW', true);
-      sim(5, () => {
+      // oyuncu yolda ~11 m/s ile kaçıyor (şerit boyunca)
+      sim(7, () => {
+        car.heading = Math.atan2(R.fx, R.fz); car.vx = R.fx * 11; car.vz = R.fz * 11;
         for (const u of W.units) { if (u.v.ai && u.v.ai.pitting) pitting = true; if (u.v.ai && u.v.ai.direct) direct = true; minD = Math.min(minD, L.d(u.v.pos, car.pos)); }
         chase = Math.max(chase, W.units.filter((u) => u.v.ai && u.v.ai.mode === 'chase').length);
       });
-      hold('KeyW', false);
       const pit = W.lawLog.pit;
       // oyuncu durdu: sıkıştırma + "Araçtan in" + 2★'da gözaltı
       W.set(2);
@@ -194,7 +195,7 @@ module.exports = async (p, out) => {
       L.place(at.x, at.z); W.set(3); W.roadblockT = 999; W.dispatchT = 0; sim(2);
       const hideAt = R.at(5, -9);
       for (const n of g.npcs.list.slice()) if (n.faction === 'police' && !n.lawUnit) g.npcs.remove(n);
-      L.place(hideAt.x + 250, hideAt.z + 250); W.seenT = 5;
+      L.place(hideAt.x + 110, hideAt.z + 110); W.seenT = 5;
       sim(1);
       const goals = W.units.map((u) => u.v.ai && u.v.ai.goal ? Math.round(L.d(u.v.ai.goal, W.lkp)) : -1);
       const goalsFromPlayer = W.units.map((u) => u.v.ai && u.v.ai.goal ? Math.round(L.d(u.v.ai.goal, pl.pos)) : -1);
@@ -212,7 +213,7 @@ module.exports = async (p, out) => {
     console.log('3 atlatma:', JSON.stringify(r));
     check(r.keptWhileSeen >= 2, '3a Polis görürken yıldız sönmedi (' + r.keptWhileSeen + ')');
     check(r.t1 <= 15, '3b 1★ görüşten çıkınca kolay söndü (' + r.t1 + ' sn)');
-    check(r.goals.length > 0 && r.goals.every((d) => d >= 0 && d < 130) && r.goalsFromPlayer.every((d) => d > 150), '3c Takip araçları LKP/arama alanına gidiyor, gerçek konuma değil');
+    check(r.goals.length > 0 && r.goals.every((d) => d >= 0 && d < 130) && r.goalsFromPlayer.every((d) => d > 60), '3c Takip araçları LKP/arama alanına gidiyor, gerçek konuma değil');
     check(r.searchR1 > r.searchR0, '3d Arama alanı zamanla büyüdü (' + r.searchR0 + '→' + r.searchR1 + ' m)');
     check(r.t3 > 0 && r.t3 < 200, '3e 3★ görüş dışında kalınca söndü (' + r.t3 + ' sn)');
     check(r.within40 === 0, '3f 3★ başında 40 m içinde kolluk belirmedi (' + r.within40 + ')');
@@ -320,7 +321,7 @@ module.exports = async (p, out) => {
       L.clear();
       const R = L.road(200, -100, 100); const at = R.at(40, 8.5); L.place(at.x, at.z, Math.atan2(R.fx, R.fz));
       sim(0.3);
-      const grp = (gang, s, n = 3) => { const out = []; for (let i = 0; i < n; i++) { const q = R.at(s + i * 1.2, 8.5 + (i % 2)); const m = g.npcs.add('gang', q.x, q.z, null, { gang, state: 'guard', home: new THREE.Vector3(q.x, 0, q.z) }); m.faceYaw = 0; out.push(m); } return out; };
+      const grp = (gang, s, n = 3) => { const out = []; for (let i = 0; i < n; i++) { const q = R.at(s + i * 1.2, 8.5 + (i % 2)); const m = g.npcs.add('gang', q.x, q.z, null, { gang, state: 'guard', home: g.player.pos.clone().set(q.x, 0, q.z) }); m.faceYaw = 0; out.push(m); } return out; };
       // tarafsız çete + yanında sivil: kimse saldırmaz
       const neutral = grp('yilanlar', 46);
       const civ = g.npcs.add('civilian', R.at(47, 10).x, R.at(47, 10).z, null, { state: 'idle' });

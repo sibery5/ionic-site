@@ -141,6 +141,7 @@ export function driveVehicleAI(mgr, v, dt) {
     if (sl <= C.sP) { tx = L.ax + L.fx * sl; tz = L.az + L.fz * sl; }
     else { const rem = sl - C.sP; tx = C.px + N.fx * rem; tz = C.pz + N.fz * rem; }
     const toCorner = C.sP - s;
+    ai.toCorner = toCorner;
     if (Math.abs(turn) > 0.5) {
       // viraj hızı: yanal ivme ~3 m/s² ile sınırlı yumuşak yavaşlama
       const vTurn = 5.5 + Math.max(0, toCorner) * 0.25;
@@ -200,7 +201,8 @@ export function driveVehicleAI(mgr, v, dt) {
       if (ai.pitCd > 0) ai.pitCd -= dt;
       // doğrudan takip yalnız iki yanal ışın da açıksa (araç genişliği binaya sürtmesin)
       let direct = false;
-      if (seen && d < 60 && !(ai.noDirectT > 0)) {
+      // yaya hedefe doğrudan dalmaz (kaldırıma/binaya sürmesin): yolda kalır, yakında durur, ekip iner
+      if (seen && pv && d < 60 && !(ai.noDirectT > 0)) {
         ai.dirChkT = (ai.dirChkT || 0) - dt;
         if (ai.dirChkT <= 0) {
           ai.dirChkT = 0.25; // [kanun] ışın testleri seyrek
@@ -284,15 +286,27 @@ export function driveVehicleAI(mgr, v, dt) {
       if (gp < gap) { gap = gp; blocker = null; leadV = 0; ai.pedBlock = true; ai.pedPlayer = isPl; }
     };
     if (!player.vehicle && !player.inInterior) pedCheck(player.pos.x, player.pos.z, true);
-    for (const n of g.npcs.list) if (!n.dead && !n.vehicle && Math.abs(n.pos.x - v.pos.x) < 30 && Math.abs(n.pos.z - v.pos.z) < 30) pedCheck(n.pos.x, n.pos.z, false);
+    for (const n of g.npcs.list) if (!n.dead && !n.vehicle && !n.passengerOf && !n.cargoOf && Math.abs(n.pos.x - v.pos.x) < 30 && Math.abs(n.pos.z - v.pos.z) < 30) pedCheck(n.pos.x, n.pos.z, false);
     if (ai.pedBlock) ai.honkFor = (ai.honkFor || 0) + dt * (ai.pedPlayer ? 1 : 0.5); else ai.honkFor = Math.max(0, (ai.honkFor || 0) - dt);
     ai.blocker = blocker;
+    // [kanun] sirenli takip aracı yavaş giden / kenara çekilen aracın arkasında sürünmez: karşı şerit boşsa sollar
+    if (ai.mode === 'chase' && blocker && !ai.overtake && gap < 16 && ai.toCorner > 30 && leadV < Math.max(4, desired * 0.6)) {
+      let clear = true;
+      for (const o of mgr.list) {
+        if (o === v || o === blocker || o.kind !== 'car') continue;
+        const dx = o.pos.x - v.pos.x, dz = o.pos.z - v.pos.z;
+        const fd = dx * fx + dz * fz, lat = dx * -fz + dz * fx;
+        if (fd > -6 && fd < 40 && lat < 0.5 && lat > -7 && Math.abs(angleDiff(v.heading, o.heading)) > 2.4) { clear = false; break; }
+      }
+      if (clear) { ai.overtake = blocker; ai.dodge = -((ai.laneCur || 2.5) + 2.2); ai.dodgeT = 5; ai.ignore = blocker; ai.ignoreT = 5; }
+    }
     // kilitlenme ve sollama
     if (gap < 1e8 && Math.abs(sp) < 0.6 && gap < 4) {
       ai.blockT = (ai.blockT || 0) + dt;
       const bl = blocker;
       const stalled = bl && (!bl.ai || bl.ai.empty || bl.parked || bl.destroyed || (bl.driver && bl.speed < 0.3) || (bl.ai && bl.ai.crashT > 0));
-      if (bl && ai.blockT > 1.5 && stalled && ai.mode === 'traffic' && !ai.overtake) {
+      // [kanun] sirenli takip aracı ışıkta/yolda duran aracı da karşı şeritten geçer
+      if (bl && ai.blockT > 1.5 && (stalled || (ai.mode === 'chase' && bl.speed < 1.5)) && (ai.mode === 'traffic' || ai.mode === 'chase') && !ai.overtake) {
         // karşı şerit boş mu: önümüzdeki 45 m'de bize doğru gelen araç yoksa sol şeride geç
         let clear = true;
         for (const o of mgr.list) {

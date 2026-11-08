@@ -342,9 +342,11 @@ export class Wanted {
     const p = this.game.player;
     if (u.incident) { const c = u.incident.culprit; return c && !c.dead && c.lawT > 0 ? c.pos : u.incident; }
     if (this.seenT < 1.5) return (p.vehicle || p).pos;
-    if (!u.sp || u.spT <= 0 || Math.hypot(u.sp.x - u.v.pos.x, u.sp.z - u.v.pos.z) < 14) {
-      u.spT = 14;
-      const a = Math.random() * Math.PI * 2, r = u.sp ? this.searchR * Math.random() : 0;
+    // önce son görülen konuma git; varınca arama alanında rastgele noktalar
+    if (u.spId !== this.lkpId) { u.spId = this.lkpId; u.sp = { x: this.lkp.x, z: this.lkp.z }; u.spT = 60; u.spLkp = true; }
+    else if (Math.hypot(u.sp.x - u.v.pos.x, u.sp.z - u.v.pos.z) < (u.spLkp ? 20 : 14) || u.spT <= 0) {
+      u.spT = 20; u.spLkp = false;
+      const a = Math.random() * Math.PI * 2, r = this.searchR * (0.3 + 0.7 * Math.random());
       u.sp = { x: this.lkp.x + Math.sin(a) * r, z: this.lkp.z + Math.cos(a) * r };
     }
     return u.sp;
@@ -365,7 +367,7 @@ export class Wanted {
     const inc = u.incident;
     const tgt = inc ? inc.culprit : p;
     if (inc) { if (tgt && !tgt.dead) a.engage(tgt, 0.8); }
-    else if (this.level >= 2 || a.kind === 'swat' || a.lawArmy || a.kind === 'soldier') a.engage(p, 1.1);
+    else if ((this.level >= 2 && !(p.vehicle && this.level <= 2 && !p.aiming)) || a.kind === 'swat' || a.lawArmy || a.kind === 'soldier') a.engage(p, 1.1);
     else { a.state = 'arrest'; a.target = p; a.static = false; }
     // mevzi: aracın tehditten uzak tarafı (kapı / motor bloğu siper)
     if (a.state === 'attack' && tgt && tgt.pos) {
@@ -442,10 +444,12 @@ export class Wanted {
       const dp = Math.hypot(v.pos.x - p.pos.x, v.pos.z - p.pos.z);
       if (u.phase === 'enroute') {
         const seenGoal = u.incident || this.seenT < 1.5;
-        const haltD = seenGoal ? (p.vehicle && !u.incident ? 0 : 26 + v.def.len) : 14;
+        const haltD = seenGoal ? (p.vehicle && !u.incident ? 0 : 40 + v.def.len * 0.5) : 18;
         // araçtaki oyuncu sıkıştırıldı: dur, ekip iner
         const boxed = !u.incident && p.vehicle && p.vehicle.speed < 1.5 && dp < 14 && v.speed < 3 && this.boxT > 1.5;
-        if ((footTarget && d < haltD) || boxed) { u.phase = 'halt'; u.t = 0; if (v.ai) { v.ai.mode = 'halt'; } }
+        // yolda takıldı (trafik, kalabalık) ve olay yeri yakında: araçtan inip yaya devam
+        u.slowT = Math.max(0, (u.slowT || 0) + (v.speed < 2 ? dt : -dt * 2));
+        if ((footTarget && (d < haltD || (d < 75 && u.slowT > 2.5))) || boxed) { u.phase = 'halt'; u.t = 0; if (v.ai) { v.ai.mode = 'halt'; } }
       } else if (u.phase === 'halt') {
         if (v.speed < 1.2 || u.t > 4) {
           v.ai = { empty: true }; v.parked = true; v.sirenOn = true;
