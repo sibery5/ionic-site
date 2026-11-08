@@ -799,7 +799,11 @@ function buildTorso(c) {
     const fl = mini ? 0.8 : long ? 1.25 : 1;
     const bkK = 0.8 + 0.2 * R.bk + 0.06 * R.fat;
     const ck = [[1.015, 0.158, 0.085, 0.098], [0.95, 0.182, 0.096, 0.122], [0.88, 0.196, 0.106, 0.13], [0.75, 0.206, 0.12, 0.138], [0.6, 0.212 + 0.012 * fl, 0.128 + 0.012 * fl, 0.142 + 0.012 * fl], [0.45, 0.22 + 0.022 * fl, 0.138 + 0.022 * fl, 0.15 + 0.02 * fl], [0.3, 0.228 + 0.032 * fl, 0.15 + 0.03 * fl, 0.158 + 0.028 * fl], [0.12, 0.236 + 0.042 * fl, 0.16 + 0.04 * fl, 0.166 + 0.036 * fl]]
-      .filter((k) => k[0] >= yb - 0.16).map(([y, rx, rf, rb]) => { const hip = y < 0.97 ? 1 : 0; return [y, 0, y, 0, (rx + 0.008 * hip) * bkK, (rf + 0.006 * hip) * bkK, (rb + 0.006 * hip) * bkK, 2.2]; }).reverse();
+      .filter((k) => k[0] >= yb - 0.16).map(([y, rx, rf, rb]) => {
+        // uyluk hattı (x≈±0.1) etek önünden çıkmasın: kalçadan aşağı ön derinlik + genişlik payı
+        const hip = y < 0.97 ? 1 : 0, th = smooth(0.96, 0.8, y);
+        return [y, 0, y, 0.006 * th, (rx + 0.008 * hip + 0.012 * th) * bkK, (rf + 0.006 * hip + 0.034 * th) * bkK, (rb + 0.006 * hip + 0.012 * th) * bkK, 2.4];
+      }).reverse();
     const S = new Limb(ck, V(1, 0, 0), V(0, 0, 1), V(0, 1, 0), skirtW(R, 0.97, long ? 0.82 : 0.9));
     const skM = c.dress ? M(pc, pantsTile, topSpec.rough) : M(pc, pantsTile, 0.85);
     S.emit(mb, [{ t0: yb, t1: 1.015, off: 0, mat: skM }], Math.max(6, Q.torso - 4), Q.dtT * 1.4, { double: true, innerMat: M(shade(pc, 0.5), 'weave', 0.8) });
@@ -1697,4 +1701,17 @@ function buildGear(c) {
       } else shell(c, (x, y) => smooth(0.075, 0.08, y) * smooth(0.1, 0.095, y), () => HT + 0.033, M(G.strap, 'canvas', 0.9), ws, hs);
     }
   }
+}
+
+// Teçhizat uyumu (savaş modülü game/body.js yelek/kask ağları için): gövde ve kafa ölçüleri, kıyafet payı dahil.
+// Birim boy uzayında (gövde/kafa kemiklerine bağlı ağlar body.scale ile ölçeklenir).
+const THICK = { coat: 0.018, pardesu: 0.016, ferace: 0.018, leather: 0.013, denim: 0.014, hoodie: 0.014, bomber: 0.016, blazer: 0.012, suit: 0.012, tuxedo: 0.012, police: 0.013, track: 0.01, sweater: 0.011, army: 0.012, jandarma: 0.012, swat: 0.011 };
+export function gearFit(L) {
+  const R = rigFor(L), keys = torsoKeys(R), off = THICK[topKind(L)] || 0.006;
+  let rx = 0, rf = 0, rb = 0;
+  for (const k of keys) if (k[0] >= 1.12 && k[0] <= 1.42) { rx = Math.max(rx, k[4]); rf = Math.max(rf, k[5]); rb = Math.max(rb, k[6]); }
+  if (R.f) rf += 0.028; // göğüs hacmi
+  rf += 0.011 * R.mu + off; rb += 0.008 * R.mu + off; rx += off;
+  const D = headDims(R.f), ht = HAIR_T[L.hair] || 0;
+  return { rx, rf, rb, headTop: D.cy + D.ry + Math.min(ht, 0.012), headRx: D.rx + Math.min(ht, 0.012), headRz: D.rz + Math.min(ht, 0.012) };
 }

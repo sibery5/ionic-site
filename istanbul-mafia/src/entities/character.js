@@ -8,7 +8,7 @@
 //   vuruş tepkisi, yönlü ölüm düşüşü ve yere yerleşme (kemik bazlı kısıt gevşetme).
 import * as THREE from 'three';
 import { buildWeaponModel, WEAPONS } from '../game/weapons.js';
-import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM } from './charParts.js';
+import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM, gearFit } from './charParts.js';
 export { BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM };
 import { charMaterial, charDepthMaterial } from './charTex.js';
 
@@ -156,15 +156,15 @@ export function randomLook(r, kind = 'civilian', archetype, district) {
     const v = r.next();
     Object.assign(L, { top: 'police', topStyle: v < 0.45 ? 'police' : v < 0.85 ? 'police_shirt' : 'police_vest', topColor: '#1d2f5a', shirtColor: '#a8c0e0', pants: 'slacks', pantsColor: '#1a2440', shoes: 'boots', shoesColor: '#111111', hat: r.chance(0.8) ? 'police' : 'none', hatColor: r.chance(0.15) ? '#e8e8e8' : '#1a2440', glasses: r.chance(0.25), glassesStyle: 'aviator', age: r.float(0, 0.45), fat: r.chance(0.2) ? 0.4 : 0, beard: gender === 'f' ? 'none' : r.pick(['none', 'stubble', 'mustache']) });
     if (L.topStyle === 'police_shirt' || L.topStyle === 'police_vest') L.topColor = '#a8c0e0';
-    if (L.topStyle === 'police' && r.chance(0.35)) L.vest = 'police'; // devriye: bazılarında çelik yelek
     if (gender === 'f') L.hair = r.pick(['topuz', 'at_kuyrugu']);
   } else if (kind === 'swat' || kind === 'soldier' || kind === 'army' || kind === 'jandarma') {
-    // üniforma + kask + çelik yelek (görünür teçhizat; savaş modülü look.helmet / look.vest okur)
+    // üniforma (kamuflaj/taktik kıyafet, eldiven). Kask ve yelek savaş modülünün ayrı ağları (game/body.js, düşürülebilir kask);
+    // karakter ağı içi teçhizat yalnız look.helmet / look.vest açıkça verilince (setGear) çizilir.
     const t = kind === 'soldier' ? 'army' : kind;
     Object.assign(L, { top: t, topStyle: null, pants: t === 'swat' ? 'tactical' : 'camo', camo: t, pantsColor: t === 'swat' ? '#16181a' : '#3f4c2a', shoes: 'boots', shoesColor: t === 'swat' ? '#0e0e0e' : '#2a2018',
-      helmet: t, vest: t, visor: t === 'swat' && r.chance(0.5), gloves: t === 'swat' || r.chance(0.4) ? (t === 'swat' ? '#121212' : '#2e3420') : null,
+      helmet: null, vest: null, gloves: t === 'swat' || r.chance(0.4) ? (t === 'swat' ? '#121212' : '#2e3420') : null,
       hat: 'none', glasses: t === 'swat' && r.chance(0.3), glassesStyle: 'glasses', chain: false, tespih: false, bag: null, earrings: null,
-      hair: gender === 'f' ? 'topuz' : r.pick(['asker', 'kisa', 'fade']), beard: gender === 'f' ? 'none' : t === 'jandarma' ? r.pick(['mustache', 'stubble']) : r.pick(['none', 'stubble']), age: r.float(0, 0.3) });
+      hair: gender === 'f' ? 'topuz' : r.pick(['asker', 'asker', 'fade']), beard: gender === 'f' ? 'none' : t === 'jandarma' ? r.pick(['mustache', 'stubble']) : r.pick(['none', 'stubble']), age: r.float(0, 0.3) });
     applyBodyType(L, r.chance(0.5) ? 'muscular' : 'average');
   } else if (kind === 'gang' && GANG_STYLE[archetype]) {
     // çeteye özgü tarz (archetype = çete anahtarı)
@@ -414,6 +414,16 @@ export class CharacterModel {
     if ((L.helmet || null) === h && (L.vest || null) === v) return;
     L.helmet = h; L.vest = v; this.build();
   }
+  // [savaş/karakter] body.js yelek ağı ölçeği: ön/arka plaka kalın katmanı gövde + kıyafet yüzeyini örter (plaka dış yüzü ±0.143)
+  torsoFit() {
+    const G = gearFit(this.look);
+    return { w: clamp(G.rx / 0.18, 0.85, 1.3), dz: Math.max(1, (G.rf + 0.012) / 0.143, (G.rb + 0.012) / 0.143) };
+  }
+  // kask ağı (yarıçap 0.138, y ölçeği 0.88): kafa + saç üstüne oturur, başı içine alır
+  helmetFit() {
+    const G = gearFit(this.look), s = Math.max(1, (G.headRx + 0.03) / 0.138, (G.headRz + 0.03) / (0.138 * 1.12));
+    return { s, y: G.headTop + 0.012 - 0.138 * 0.88 * s };
+  }
   get hasHelmet() { return !!this.look.helmet; }
   get hasVest() { return !!this.look.vest; }
 
@@ -607,7 +617,7 @@ export class CharacterModel {
     const cow = !!st.cower;
     W.crouch = dmp(W.crouch, st.crouch && !cow ? 1 : 0, 9, dt);
     W.aim = dmp(W.aim, st.aim ? 1 : 0, 14, dt);
-    W.air = dmp(W.air, st.air ? 1 : 0, st.air ? 8 : 20, dt);
+    W.air = dmp(W.air, st.air ? 1 : 0, st.air ? 8 : 34, dt);
     W.swim = dmp(W.swim, st.swim ? 1 : 0, 5, dt);
     W.sit = dmp(W.sit, st.sit ? 1 : 0, 6, dt);
     W.up = dmp(W.up, st.hands_up && !cow ? 1 : 0, 8, dt);
@@ -617,7 +627,7 @@ export class CharacterModel {
     W.reload = dmp(W.reload, st.reload > 0 ? 1 : 0, 10, dt);
     W.hold = dmp(W.hold, twoH ? 1 : 0, 10, dt);
     if (st.air) { this.airVy = Math.min(this.airVy, st.vy || 0); }
-    if (this.wasAir && !st.air) { this.landK = clamp(-this.airVy / 11, 0.15, 1); this.landT = 0; this.airVy = 0; }
+    if (this.wasAir && !st.air) { W.air = Math.min(W.air, 0.2); this.landK = clamp(-this.airVy / 11, 0.15, 1); this.landT = 0; this.airVy = 0; }
     this.wasAir = !!st.air;
     this.landT += dt;
     const age = this.rig.age;
@@ -654,7 +664,7 @@ export class CharacterModel {
     let rdx = 0, rdz = 0;
     if (!tele) { const cr = Math.cos(ry - dy), sr = Math.sin(ry - dy); rdx = (rwx * cr - rwz * sr) / sc; rdz = (rwx * sr + rwz * cr) / sc; }
     // ayak yerdeyken her zaman kilitli (boşta da): kalkışta/çömelirken formül konumuna çekilip kaymasın
-    const lockOK = !tele && W.air < 0.3 && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead && !st.ride;
+    const lockOK = !tele && (W.air < 0.04 || (!st.air && W.air < 0.25)) && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead && !st.ride;
     const cdy = Math.cos(dy), sdy = Math.sin(dy);
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;
@@ -677,11 +687,13 @@ export class CharacterModel {
       if (back) pitch *= 0.4;
       if (i === 0) sLs = along; else sRs = along;
       const baseX = s * this.hipX * width;
-      let fx = baseX + dX * along, fz = dZ * along;
+      // boşta: bir ayak hafif önde (formül konumunda -> kilitli ayak itilmez)
+      const idleZ = 0.05 * ((this.seed % 1) - 0.5) * (1 - moving) * s;
+      let fx = baseX + dX * along, fz = dZ * along + idleZ;
       fx = s > 0 ? Math.max(fx, 0.035) : Math.min(fx, -0.035);
       const Fk = F[i];
       if (lockOK && p < beta) {
-        if (!Fk.lock) { Fk.lock = true; Fk.lx = fx; Fk.lz = fz; }
+        if (!Fk.lock) { Fk.lock = true; Fk.lx = fx + rdx; Fk.lz = fz + rdz; } // çizilen konum = fx (aşağıdaki telafiyle)
         else {
           // vücut döndü/ilerledi: dünyada sabit nokta vücut uzayında ters yöne gider
           const lx = Fk.lx * cdy - Fk.lz * sdy - rdx, lz = Fk.lx * sdy + Fk.lz * cdy - rdz;
@@ -689,8 +701,10 @@ export class CharacterModel {
           const ex = Fk.lx - fx, ez = Fk.lz - fz, el = Math.hypot(ex, ez);
           if (el > 0.34) { Fk.lx = fx + ex / el * 0.34; Fk.lz = fz + ez / el * 0.34; }
         }
-        fx = Fk.lx; fz = Fk.lz;
-        Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along;
+        // kök konumu animasyondan SONRA yazılıyor (player/npc sync): çizilen karede kök bir adım daha ilerlemiş olur.
+        // Son kök adımı kadar önden telafi et -> kilitli ayak dünyada sabit (kalkışta/çömelirken kayma birikmez)
+        fx = Fk.lx - rdx; fz = Fk.lz - rdz;
+        Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along - idleZ;
       } else {
         if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; Fk.need = Math.hypot(Fk.ox || 0, Fk.oz || 0); }
         // kilit bırakılınca kalan fark sönümlenir (sıçrama yok): kalkışta salınım boyunca, duruşta zamanla
@@ -754,7 +768,6 @@ export class CharacterModel {
     const shift = (Math.sin(t * 0.37 + this.seed) * 0.7 + Math.sin(t * 0.13 + this.seed * 3) * 0.3) * idle * (1 - wc);
     pel.x += 0.032 * shift; addJ(P, J.hips, 0, 0.04 * shift, 0.035 * shift); addJ(P, J.spine, 0, 0, -0.03 * shift); addJ(P, J.chest, 0, 0, -0.015 * shift);
     // idle ayak duruşu: hafif açık + bir ayak önde
-    if (idle > 0.01) { const st2 = (this.seed % 1) - 0.5; F[0].z += 0.05 * st2 * idle; F[1].z -= 0.05 * st2 * idle; }
     let lock = 1, hipsY = RIG.hips;
 
     // ---- boşta varyasyonları ve kişilik davranışları ----
