@@ -2161,7 +2161,10 @@ export class VehicleManager {
     const r = Math.random();
     const t = r < 0.22 ? 'kartal' : r < 0.36 ? 'hatch' : r < 0.44 ? 'hatch3' : r < 0.53 ? 'sedan' : r < 0.6 ? 'estate' : r < 0.68 ? 'suv' : r < 0.73 ? 'offroad' : r < 0.78 ? 'coupe' : r < 0.82 ? 'cabrio' : r < 0.88 ? 'motor' : r < 0.91 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
     // sağdan akan trafikte park: aracın sağ tarafı kaldırıma, yüzü trafik yönüne
-    const v = this.add(t, x, z, Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI));
+    const hd = Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI);
+    // [dünya] park yeri doğrulaması: bina/lamba/ağaç/eşya ile çakışan ya da kavşağa taşan yer reddedilir
+    if (this.game.physics.city.overlapsRect(x, z, 1.05, 2.6, hd, 0.15) || this.game.city.parkSpotBad?.(x, z)) return null;
+    const v = this.add(t, x, z, hd);
     v.parked = true; v.parkedAI = true;
     return v;
   }

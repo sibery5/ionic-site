@@ -356,6 +356,8 @@ export function maybePark(mgr, v) {
   const off = edgeWidth(ai.from, ai.to) / 2 - 1.0;
   const px = ai.from.x + L.fx * ps - L.fz * off, pz = ai.from.z + L.fz * ps + L.fx * off;
   for (const o of mgr.list) if (o !== v && Math.abs(o.pos.x - px) < 7 && Math.abs(o.pos.z - pz) < 7) return false;
+  // park yeri boş mu (bina/eşya ile çakışma yok)
+  if (mgr.game.physics.city.overlapsRect(px, pz, 1.05, 2.6, Math.atan2(L.fx, L.fz), 0.15)) return false;
   ai.park = { s: ps, to: ai.to };
   return true;
 }

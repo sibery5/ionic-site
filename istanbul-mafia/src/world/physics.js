@@ -94,6 +94,19 @@ export class Colliders {
     this.version++;
     if (this.nav) this.nav.invalidate(b.x0, b.z0, b.x1, b.z1);
   }
+  // Araç taban dikdörtgeni (merkez, yarı genişlik hw, yarı uzunluk hl, yön heading) statik bir şekle giriyor mu?
+  // Park yeri doğrulaması için: bordür/tabliye hariç, zeminden yükselen her katı şekil (bina, lamba, ağaç...).
+  overlapsRect(cx, cz, hw, hl, heading, margin = 0.15, filter = null) {
+    const fx = Math.sin(heading), fz = Math.cos(heading), rx = -fz, rz = fx;
+    const R = Math.hypot(hw, hl) + margin;
+    const list = this.query(cx - R, cz - R, cx + R, cz + R, _ovl);
+    for (const b of list) {
+      if (b.tag === 'curb' || b.tag === 'bridgeDeck' || b.y1 < 0.45 || b.y0 > 1.6) continue;
+      if (filter && !filter(b)) continue;
+      if (rectHitsShape(cx, cz, rx, rz, fx, fz, hw + margin, hl + margin, b)) return b;
+    }
+    return null;
+  }
   query(x0, z0, x1, z1, out) {
     this.stamp++;
     out.length = 0;
@@ -109,6 +122,27 @@ export class Colliders {
     }
     return out;
   }
+}
+
+const _ovl = [];
+// dikdörtgen (eksenler r,f; yarı boylar hw,hl) ile şekil kesişimi (SAT / çember)
+function rectHitsShape(cx, cz, rx, rz, fx, fz, hw, hl, b) {
+  if (b.shape === SHAPE_CIRCLE) {
+    const dx = b.cx - cx, dz = b.cz - cz;
+    const u = Math.max(-hw, Math.min(hw, dx * rx + dz * rz)), v = Math.max(-hl, Math.min(hl, dx * fx + dz * fz));
+    const px = cx + rx * u + fx * v, pz = cz + rz * u + fz * v;
+    return Math.hypot(b.cx - px, b.cz - pz) < b.r;
+  }
+  let bcx, bcz, ax, az, bx, bz, ah, bh;
+  if (b.shape === SHAPE_OBB) { bcx = b.cx; bcz = b.cz; ax = b.ca; az = -b.sa; bx = b.sa; bz = b.ca; ah = b.hx; bh = b.hz; }
+  else { bcx = (b.x0 + b.x1) / 2; bcz = (b.z0 + b.z1) / 2; ax = 1; az = 0; bx = 0; bz = 1; ah = (b.x1 - b.x0) / 2; bh = (b.z1 - b.z0) / 2; }
+  const dx = bcx - cx, dz = bcz - cz;
+  for (const [sx, sz] of [[rx, rz], [fx, fz], [ax, az], [bx, bz]]) {
+    const ra = hw * Math.abs(rx * sx + rz * sz) + hl * Math.abs(fx * sx + fz * sz);
+    const rb = ah * Math.abs(ax * sx + az * sz) + bh * Math.abs(bx * sx + bz * sz);
+    if (Math.abs(dx * sx + dz * sz) > ra + rb) return false;
+  }
+  return true;
 }
 
 // ---------------- şekil yardımcıları (bellek ayırmaz) ----------------
@@ -226,7 +260,7 @@ export class Physics {
         if (!b.noClimb && y >= b.y1 - step && shapeContains(b, p.x, p.z, radius * 0.5)) support = Math.max(support, b.y1);
         continue;
       }
-      if (b.y1 - y <= step && b.y1 - y > -0.01) {
+      if (!b.noClimb && b.y1 - y <= step && b.y1 - y > -0.01) {
         if (shapeContains(b, p.x, p.z, 0)) support = Math.max(support, b.y1);
         continue;
       }
