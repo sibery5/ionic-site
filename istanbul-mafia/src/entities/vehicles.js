@@ -1453,13 +1453,15 @@ export class Vehicle {
       }
       if (t0 <= t1 && t0 < bt) { bt = t0; best = i; }
     }
-    if (best >= 0) this.paneHit(best, 1);
+    if (best >= 0) { this.lastPaneHit = best; this.paneHit(best, 1, h); } // [savaş cam] isabet noktası çatlak izine
   }
-  paneHit(i, k) {
+  paneHit(i, k, hit = null) {
     const w = this.windows[i]; if (!w || w.state >= 3) return;
     w.hits += k;
     const hp = w.p.hp;
     const st = w.hits >= hp ? 3 : w.hits >= hp * 0.5 ? 2 : 1;
+    const G = this.game.combat && this.game.combat.glass; // [savaş cam] isabet noktasında çatlak izi
+    if (G && hit && st < 3) G.crack(this, i, hit, st);
     if (st > w.state) this.setPane(i, st);
     else if (this.game.audio && this.game.audio.glassCrack) this.game.audio.glassCrack(this.pos.x, this.pos.z, 0.5);
   }
@@ -1483,11 +1485,13 @@ export class Vehicle {
     const P = this.game.particles;
     const out = Math.sign(w.p.c[0]) || 0, f = this.fwd;
     const ox = f.z * out, oz = -f.x * out;
-    if (P && P.debris && P.debris.emit) for (let k = 0; k < 18; k++) {
+    const G = this.game.combat && this.game.combat.glass; // [savaş cam] dökülen cam parçaları (havuzlu)
+    if (G) G.shatter(this, i, _v0);
+    else if (P && P.debris && P.debris.emit) for (let k = 0; k < 18; k++) {
       const c = 0.7 + Math.random() * 0.25;
       P.debris.emit(_v0.x + rnd(0.3), _v0.y + rnd(0.15), _v0.z + rnd(0.3), ox * 2 + this.vx * 0.8 + rnd(1.6), Math.random() * 2.2, oz * 2 + this.vz * 0.8 + rnd(1.6), 0.015 + Math.random() * 0.03, (this.groundY || 0) + 0.01, 0, c * 0.85, c * 0.95, c);
     }
-    if (P && P.sparks) P.sparks(_v0, 3);
+    if (P && P.sparks && !G) P.sparks(_v0, 3);
     if (a.glassBreak) a.glassBreak(_v0.x, _v0.z, w.p.tag === 'g_ws' ? 1.2 : 1);
   }
 

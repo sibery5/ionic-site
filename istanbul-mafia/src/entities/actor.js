@@ -119,11 +119,8 @@ export class Actor {
       const n = def.pellets || 1;
       // [savaş entegrasyonu] sapma: taban + birikmiş bloom, nişan çarpanı (adsMul), hareket/çömelme
       let spread;
-      if (this.isPlayer) {
-        const base = this.aiming ? def.spread * (def.adsMul || 0.6) : (def.hipSpread || def.spread);
-        spread = (base + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
-        if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
-      } else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
+      if (this.isPlayer) spread = this.spreadNow(def);
+      else spread = def.spread * 2.2 * (this.accuracy ? 1 / this.accuracy : 1) + this.bloom * 0.5;
       this.bloom = Math.min(def.bloomMax || 0, this.bloom + (def.bloom || 0));
       for (let i = 0; i < n; i++) {
         const d = dir.clone();
@@ -137,11 +134,22 @@ export class Actor {
     return true;
   }
 
-  takeDamage(amount, attacker, kind = 'bullet', headshot = false) {
+  // [savaş] resolved: hasar game/body.js'te bölge/kask/yelek kuralıyla çözüldü (başa çarpan ve zırh yeniden uygulanmaz)
+  // [savaş] oyuncunun anlık sapması (radyan civarı): nişan, bloom, çömelme, hareket, yaralı kol. Nişangâh da bunu gösterir.
+  spreadNow(def = this.wdef) {
+    if (!def || def.type === 'melee') return 0;
+    const ads = this.adsK !== undefined ? this.adsK : this.aiming ? 1 : 0;
+    const hip = def.hipSpread || def.spread || 0, aim = (def.spread || 0) * (def.adsMul || 0.6);
+    let spread = (hip + (aim - hip) * ads + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
+    if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
+    return spread;
+  }
+
+  takeDamage(amount, attacker, kind = 'bullet', headshot = false, resolved = false) {
     if (this.dead) return 0;
     if (this.god) return 0;
-    let dmg = amount * (headshot ? 2.5 : 1);
-    if (this.armor > 0 && kind !== 'fall') {
+    let dmg = amount * (headshot && !resolved ? 2.5 : 1);
+    if (!resolved && this.armor > 0 && kind !== 'fall' && kind !== 'bleed') {
       const absorb = Math.min(this.armor, dmg * 0.7);
       this.armor -= absorb; dmg -= absorb;
     }
@@ -178,6 +186,7 @@ export class Actor {
       else this.model.die();
     }
     this.deadT = 0; this.kdT = 0;
+    const cb = this.game.combat; if (cb && cb.onActorDeath) cb.onActorDeath(this, attacker, kind); // [savaş] ölüm stili + ceset yerleşmesi
     this.onDeath && this.onDeath(attacker, kind);
   }
 

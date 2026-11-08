@@ -3,6 +3,7 @@
 // atış slotları (aynı anda oyuncuya isabetli ateş eden NPC sayısı sınırlı). Siviller: günlük rutinler, kaçma/sinme, laf atma.
 // Kalabalık LOD: uzak NPC'ler daha seyrek güncellenir, 60 m ötesinde animasyon atlanır.
 import * as THREE from 'three';
+import { outfit, equipKit } from '../game/body.js';
 import { Actor } from './actor.js';
 import { randomLook } from './character.js';
 import { RNG, angleDiff, clamp, dampAngle, rng } from '../core/util.js';
@@ -72,46 +73,8 @@ export function soldierLook(r = lookRng) { return Object.assign(randomLook(r, 'g
 // [savaş] jandarma: daha koyu yeşil üniforma
 export function jandarmaLook(r = lookRng) { return Object.assign(soldierLook(r), { topColor: '#3c4a2c', pantsColor: '#36422a', hatColor: '#2e3a22', beard: 'mustache' }); }
 
-// [savaş] teçhizat: kask + çelik yelek (kemiklere takılan basit ağlar; geometri/malzeme paylaşılır)
-const GEAR = {};
-function gearParts() {
-  if (GEAR.helmet) return GEAR;
-  const hg = new THREE.SphereGeometry(0.132, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  hg.scale(1, 0.9, 1.1);
-  GEAR.helmet = hg;
-  GEAR.visor = new THREE.BoxGeometry(0.2, 0.05, 0.04);
-  GEAR.vest = new THREE.BoxGeometry(0.36, 0.34, 0.27);
-  GEAR.pouch = new THREE.BoxGeometry(0.07, 0.08, 0.05);
-  GEAR.patch = new THREE.PlaneGeometry(0.2, 0.06);
-  const std = (c, r = 0.75, m = 0.1) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
-  GEAR.mat = { swat: std(0x141618, 0.6, 0.2), army: std(0x46522e, 0.8), jandarma: std(0x3a4628, 0.8), vestS: std(0x1c1e20, 0.85), vestA: std(0x55603a, 0.9), visor: std(0x0a0d12, 0.08, 0.6) };
-  const patchTex = (txt, bg, fg) => {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
-    const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, 256, 64); x.fillStyle = fg; x.font = 'bold 40px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, 128, 34);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-  };
-  GEAR.patchMat = {
-    swat: new THREE.MeshBasicMaterial({ map: patchTex('ÖZEL HAREKAT', '#111', '#e8e8e8') }),
-    army: new THREE.MeshBasicMaterial({ map: patchTex('ASKER', '#3a4426', '#e0d8b0') }),
-    jandarma: new THREE.MeshBasicMaterial({ map: patchTex('JANDARMA', '#2e3a22', '#f0e8c0') }),
-  };
-  return GEAR;
-}
-export function equipGear(n, type) {
-  const G = gearParts(), M = n.model;
-  if (!M || M.gear) return;
-  const hm = new THREE.Mesh(G.helmet, G.mat[type] || G.mat.army);
-  hm.position.set(0, 0.105, 0.005); hm.castShadow = true;
-  M.head.add(hm);
-  const parts = [hm];
-  if (type === 'swat') { const v = new THREE.Mesh(G.visor, G.mat.visor); v.position.set(0, 0.11, 0.125); M.head.add(v); parts.push(v); }
-  const vest = new THREE.Mesh(G.vest, type === 'swat' ? G.mat.vestS : G.mat.vestA);
-  vest.position.set(0, 0.04, 0.0); vest.castShadow = true;
-  M.chest.add(vest); parts.push(vest);
-  for (const s of [-1, 1]) { const p = new THREE.Mesh(G.pouch, type === 'swat' ? G.mat.vestS : G.mat.vestA); p.position.set(s * 0.08, -0.06, 0.155); M.chest.add(p); parts.push(p); }
-  const pb = new THREE.Mesh(G.patch, G.patchMat[type] || G.patchMat.army); pb.position.set(0, 0.06, -0.137); pb.rotation.y = Math.PI; M.chest.add(pb); parts.push(pb);
-  M.gear = parts;
-}
+// [savaş] teçhizat artık game/body.js'te (görünür yelek/kask, birim türüne göre). Eski API korunur.
+export function equipGear(n, type) { equipKit(n, type); }
 
 export class NPC extends Actor {
   constructor(game, kind, look, opts = {}) {
@@ -160,13 +123,12 @@ export class NPC extends Actor {
     this.crouch = false;
     this.persistent = !!opts.persistent;
     if (kind === 'police') { this.maxHp = this.hp = 120; const w = opts.weapon || (Math.random() < 0.85 ? 'pistol' : 'shotgun'); this.giveWeapon(w, 200); this.setWeapon(w); }
-    if (kind === 'swat') { this.maxHp = this.hp = 180; this.armor = 100; const w = opts.weapon || (Math.random() < 0.7 ? 'm4' : 'akrep'); this.giveWeapon(w, 400); this.setWeapon(w); this.giveWeapon('kilic', 60); equipGear(this, 'swat'); }
+    if (kind === 'swat') { this.maxHp = this.hp = 180; this.armor = 100; const w = opts.weapon || (Math.random() < 0.7 ? 'm4' : 'akrep'); this.giveWeapon(w, 400); this.setWeapon(w); this.giveWeapon('kilic', 60); }
     if (kind === 'soldier') {
       this.maxHp = this.hp = 160; this.armor = 60;
       const r = Math.random();
       const w = opts.weapon || (r < 0.55 ? 'm4' : r < 0.78 ? 'ak' : r < 0.9 ? 'tufan' : 'bozkurt');
       this.giveWeapon(w, 500); this.setWeapon(w);
-      equipGear(this, opts.jandarma ? 'jandarma' : 'army');
     }
     if (kind === 'gang') {
       const r = Math.random();
@@ -178,6 +140,7 @@ export class NPC extends Actor {
     if (opts.weapon && kind !== 'gang' && kind !== 'boss' && kind !== 'police' && kind !== 'soldier') { this.giveWeapon(opts.weapon, 300); this.setWeapon(opts.weapon); }
     if (opts.hp) this.maxHp = this.hp = opts.hp;
     if (opts.armor !== undefined) this.armor = opts.armor;
+    outfit(this, kind, opts); // [savaş] görünür teçhizat + beden hasar modeli (game/body.js)
   }
 
   restState() {
