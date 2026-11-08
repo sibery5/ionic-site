@@ -49,8 +49,8 @@ const PHONE_CSS = `
 .phone.v2 .ph-app { position: relative; outline: none; }
 .phone.v2 .ph-app i { width: 56px; height: 56px; border-radius: 17px; box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 6px rgba(0,0,0,0.25); transition: transform 0.15s, box-shadow 0.15s; }
 .phone.v2 .ph-app.hot i, .phone.v2 .ph-app:focus-visible i { transform: translateY(-3px) scale(1.07); box-shadow: 0 0 0 2px #fff, 0 10px 22px rgba(0,0,0,0.5); }
-.phone.v2 .ph-app span { text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-.phone.v2 .ph-dock .ph-app span { display: none; }
+.phone.v2 .ph-app .lbl { text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.phone.v2 .ph-dock .ph-app .lbl { display: none; }
 .ph-badge { position: absolute; top: -5px; right: 6px; min-width: 20px; height: 20px; border-radius: 10px; background: #ff3b30; color: #fff; font: bold 11px/20px var(--sans); text-align: center; padding: 0 5px; box-shadow: 0 0 0 2px #0a0808; }
 .phone.v2 .ph-head { padding: 4px 14px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .phone.v2 .ph-head b { font: 800 22px var(--sans); letter-spacing: -0.01em; }
@@ -192,7 +192,7 @@ export const PhoneMethods = {
           <div class="ph-apps"></div><div class="ph-dock"></div><div class="ph-keys"><kbd>Oklar</kbd> gez · <kbd>Enter</kbd> aç · <kbd>⌫</kbd> geri · <kbd>Esc</kbd> kapat</div>`;
         $('.ph-glance', scr).onclick = () => openApp('missions');
         const mk = ([id, name, icon, col], box) => {
-          const a = el('button', 'ph-app', `<i style="background:linear-gradient(160deg, ${col}, ${col}55 120%)">${appIcon(icon)}</i><span>${name}</span>${id === 'messages' && nUn ? `<em class="ph-badge">${nUn}</em>` : ''}`);
+          const a = el('button', 'ph-app', `<i style="background:linear-gradient(160deg, ${col}, ${col}55 120%)">${appIcon(icon)}</i><span class="lbl">${name}</span>${id === 'messages' && nUn ? `<em class="ph-badge">${nUn}</em>` : ''}`);
           a.dataset.app = id;
           a.onclick = () => openApp(id);
           box.appendChild(a);
