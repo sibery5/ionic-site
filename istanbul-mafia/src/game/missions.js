@@ -430,7 +430,7 @@ export class Missions {
     const reward = this.replay ? Math.floor(def.reward * 0.25) : def.reward;
     g.state.money += reward;
     const grade = this.replay ? null : this.baba.finish(def);
-    if (grade && g.phone) g.phone.notify(this.baba.giver(), `${def.title} — not: ${grade.label}. ${STORY[g.state.storyIndex + 0] ? 'Konağa uğra.' : ''}`, { silent: true, kind: 'story' });
+    if (grade && g.phone) g.phone.notify(this.baba.giver(), `${def.title} — not: ${grade.label}. Konağa uğra.`, { silent: true, kind: 'story' });
     if (!this.replay) {
       g.state.respect += def.respect;
       if (!g.state.completed.includes(def.id)) g.state.completed.push(def.id);

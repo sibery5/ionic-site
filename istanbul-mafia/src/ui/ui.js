@@ -724,12 +724,13 @@ export class UI {
 
   // ======================= YÜKLEME =======================
   showLoading() {
-    const l = el('div', 'loading');
+    // [hikâye] index.html'deki anında görünen yükleme ekranı varsa onu doldur (pencere boş beklemez)
+    const l = $('#loading') || el('div', 'loading');
     l.id = 'loading';
     l.innerHTML = `<div class="ld-grain"></div><div class="ld-center"><div class="logo-big">${ICONS.logo}</div><h1 class="title"><span>İSTANBUL</span><em>MAFYA</em></h1>
       <div class="bar"><i id="loadBar"></i></div><div class="ld-row"><p id="loadText">Şehir kuruluyor...</p><b id="loadPct">0%</b></div></div>
       <p class="tip">${TIPS[Math.floor(Math.random() * TIPS.length)]}</p>`;
-    this.root.appendChild(l);
+    if (!l.parentNode) this.root.appendChild(l);
   }
   setLoading(p, text) {
     const b = $('#loadBar'); if (b) b.style.transform = `scaleX(${Math.max(0.001, p)})`;

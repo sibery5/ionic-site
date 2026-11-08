@@ -10,7 +10,9 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="ui"></div>
-  <script src="game.js"></script>
+  <!-- Anında görünen yükleme ekranı: 1,8 MB'lık oyun betiği ayrıştırılmadan önce çizilir; betik ilk kareden sonra yüklenir -->
+  <div id="ui"><div class="loading" id="loading"><div class="ld-center"><h1 class="title"><span>İSTANBUL</span><em>MAFYA</em></h1>
+    <div class="bar"><i id="loadBar"></i></div><div class="ld-row"><p id="loadText">Oyun açılıyor...</p><b id="loadPct">0%</b></div></div></div></div>
+  <script>requestAnimationFrame(function () { setTimeout(function () { var s = document.createElement('script'); s.src = 'game.js'; document.body.appendChild(s); }, 0); });</script>
 </body>
 </html>

@@ -238,6 +238,19 @@ class Game {
     await step(1, 'Hazır!');
     mark('Gölgelendirici derleme');
     this.renderer.compile(this.scene, this.camera);
+    // [hikâye] ısınma karesi: son işlem geçişleri, gölge derinlik şaderleri ve doku/geometri yüklemeleri ilk
+    // menü karesinde değil, yükleme ekranı açıkken çok küçük bir çizim tamponunda yapılır (ilk kare sıçraması).
+    mark('Isınma karesi');
+    this.ui.setLoading(1, 'Gölgelendiriciler hazırlanıyor...');
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      const pr0 = this.renderer.getPixelRatio();
+      this.camera.position.set(480, 110, -120); this.camera.lookAt(60, 10, -40);
+      this.renderer.setPixelRatio(0.1); this.composer.setPixelRatio(0.1);
+      this.renderer.shadowMap.needsUpdate = true;
+      this.composer.render();
+      this.renderer.setPixelRatio(pr0); this.composer.setPixelRatio(pr0);
+    } catch (e) { console.error(e); }
     mark('Menü');
     this.ui.hideLoading();
     this.mode = 'menu';
