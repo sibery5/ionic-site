@@ -6,6 +6,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, HARBOR, districtAt } from './map.js';
 import { RNG } from '../core/util.js';
+import { MOUNTAIN, initMountain } from './terrain.js';
+import { paintCoast, buildCoast } from './coast.js';
+import { buildSeats } from './seating.js';
 import { oceanNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
 import { SHARED, OCEAN, oceanMaterial, oceanGeometry, oceanObstacle, terrainMaterial, pbrMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
 import { NearInstancer, ChunkInstancer, ChunkMerger } from './instancer.js';
@@ -14,7 +17,7 @@ import { buildStreetProps, STREET_PROP_DEFS, STREET_PROP_OPTS } from './streetpr
 import { buildVegetation, PARK_PROP_DEFS, PARK_PROP_OPTS } from './vegetation.js';
 import { buildPoliceStations, POLICE_PROP_DEFS, POLICE_PROP_OPTS } from './police_station.js';
 import { buildMilitary, paintMilitary, MILITARY_PROP_DEFS, MILITARY_PROP_OPTS } from './military.js';
-import { buildLandmark } from './landmarks.js';
+import { buildLandmark, landmarkTrees } from './landmarks.js';
 import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
 import { buildHarbor, buildForest, paintLocations, LOCATION_PROP_DEFS, LOCATION_PROP_OPTS } from './locations.js';
@@ -158,7 +161,14 @@ export class City {
       if (topKind) this.props[topKind].addTRS(x0 + dx * s, y0 + height, z0 + dz * s, ry, seg / (FENCE_W[topKind] || 4), 1, 1);
     }
     const th = 0.12;
-    this.physics.city.add(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, height + (topKind ? 0.6 : 0), 'fence');
+    return this.physics.city.add(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, height + (topKind ? 0.6 : 0), 'fence');
+  }
+  // Park yeri kavşak içinde mi (kesişen yolun şeridi) ya da kara dışında mı
+  parkSpotBad(x, z) {
+    const n = this.map.nearestNode(x, z);
+    if (n) { let w = 0; for (const e of n.edges) w = Math.max(w, e.width / 2); if (Math.abs(x - n.x) < w + 3.5 && Math.abs(z - n.z) < w + 3.5) return true; }
+    for (const b of this.map.buildings) if (x > b.x0 - 1 && x < b.x1 + 1 && z > b.z0 - 1 && z < b.z1 + 1) return true;
+    return false;
   }
   onSlab(x, z) {
     for (const b of this.map.blocks) if (b.kind !== 'zone' && x >= b.x0 - SIDEWALK - 0.01 && x <= b.x1 + SIDEWALK + 0.01 && z >= b.z0 - SIDEWALK - 0.01 && z <= b.z1 + SIDEWALK + 0.01) return true;
@@ -222,14 +232,18 @@ export class City {
     paintMilitary(paint);
     paintAirport(paint);
     paintLocations(paint);
+    paintCoast(paint);
     const maskTex = new THREE.DataTexture(mask, S, S, THREE.RGBAFormat);
     maskTex.magFilter = THREE.LinearFilter; maskTex.minFilter = THREE.LinearMipmapLinearFilter; maskTex.generateMipmaps = true; maskTex.anisotropy = 4;
     maskTex.needsUpdate = true;
     this.maskTex = maskTex;
 
     // zemin: yalnız kara parçaları (su altında zemin yok)
-    const lands = [[-1000, -1000, 200, 70], [-1000, 70, -850, 190], [-1000, 190, 200, 820], [420, -1000, 1000, 820]];
-    const parts = lands.map(([x0, z0, x1, z1]) => { const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.ceil((x1 - x0) / 100), Math.ceil((z1 - z0) / 100)); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2); return g; });
+    // Anadolu yakası: dağ alanı (terrain.js) düz zeminden kesilir, kendi ağıyla çizilir
+    initMountain();
+    const MX = MOUNTAIN.ready ? MOUNTAIN.x0 : 1000, MZ0 = MOUNTAIN.ready ? MOUNTAIN.z0 : 820, MZ1 = MOUNTAIN.ready ? MOUNTAIN.z1 : 820;
+    const lands = [[-1000, -1000, 200, 70], [-1000, 70, -850, 190], [-1000, 190, 200, 820], [420, -1000, 1000, MZ0], [420, MZ0, MX, MZ1], [420, MZ1, 1000, 820]].filter(([x0, z0, x1, z1]) => x1 - x0 > 0.5 && z1 - z0 > 0.5);
+    const parts = lands.map(([x0, z0, x1, z1]) => { const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.max(1, Math.ceil((x1 - x0) / 100)), Math.max(1, Math.ceil((z1 - z0) / 100))); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2); return g; });
     const ground = new THREE.Mesh(mergeGeometries(parts), terrainMaterial(maskTex, this.quality));
     ground.receiveShadow = true;
     ground.onBeforeRender = (r, s, cam) => { if (cam && cam.isPerspectiveCamera) this.camPos.copy(cam.position); };
@@ -397,6 +411,8 @@ export class City {
 
   buildParks() {
     buildVegetation(this);
+    for (const [k, x, z, s] of landmarkTrees) this.addTree(k, x, z, s, 0.02); // cami bahçeleri
+    landmarkTrees.length = 0;
     buildPoliceStations(this);
     buildMilitary(this);
     buildAirport(this);
@@ -404,6 +420,8 @@ export class City {
     buildVillas(this);
     buildHarbor(this);
     buildForest(this);
+    this.coast = buildCoast(this);
+    buildSeats(this); // tüm banklar → oturma yerleri (city.seats)
     this.buildLightPools();
     // çim (kamera çevresi)
     if (this.quality !== 'low') { this.grass = grassField(this.maskTex, this.quality === 'high' ? 42 : 32, this.quality === 'high' ? 0.45 : 0.55); this.group.add(this.grass); }
@@ -432,7 +450,7 @@ export class City {
     if (this.haloMat) this.haloMat.opacity = n * 0.85;
     // gerçek ışıklar yakındakileri aydınlatır; havuz çıkartması uzaktakiler için (ıslak zeminde daha parlak)
     if (this.poolMat) this.poolMat.opacity = n * (0.42 + SHARED.uWet.value * 0.25);
-    if (this.beamMat) this.beamMat.opacity = n * 0.16;
+    if (this.beamMat) this.beamMat.opacity = n * 0.09; // projektör konisi: hafif (sis gibi beyaz hale yapmasın)
   }
 }
 
@@ -466,7 +484,8 @@ function trimFinish(g, kind, col) {
 export function buildBridgesAndIsland(group, cols, uniforms, city = currentCity) {
   void uniforms;
   const q = city ? city.quality : 'medium';
-  buildBridges(group, cols, city, q);
+  const bo = buildBridges(group, cols, city, q);
+  if (city) city.bridgeBarriers = bo.barriers;
   buildMaidensTower(group, cols, q);
   hookLedMeshes(group);
 }

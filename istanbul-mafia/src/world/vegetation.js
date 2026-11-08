@@ -95,7 +95,7 @@ export function buildVegetation(city) {
     const h = k === 'cypress' ? 0.3 : k === 'palm' ? 0.28 : 0.25 + rng.float(-0.03, 0.03);
     inst[k].crown.addTRS(x, y, z, ry, s, s, s, col.setHSL(h, k === 'cypress' ? 0.35 : 0.5, (k === 'cypress' ? 0.26 : 0.38) + rng.float(-0.06, 0.06)));
     const tr = k === 'plane' ? 0.45 : 0.25;
-    cols.addCircle(x, z, tr * s, 0, 4 * s, 'tree');
+    cols.addCircle(x, z, tr * s, y > 1 ? y - 0.5 : 0, y + 4 * s, 'tree');
   };
   city.addTree = tree;
   // park ağaçları

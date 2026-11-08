@@ -41,6 +41,7 @@ import { PhoneService } from './ui/phone.js';
 import { mapBase } from './ui/bigmap.js'; // [hikâye] harita tabanı boşta hazırlanır // [hikâye] game.phone.notify(başlık, metin)
 import { formatMoney, clamp } from './core/util.js';
 import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
+import { Seating } from './world/seating.js'; // [dünya] bank oturma
 
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
@@ -190,6 +191,7 @@ class Game {
     }
     buildBridgesAndIsland(this.city.group, this.physics.city, this.uniforms);
     this.city.buildParks();
+    this.seating = new Seating(this); // [dünya] sokak/sahil bankları (E: otur/kalk)
     // simge yapı kapıları
     for (const d of landmarkDoors) this.city.doors.push({ x: d.x, z: d.z, building: { id: 'lm-' + d.name, type: d.type, name: d.name, door: { x: d.x, z: d.z, nz: 1 } } });
     this.setupGalataTop();
@@ -938,6 +940,8 @@ class Game {
         return { label: `Gir: ${placeName(door.building.type, door.building)}`, action: () => this.interiors.enter(door) };
       }
     }
+    const seat = this.seating && this.seating.prompt(); // [dünya] bankta otur / kalk
+    if (seat) return seat;
     const cat = this.animals.nearestPet(p.pos.x, p.pos.z, 1.8);
     if (cat) return { label: cat.dog ? 'Köpeği sev' : 'Kediyi sev', action: () => { this.animals.pet(cat); if (p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 5); this.state.stats.cats = (this.state.stats.cats || 0) + 1; if (this.state.stats.cats === 10) this.ui.notify('Başarım: Kedi Dostu! İstanbul kedileri seni seviyor.', 'gold'); } };
     return null;
@@ -1055,6 +1059,7 @@ class Game {
     }
     // oyuncu
     p.update(dt, input);
+    if (this.seating) this.seating.update(dt, input); // [dünya]
     this.audio.listener.x = p.pos.x; this.audio.listener.z = p.pos.z;
     // dünya
     const inside = !!p.inInterior;

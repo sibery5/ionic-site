@@ -56,6 +56,31 @@ function mergeByMaterial(g) {
 
 export const landmarkDoors = [];
 
+// Mahalle camisi üst yapısı (buildings.js 'dome' çatı): pencereli sekizgen kasnak, kaburgalı kurşun kubbe,
+// köşe ağırlık kulecikleri, son cemaat yeri saçağı (ince sütunlar), tek şerefeli kalem minare, kurşun külah.
+export function smallMosqueTop(b, wallHex = '#e8e4dc') {
+  const g = new THREE.Group();
+  const wall = MM('smWall' + wallHex, new THREE.Color(wallHex));
+  const w = Math.min(b.x1 - b.x0, b.z1 - b.z0), cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, H = b.h;
+  const R = w * 0.34, dh = Math.max(1.4, w * 0.09);
+  add(g, new THREE.BoxGeometry(b.x1 - b.x0 + 0.5, 0.45, b.z1 - b.z0 + 0.5), wall, cx, H + 0.2, cz); // saçak silmesi
+  drum(g, wall, cx, H + 0.4, cz, R, dh, 12);
+  ribDome(g, cx, H + 0.4 + dh + 0.4, cz, R, { ribs: 16 });
+  for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const x = cx + dx * R * 1.05, z = cz + dz * R * 1.05;
+    add(g, new THREE.CylinderGeometry(0.45, 0.5, 1.6, 8), wall, x, H + 1.2, z);
+    ribDome(g, x, H + 2.0, z, 0.45, { ribs: 6, alem: false });
+  }
+  // son cemaat yeri: kapı cephesinde 1.8 m derin saçak + 4 sütun + üç küçük kubbe
+  const nz = (b.door && b.door.nz) || 1, fz = nz > 0 ? b.z1 : b.z0, pw = Math.min(b.x1 - b.x0 - 1, 10);
+  add(g, new THREE.BoxGeometry(pw, 0.35, 2.0), wall, cx, 3.6, fz + nz * 1.0);
+  for (let i = 0; i < 4; i++) add(g, new THREE.CylinderGeometry(0.14, 0.17, 3.4, 8), wall, cx - pw / 2 + 0.4 + (pw - 0.8) * i / 3, 1.85, fz + nz * 1.75);
+  for (let i = 0; i < 3; i++) ribDome(g, cx + (i - 1) * pw / 3, 3.8, fz + nz * 1.0, Math.min(1.0, pw / 7), { ribs: 6, alem: false });
+  const dummy = { add: () => null };
+  minaret(g, dummy, b.x1 - 1.2, b.z0 + 1.2, Math.max(22, H + 16), wall, 0.72, 1);
+  return mergeByMaterial(g);
+}
+
 function add(g, geo, mat, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
@@ -174,6 +199,18 @@ function mosque(g, cols, cx, cz, S, opt) {
     windowRow(g, cx, cz, S / 2, side, H * 0.14, n, 1.4, H * 0.28, ax);
     windowRow(g, cx, cz, S / 2, side, H * 0.56, n, 1.0, H * 0.22, ax);
   }
+  // payandalar (dış duvar boyunca kademeli destek ayakları, üstü eğimli)
+  const nb = Math.max(3, Math.round(S / 9));
+  for (let i = 1; i < nb; i++) {
+    const t = -S / 2 + (S / nb) * i;
+    for (const sd of [-1, 1]) {
+      add(g, new THREE.BoxGeometry(1.3, H * 0.92, 1.1), wall, cx + t, H * 0.46, cz + sd * (S / 2 + 0.5));
+      add(g, new THREE.BoxGeometry(1.1, H * 0.92, 1.3), wall, cx + sd * (S / 2 + 0.5), H * 0.46, cz + t);
+      add(g, new THREE.CylinderGeometry(0.05, 0.75, 1.2, 4).rotateY(Math.PI / 4), LEAD(), cx + t, H * 0.92 + 0.5, cz + sd * (S / 2 + 0.5), false);
+      add(g, new THREE.CylinderGeometry(0.05, 0.75, 1.2, 4).rotateY(Math.PI / 4), LEAD(), cx + sd * (S / 2 + 0.5), H * 0.92 + 0.5, cz + t, false);
+    }
+  }
+  cols.add(cx - S / 2 - 1.1, cz - S / 2 - 1.1, cx + S / 2 + 1.1, cz + S / 2 + 1.1, 0, H * 0.92, 'mosque'); // payandalar
   // ana kubbe: kasnak + kaburgalı kurşun kubbe
   const R = opt.domeR || S * 0.26, dh = S * 0.07;
   drum(g, wall, cx, H, cz, R, dh, opt.drumN || 24);
@@ -197,10 +234,17 @@ function mosque(g, cols, cx, cz, S, opt) {
   if (opt.courtyard) {
     const cz2 = cz + opt.courtyard * (S * 0.5 + S * 0.36);
     const cw = S * 0.9, cd = S * 0.66;
-    for (const [w, d, x, z] of [[cw, 1.4, cx, cz2 + opt.courtyard * cd / 2], [1.4, cd, cx - cw / 2, cz2], [1.4, cd, cx + cw / 2, cz2]]) {
+    const fz = cz2 + opt.courtyard * cd / 2, gw = 3.4, sw = (cw - gw * 2) / 2;
+    for (const [w, d, x, z] of [[sw, 1.4, cx - gw - sw / 2, fz], [sw, 1.4, cx + gw + sw / 2, fz], [1.4, cd, cx - cw / 2, cz2], [1.4, cd, cx + cw / 2, cz2]]) {
       add(g, new THREE.BoxGeometry(w, 6, d), wall, x, 3, z);
       cols.add(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 0, 6, 'wall');
     }
+    // avlu taç kapısı: yüksek portal, sivri kemerli geçit (içeri girilebilir), mukarnaslı saçak
+    for (const sx of [-1, 1]) { add(g, new THREE.BoxGeometry(2.2, 9.5, 2.2), wall, cx + sx * (gw - 1.1 + 0.2), 4.75, fz); cols.add(cx + sx * (gw - 1.1 + 0.2) - 1.1, fz - 1.1, cx + sx * (gw - 1.1 + 0.2) + 1.1, fz + 1.1, 0, 9.5, 'wall'); }
+    add(g, new THREE.BoxGeometry(gw * 2 + 0.4, 3.0, 2.2), wall, cx, 8.0, fz);
+    add(g, new THREE.BoxGeometry(gw * 2 + 1.4, 0.5, 2.8), wall, cx, 9.75, fz);
+    place(g, archGeo(gw * 2 - 0.6, 6.4, 0.1), M('gateDark', { color: 0x2a2620, roughness: 0.9 }), cx, 0, fz + opt.courtyard * 1.12, opt.courtyard > 0 ? Math.PI / 2 : -Math.PI / 2);
+    ribDome(g, cx, 10.0, fz, 1.6, { ribs: 8 });
     // revak kubbecikleri ve sütunlar (üç kenar)
     const dg = 3.6;
     for (let i = 0; i < 9; i++) {
@@ -229,6 +273,53 @@ function mosque(g, cols, cx, cz, S, opt) {
   add(g, new THREE.BoxGeometry(7, 9, 1.2), wall, cx, 4.5, cz + ds * (S / 2 + 0.5));
   place(g, archGeo(3.2, 5.5, 0.3), M('mdoor', { color: 0x3a2412, roughness: 0.7 }), cx, 0, cz + ds * (S / 2 + 1.15), ds > 0 ? Math.PI / 2 : -Math.PI / 2);
   landmarkDoors.push({ x: cx, z: doorZ + ds * 1.6, type: 'mosque', name: opt.name });
+  // cami bahçesi: alçak taş duvar + demir parmaklık, dört kapı, servi ve çınarlar
+  if (opt.block) {
+    const ex = [{ x0: cx - S / 2 - 5, x1: cx + S / 2 + 5, z0: cz - S / 2 - 5, z1: cz + S / 2 + 5 }];
+    if (opt.courtyard) { const c2 = cz + opt.courtyard * (S * 0.5 + S * 0.36); ex.push({ x0: cx - S * 0.45 - 4, x1: cx + S * 0.45 + 4, z0: c2 - S * 0.33 - 4, z1: c2 + S * 0.33 + 6 }); }
+    for (const [mx, mz] of opt.minarets) ex.push({ x0: cx + mx * S - 5, x1: cx + mx * S + 5, z0: cz + mz * S - 5, z1: cz + mz * S + 5 });
+    mosqueGarden(g, cols, opt.block, ex, opt.wall);
+  }
+}
+
+// Ağaç istekleri: simge yapılar bitki örtüsünden önce kurulur → city.buildParks bunları diker
+export const landmarkTrees = [];
+function mosqueGarden(g, cols, b, ex, wall) {
+  const x0 = b.x0 + 0.6, x1 = b.x1 - 0.6, z0 = b.z0 + 0.6, z1 = b.z1 - 0.6, GW = 3.2;
+  const iron = M('ironRail', { color: 0x1c1f22, metalness: 0.6, roughness: 0.45 });
+  const seg = (ax, az, bx, bz) => {
+    const L = Math.hypot(bx - ax, bz - az); if (L < 0.5) return;
+    const hor = Math.abs(bz - az) < 0.01, mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    add(g, new THREE.BoxGeometry(hor ? L : 0.6, 0.7, hor ? 0.6 : L), wall, mx, 0.35, mz, false);
+    add(g, new THREE.BoxGeometry(hor ? L : 0.7, 0.12, hor ? 0.7 : L), wall, mx, 0.76, mz, false);
+    add(g, new THREE.BoxGeometry(hor ? L : 0.05, 0.05, hor ? 0.05 : L), iron, mx, 1.6, mz, false);
+    const n = Math.floor(L / 0.25);
+    const bars = [];
+    for (let i = 0; i <= n; i++) { const t = i / n; bars.push(new THREE.CylinderGeometry(0.018, 0.018, 0.8, 4).translate(ax + (bx - ax) * t, 1.22, az + (bz - az) * t)); }
+    add(g, mergeGeometries(bars), iron, 0, 0, 0, false);
+    cols.add(Math.min(ax, bx) - 0.3, Math.min(az, bz) - 0.3, Math.max(ax, bx) + 0.3, Math.max(az, bz) + 0.3, 0, 1.65, 'gardenWall');
+  };
+  const mxc = (x0 + x1) / 2, mzc = (z0 + z1) / 2;
+  seg(x0, z0, mxc - GW, z0); seg(mxc + GW, z0, x1, z0); seg(x0, z1, mxc - GW, z1); seg(mxc + GW, z1, x1, z1);
+  seg(x0, z0, x0, mzc - GW); seg(x0, mzc + GW, x0, z1); seg(x1, z0, x1, mzc - GW); seg(x1, mzc + GW, x1, z1);
+  // kapı babaları + kubbecikli taş ayaklar, iki yanında servi
+  for (const [gx, gz, hor] of [[mxc, z0, 1], [mxc, z1, 1], [x0, mzc, 0], [x1, mzc, 0]]) for (const s of [-1, 1]) {
+    const px = gx + (hor ? s * GW : 0), pz = gz + (hor ? 0 : s * GW);
+    add(g, new THREE.BoxGeometry(0.9, 2.6, 0.9), wall, px, 1.3, pz);
+    add(g, new THREE.ConeGeometry(0.62, 0.7, 4).rotateY(Math.PI / 4), LEAD(), px, 2.95, pz, false);
+    cols.add(px - 0.45, pz - 0.45, px + 0.45, pz + 0.45, 0, 2.6, 'gatepost');
+    landmarkTrees.push(['cypress', px + (hor ? s * 2.2 : 1.6 * (gx < mxc ? 1 : -1)), pz + (hor ? 1.6 * (gz < mzc ? 1 : -1) : s * 2.2), 1.1]);
+  }
+  const free = (x, z, r) => !ex.some((e) => x > e.x0 - r && x < e.x1 + r && z > e.z0 - r && z < e.z1 + r);
+  // duvar boyunca servi dizisi
+  let k = 0;
+  for (let x = x0 + 4; x < x1 - 3; x += 8) for (const z of [z0 + 2.4, z1 - 2.4]) if (Math.abs(x - mxc) > GW + 4 && free(x, z, 1)) landmarkTrees.push(['cypress', x, z, 0.9 + ((k++ * 7) % 5) * 0.06]);
+  for (let z = z0 + 4; z < z1 - 3; z += 8) for (const x of [x0 + 2.4, x1 - 2.4]) if (Math.abs(z - mzc) > GW + 4 && free(x, z, 1)) landmarkTrees.push(['cypress', x, z, 0.95]);
+  // iç bahçe: ulu çınarlar
+  for (let x = x0 + 9; x < x1 - 8; x += 15) for (let z = z0 + 9; z < z1 - 8; z += 15) {
+    const jx = x + ((x * 13.1 + z * 7.3) % 3), jz = z + ((x * 5.7 + z * 3.1) % 3);
+    if (free(jx, jz, 4) && Math.abs(jx - mxc) > 4 && Math.abs(jz - mzc) > 4) landmarkTrees.push(['plane', jx, jz, 1.25]);
+  }
 }
 
 // Dolmabahçe Sarayı (yerel koordinatta: uzun eksen x, cephe +z; çağıran döndürür)
@@ -355,19 +446,19 @@ export function buildLandmark(type, b, cols) {
     case 'bluemosque':
       mosque(g, cols, cx, cz - D * 0.12, S * 0.62, {
         wall: SM('bmWall', '#ddd6c8', 0.4), drumN: 28,
-        minarets: [[0.62, 0.62, 3], [-0.62, 0.62, 3], [0.62, -0.62, 3], [-0.62, -0.62, 3], [0.62, 1.55, 2], [-0.62, 1.55, 2]], courtyard: 1, doorSide: -1, name: 'Sultanahmet Camii', minaretH: 64,
+        minarets: [[0.62, 0.62, 3], [-0.62, 0.62, 3], [0.62, -0.62, 3], [-0.62, -0.62, 3], [0.62, 1.55, 2], [-0.62, 1.55, 2]], courtyard: 1, doorSide: -1, name: 'Sultanahmet Camii', minaretH: 64, block: b,
       });
       break;
     case 'suleymaniye':
       mosque(g, cols, cx, cz, S * 0.66, {
         wall: SM('sWall', '#e2dacb', 0.4), semi: [[0, 1], [0, -1]], drumN: 32,
-        minarets: [[0.62, 0.62, 3], [-0.62, 0.62, 3], [0.62, -0.62, 2], [-0.62, -0.62, 2]], doorSide: 1, name: 'Süleymaniye Camii', minaretH: 62,
+        minarets: [[0.62, 0.62, 3], [-0.62, 0.62, 3], [0.62, -0.62, 2], [-0.62, -0.62, 2]], doorSide: 1, name: 'Süleymaniye Camii', minaretH: 62, block: b,
       });
       break;
     case 'mihrimah':
       mosque(g, cols, cx, cz, S * 0.5, {
         wall: SM('mWall', '#d9d0bc', 0.38), drumN: 20,
-        minarets: [[0.6, -0.6, 1], [-0.6, -0.6, 1]], doorSide: -1, semi: [[0, 1]], name: 'Mihrimah Sultan Camii', minaretH: 40,
+        minarets: [[0.6, -0.6, 1], [-0.6, -0.6, 1]], doorSide: -1, semi: [[0, 1]], name: 'Mihrimah Sultan Camii', minaretH: 40, block: b,
       });
       break;
     case 'ayasofya': {

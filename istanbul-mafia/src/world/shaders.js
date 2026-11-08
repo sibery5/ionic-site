@@ -281,11 +281,16 @@ export function facadeMaterial(quality) {
             if (mull > 0.5) { diffuseColor.rgb = vec3(0.55, 0.58, 0.6); fRough = 0.35; fMetal = 0.9; }
             else if (spand > 0.5) { diffuseColor.rgb = tint * 0.6; fRough = 0.15; fMetal = 0.7; }
             else {
-              diffuseColor.rgb = tint; fRough = 0.04; fMetal = 0.75; fGlass = 1.0;
-              float lit = step(0.38, hsh(vec2(fi, seed * 13.0 + faceId))) * step(0.15, rc);
+              // [dünya] gökdelen ambiyansı: eskiden her pencerede beyaz tavan bandı (+1.0 emisyon) ve ayna gibi cam
+              // (pürüzlülük 0.04) parlama eşiğini aşıp sis gibi beyaz bir hale yapıyordu. Şimdi: kat kat değişen ofis
+              // ışığı (soğuk/sıcak), seyrek açık kat, düşük yoğunluklu tavan armatürü; cam hafif pürüzlü.
+              diffuseColor.rgb = tint; fRough = 0.1; fMetal = 0.6; fGlass = 1.0;
+              float flr = hsh(vec2(fi, seed * 13.0 + faceId));
+              float lit = step(0.52, flr) * step(0.2, rc);
               vec3 rm = room(vec2(fx * pw, fy), Vt, pw, fh, 7.0, rc, lit, 0.0);
-              float panel = step(0.7, fract(u / 3.2)) * step(0.85, fyn);
-              fEmis = rm * (0.06 * dayK) + uNight * lit * (vec3(0.85, 0.92, 1.0) * (0.35 + panel) + rm * 0.4);
+              float panel = step(0.72, fract(u / 3.2)) * step(0.86, fyn) * step(0.88, fyn + 0.1);
+              vec3 office = mix(vec3(0.78, 0.86, 1.0), vec3(1.0, 0.86, 0.66), step(0.75, fract(flr * 7.3)));
+              fEmis = rm * (0.04 * dayK) + uNight * lit * (office * (0.1 + panel * 0.22) + rm * 0.22);
             }
           } else {
             // ---- klasik cepheler ----
@@ -803,6 +808,9 @@ const vec4 W0 = vec4(0.8, 0.6, 24.0, 1.0);
 const vec4 W1 = vec4(0.28, 0.96, 14.0, 0.6);
 const vec4 W2 = vec4(0.95, -0.31, 9.0, 0.38);
 const vec4 W3 = vec4(-0.5, 0.866, 5.5, 0.22);
+// [dünya] ek kısa oktavlar (rüzgâr dalgacıkları): daha canlı, tekrarı belli olmayan yüzey
+const vec4 W4 = vec4(0.6, -0.8, 3.4, 0.1);
+const vec4 W5 = vec4(-0.92, -0.39, 2.2, 0.055);
 // (yükseklik, dh/dx, dh/dz)
 vec3 wv(vec2 p, vec4 w, float t, float ph) {
   float k = 6.2831853 / w.z; float om = sqrt(9.81 * k);
@@ -810,7 +818,7 @@ vec3 wv(vec2 p, vec4 w, float t, float ph) {
   float s = sin(a), c = cos(a);
   return vec3(s * w.w, c * w.w * k * w.x, c * w.w * k * w.y);
 }
-vec3 waves(vec2 p, float t) { return wv(p, W0, t, 0.0) + wv(p, W1, t, 1.7) + wv(p, W2, t, 4.1) + wv(p, W3, t, 2.3); }
+vec3 waves(vec2 p, float t) { return wv(p, W0, t, 0.0) + wv(p, W1, t, 1.7) + wv(p, W2, t, 4.1) + wv(p, W3, t, 2.3) + wv(p, W4, t, 5.2) + wv(p, W5, t, 0.9); }
 `;
 
 export function oceanMaterial(quality) {

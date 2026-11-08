@@ -127,7 +127,7 @@ export class NightLights {
     for (const s of sl) {
       const a = s.baseA + Math.sin(T * s.speed + s.phase) * s.sweep;
       s.tx = s.x + Math.sin(a) * s.reach; s.tz = s.z + Math.cos(a) * s.reach;
-      if (Math.abs(s.x - cx) + Math.abs(s.z - cz) < 900) near = true;
+      if (Math.abs(s.x - cx) + Math.abs(s.z - cz) < 420) near = true; // [dünya] uzak konileri (Levent'ten görünen) çizme
     }
     const show = night > 0.05 && near;
     this.beams.visible = show;

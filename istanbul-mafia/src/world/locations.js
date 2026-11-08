@@ -12,6 +12,8 @@ import { oceanObstacle, pbrMaterial } from './shaders.js';
 import { granitePBR } from '../core/textures.js';
 import { RNG } from '../core/util.js';
 import { addBarrier } from './zones.js';
+import { MOUNTAIN, initMountain } from './terrain.js';
+import { buildMountainWorld, silhouetteHeight, mountainMaterial } from './mountain.js';
 
 const CONT_COLS = [0xb8322a, 0x2a5aa0, 0x2f7d4a, 0xd08a2a, 0x8a8f94, 0x6a3a8a, 0xc8b030, 0x1e6e78, 0xe0e0dc, 0x9a4a2a];
 
@@ -89,45 +91,9 @@ export const LOCATION_PROP_OPTS = {
 export function paintLocations(paint) {
   const DIRT = [0, 0, 0, 0], GRASS = [0, 0, 255, 0], ASPH = [255, 0, 0, 0];
   for (const gt of HARBOR.gates) paint.rect(gt.x - 5, 812, gt.x + 5, 820, ASPH);
-  paint.rect(FOREST.x0 - 2, FOREST.z0 - 2, FOREST.x1 + 2, FOREST.z1 + 2, GRASS);
-  const R = forestRoad();
-  for (let i = 0; i < R.length - 1; i++) paint.seg(R[i].x, R[i].z, R[i + 1].x, R[i + 1].z, 3.2, DIRT);
-  const c = cabinSpot();
-  paint.ring(c.x, c.z, 0, 16, DIRT);
-}
-
-// orman yolu: 250 caddesinden girer, kıvrılarak dağ evine iner, güneyde 810 caddesine çıkar
-function forestRoad() {
-  if (FOREST.road.length) return FOREST.road;
-  const F = FOREST, w = F.x1 - F.x0, cx = (F.x0 + F.x1) / 2, L = F.z1 - F.z0;
-  const pts = [
-    [F.x0 + w * 0.3, F.z0 - 12], [F.x0 + w * 0.3, F.z0 + 20], [F.x0 + w * 0.72, F.z0 + L * 0.14], [F.x0 + w * 0.3, F.z0 + L * 0.3],
-    [F.x0 + w * 0.68, F.z0 + L * 0.46], [cx, F.z0 + L * 0.58], [F.x0 + w * 0.3, F.z0 + L * 0.76], [F.x0 + w * 0.62, F.z0 + L * 0.9], [F.x0 + w * 0.62, F.z1 + 12],
-  ];
-  // Catmull-Rom yumuşatma
-  const out = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-    for (let k = 0; k < 6; k++) {
-      const t = k / 6, t2 = t * t, t3 = t2 * t;
-      const f = (a, b, c2, d) => 0.5 * (2 * b + (-a + c2) * t + (2 * a - 5 * b + 4 * c2 - d) * t2 + (-a + 3 * b - 3 * c2 + d) * t3);
-      out.push({ x: f(p0[0], p1[0], p2[0], p3[0]), z: f(p0[1], p1[1], p2[1], p3[1]) });
-    }
-  }
-  out.push({ x: pts[pts.length - 1][0], z: pts[pts.length - 1][1] });
-  FOREST.road.push(...out);
-  return out;
-}
-function cabinSpot() { const F = FOREST, L = F.z1 - F.z0; return { x: F.x0 + (F.x1 - F.x0) * 0.5 + 16, z: F.z0 + L * 0.58 + 4 }; }
-function distToRoad(x, z) {
-  let best = 1e9;
-  const R = FOREST.road;
-  for (let i = 0; i < R.length - 1; i++) {
-    const ax = R[i].x, az = R[i].z, dx = R[i + 1].x - ax, dz = R[i + 1].z - az, l2 = dx * dx + dz * dz || 1;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-    best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
-  }
-  return best;
+  // dağ arazisi kendi malzemesiyle çizilir (mountain.js); düz zemin maskesinde toprak (çim lifi çizilmez)
+  paint.rect(FOREST.x0 - 2, FOREST.z0 - 2, 1000, FOREST.z1 + 2, DIRT);
+  void GRASS;
 }
 
 export function buildHarbor(city) {
@@ -191,31 +157,13 @@ export function buildHarbor(city) {
 }
 
 export function buildForest(city) {
-  const P = city.props, cols = city.physics.city;
-  const F = FOREST, rng = new RNG(1923);
-  forestRoad();
-  const cab = cabinSpot();
-  // ağaçlar: çam ağırlıklı, yolu ve dağ evi açıklığını boş bırak
-  for (let x = F.x0 + 3; x < F.x1 - 1; x += 6.5) for (let z = F.z0 + 3; z < F.z1 - 1; z += 6.5) {
-    const tx = x + rng.float(-2.6, 2.6), tz = z + rng.float(-2.6, 2.6);
-    if (distToRoad(tx, tz) < 5.2 || Math.hypot(tx - cab.x, tz - cab.z) < 19) continue;
-    const k = rng.next();
-    if (city.addTree) city.addTree(k < 0.62 ? 'pine' : k < 0.8 ? 'cypress' : 'plane', tx, tz, rng.float(0.9, 1.45), 0);
-    F.trees.push(tx, tz);
-  }
-  // kayalar
-  for (let i = 0; i < 40; i++) {
-    const x = rng.float(F.x0 + 2, F.x1 - 2), z = rng.float(F.z0 + 2, F.z1 - 2);
-    if (distToRoad(x, z) < 4.5 || Math.hypot(x - cab.x, z - cab.z) < 17) continue;
-    const s = rng.float(0.6, 1.8);
-    P.rock.addTRS(x, 0, z, rng.float(0, 6.28), s, s, s); cols.addCircle(x, z, 0.8 * s, 0, 0.9 * s, 'rock');
-  }
-  // dağ evi (kapı +z: verandaya bakar), çarpışma kutuları (duvarlar ayrı: kapı içeri açık değil, iç mekân yok)
-  P.cabin.addTRS(cab.x, 0, cab.z, 0);
-  cols.add(cab.x - 4.9, cab.z - 3.7, cab.x + 4.9, cab.z + 3.7, 0, 4.6, 'cabin');
-  for (const x of [-4.5, -1.5, 1.5, 4.5]) cols.addCircle(cab.x + x, cab.z + 6.0, 0.12, 0, 2.9, 'cabinPost');
-  cols.add(cab.x - 4.0, cab.z - 2.0, cab.x - 3.2, cab.z - 1.0, 0, 6.8, 'chimney');
-  city.addLight(cab.x - 0.3, 2.6, cab.z + 6.2, 0xffb060, 0.8, true, 0.03);
+  const F = FOREST;
+  initMountain();
+  // dağ: arazi, yol, bariyerler, istinat duvarı, çam ormanı, kayalar, dağ evi (mountain.js)
+  city.mountain = buildMountainWorld(city);
+  city.mountainData = MOUNTAIN;
+  const cab = MOUNTAIN.cabin;
+  void F;
   HIDEOUTS.length = 0;
   HIDEOUTS.push({
     id: 'dagevi', name: 'Dağ Evi (Aydos Ormanı)', kind: 'cabin', x: cab.x, z: cab.z,
@@ -223,7 +171,7 @@ export function buildForest(city) {
     parking: [{ x: cab.x - 10, z: cab.z + 12, heading: Math.PI / 2 }, { x: cab.x + 9, z: cab.z + 12, heading: -Math.PI / 2 }],
     dealSpots: [{ x: cab.x - 3, z: cab.z + 9 }, { x: cab.x + 3, z: cab.z + 9 }],
     lookouts: [{ x: cab.x + 14, z: cab.z - 6 }, { x: cab.x - 14, z: cab.z + 14 }],
-    approach: FOREST.road.filter((_, i) => i % 3 === 0).map((p) => ({ x: p.x, z: p.z })),
+    approach: FOREST.road.filter((_, i) => i % 3 === 0).map((p) => ({ x: p.x, z: p.z })), y: cab.y,
     entrances: [FOREST.road[0], FOREST.road[FOREST.road.length - 1]].map((p) => ({ x: p.x, z: p.z })),
     radius: 26, isolated: true,
   });
@@ -235,7 +183,7 @@ export function buildForest(city) {
 
 // Harita dışında dağ silüeti (x > 1000): düşük çokgen yükseklik alanı, çarpışmasız (oyuncu oraya gidemez)
 function buildMountains(city) {
-  const nx = 40, nz = 48, X0 = 1000, X1 = 1700, Z0 = 120, Z1 = 980;
+  const nx = 70, nz = 110, X0 = 999, X1 = 1700, Z0 = 120, Z1 = 980;
   const g = new THREE.PlaneGeometry(X1 - X0, Z1 - Z0, nx, nz); g.rotateX(-Math.PI / 2); g.translate((X0 + X1) / 2, 0, (Z0 + Z1) / 2);
   const p = g.attributes.position, c = new Float32Array(p.count * 3);
   const hsh = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -245,13 +193,16 @@ function buildMountains(city) {
     const edge = Math.min(1, (x - X0) / 60) * Math.min(1, (z - Z0) / 80) * Math.min(1, Math.max(0, (Z1 - 120 - z) / 160));
     let h = (Math.sin(z * 0.011) * 0.5 + 0.5) * 90 + (Math.sin(z * 0.031 + 1.3) * 0.5 + 0.5) * 40 + hsh(Math.round(x / 18), Math.round(z / 18)) * 18;
     h *= Math.min(1, u * 2.2 + 0.25) * edge;
-    p.setY(i, Math.max(-6, h - 3));
+    h = silhouetteHeight(x, z, h - 3) - 0.6 * Math.max(0, 1 - (x - X0) / 30);
+    p.setY(i, Math.max(-6, h));
     const k = Math.min(1, h / 140);
     c[i * 3] = 0.16 + k * 0.18; c[i * 3 + 1] = 0.24 + k * 0.12; c[i * 3 + 2] = 0.14 + k * 0.1;
   }
-  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  // dağın kendi zemin malzemesi (çim/kaya/toprak) → yamaç harita dışına kesintisiz uzanır
+  g.setAttribute('aMt', new THREE.BufferAttribute(new Float32Array(p.count * 2), 2));
+  g.deleteAttribute('uv'); void c;
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+  const m = new THREE.Mesh(g, mountainMaterial(city.quality));
   m.receiveShadow = true; m.name = 'mountains';
   city.group.add(m);
 }

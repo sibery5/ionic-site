@@ -157,9 +157,14 @@ export function buildMilitary(city) {
   const wall = (x0, z0, x1, z1) => {
     const L = Math.hypot(x1 - x0, z1 - z0); if (L < 0.5) return;
     const ry = Math.atan2(-(z1 - z0), x1 - x0), dx = (x1 - x0) / L, dz = (z1 - z0) / L;
-    for (let s = 0; s < L - 0.05; s += 4) P.wallSeg.addTRS(x0 + dx * s, 0, z0 + dz * s, ry, Math.min(4, L - s) / 4, 1, 1);
-    cols.add(Math.min(x0, x1) - 0.32, Math.min(z0, z1) - 0.32, Math.max(x0, x1) + 0.32, Math.max(z0, z1) + 0.32, 0, 3.45, 'milWall');
-    MB.walls.push({ x0, z0, x1, z1, h: 3.45 });
+    for (let s = 0; s < L - 0.05; s += 4) {
+      P.wallSeg.addTRS(x0 + dx * s, 0, z0 + dz * s, ry, Math.min(4, L - s) / 4, 1, 1);
+      P.razor.addTRS(x0 + dx * s, 3.45, z0 + dz * s, ry, Math.min(4, L - s) / 4, 1, 1); // duvar üstü jiletli tel
+    }
+    // tırmanılamaz: noClimb → oyuncu tutunamaz/üstüne çıkamaz (player.tryVault + physics desteği reddeder)
+    const b = cols.add(Math.min(x0, x1) - 0.32, Math.min(z0, z1) - 0.32, Math.max(x0, x1) + 0.32, Math.max(z0, z1) + 0.32, 0, 4.05, 'milWall');
+    b.noClimb = true;
+    MB.walls.push({ x0, z0, x1, z1, h: 4.05, noClimb: true, box: b });
   };
   wall(MB.x0, MB.z0, MB.x1, MB.z0);
   wall(MB.x0, MB.z0, MB.x0, MB.z1);
@@ -169,11 +174,10 @@ export function buildMilitary(city) {
   // ---- iç tel örgü + jiletli tel (duvardan 6 m içeride; kapı boşluklu) ----
   const fi = FENCE_IN, fx0 = MB.x0 + fi, fx1 = MB.x1 - fi, fz0 = MB.z0 + fi, fz1 = MB.z1 - fi;
   const H = 3;
-  city.fenceLine(fx0, fz0, fx1, fz0, 'chain', H, 'razor');
-  city.fenceLine(fx0, fz0, fx0, fz1, 'chain', H, 'razor');
-  city.fenceLine(fx1, fz0, fx1, fz1, 'chain', H, 'razor');
-  city.fenceLine(fx0, fz1, gx - 6, fz1, 'chain', H, 'razor');
-  city.fenceLine(gx + 6, fz1, fx1, fz1, 'chain', H, 'razor');
+  for (const [a, b2, c, d] of [[fx0, fz0, fx1, fz0], [fx0, fz0, fx0, fz1], [fx1, fz0, fx1, fz1], [fx0, fz1, gx - 6, fz1], [gx + 6, fz1, fx1, fz1]]) {
+    const f = city.fenceLine(a, b2, c, d, 'chain', H, 'razor');
+    if (f) f.noClimb = true;
+  }
   // ---- nizamiye: dış + iç bariyer, kulübe, kapı direkleri, kum torbası mevzileri, uyarı tabelaları ----
   P.booth.addTRS(gx + 9, 0, MB.z1 - 2.8, Math.PI); cols.add(gx + 8.2, MB.z1 - 3.6, gx + 9.8, MB.z1 - 2.0, 0, 2.6, 'booth');
   P.barrier.addTRS(gx - 5, 0, MB.z1, 0); addBarrier(city, gx - 5, MB.z1, 0, 0);
@@ -193,7 +197,7 @@ export function buildMilitary(city) {
   towerPts.forEach(([x, z], i) => {
     const face = Math.atan2(cx - x, cz - z);
     P.guardtower.addTRS(x, 0, z, z > MB.z0 + 100 ? 0 : Math.PI);
-    cols.add(x - 1.6, z - 1.6, x + 1.6, z + 1.6, 0, 10, 'guardtower');
+    cols.add(x - 1.6, z - 1.6, x + 1.6, z + 1.6, 0, 10, 'guardtower').noClimb = true;
     MB.towers.push({ x, z, y: 7.2 });
     MB.guardPosts.push({ type: 'tower', x, z, y: 7.2, heading: face, id: 'kule' + i });
     const lx = x + Math.sin(face) * 1.2, lz = z + Math.cos(face) * 1.2;
