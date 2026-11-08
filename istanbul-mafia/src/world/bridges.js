@@ -139,6 +139,9 @@ export function buildBridges(group, cols, city, quality = 'medium') {
         ledG.push(box(0.25, TOP - 4, 0.25, tx - 1.2, TOP / 2 + 1, z - s * 1.05));
         ledG.push(box(0.25, TOP - 4, 0.25, tx + 1.2, TOP / 2 + 1, z - s * 1.05));
       }
+      // kule tepesi: ışıklı taç bandı (gece renk değiştirir) + portal kirişlerinde LED şeridi
+      ledG.push(box(2.3, 0.3, LZ * 2 + 4.4, tx, TOP - 0.4, zc));
+      for (const y of [26, 44]) ledG.push(box(0.2, 0.2, LZ * 2 - 3, tx - 1.05, y - 1.0, zc), box(0.2, 0.2, LZ * 2 - 3, tx + 1.05, y - 1.0, zc));
       for (const [y, hgt] of [[26, 2.4], [44, 2.0], [60.5, 2.4]]) {
         steelG.push(box(2.0, hgt, LZ * 2 - 2.6, tx, y, zc));
         cols.add(tx - 1, zc - LZ + 1.3, tx + 1, zc + LZ - 1.3, y - hgt / 2, y + hgt / 2, 'tower');
@@ -173,6 +176,9 @@ export function buildBridges(group, cols, city, quality = 'medium') {
         const yc = cableY(x), yd = yf(xd) - 0.3;
         if (yc - yd < 1.2) continue;
         cableG.push(rod(x, yc, z, xd, yd, zc + s * (hw + 0.15), 0.07, 4));
+        // askı kelepçesi (kablo bandı) + tabliye bağlantı plakası
+        cableG.push(rod(x - 0.25, cableY(x - 0.25), z, x + 0.25, cableY(x + 0.25), z, 0.5, 8));
+        steelG.push(box(0.5, 0.35, 0.5, xd, yd + 0.45, zc + s * (hw + 0.15)));
       }
       for (let x = 210; x <= 410; x += 6) ledG.push(new THREE.SphereGeometry(0.3, 6, 4).translate(x, cableY(x) + 0.5, z));
     }
