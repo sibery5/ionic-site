@@ -2,6 +2,7 @@
 // birleşik çatı + saçak/parapet/korniş geometrisi ve yakın LOD cephe ayrıntıları (balkon, korkuluk,
 // denizlik, kapı, tabela, tente, klima, çanak anten, güneş enerjili su ısıtıcı, çamaşır ipi, grafiti).
 import * as THREE from 'three';
+import { smallMosqueTop } from './landmarks.js';
 import { RNG } from '../core/util.js';
 import { signAtlas } from '../core/textures.js';
 import { facadeMaterial, roofMaterial, SHARED } from './shaders.js';
@@ -113,6 +114,8 @@ function colsFor(L, st) {
   return { n, cw: L / n };
 }
 
+// İstanbul cumbası (çıkma): tarihi semtlerde ve Üsküdar ara sokaklarında sık
+const CUMBA_K = { beyoglu: 0.35, fatih: 0.38, uskudar: 0.42, eyup: 0.3, kadikoy: 0.15 };
 export function buildBuildings(city) {
   const { map, physics, quality } = city;
   const cols = physics.city;
@@ -191,7 +194,7 @@ export function buildBuildings(city) {
     }
 
     // ---- cumba (çıkma) ----
-    if (!b.tower && b.floors >= 2 && fcode < 2 && (style === 3 || (style === 0 && (b.district.id === 'beyoglu' || b.district.id === 'fatih') && r.chance(0.35)))) {
+    if (!b.tower && b.floors >= 2 && fcode < 2 && (style === 3 || ((style === 0 || style === 1) && CUMBA_K[b.district.id] && b.floors <= 6 && r.chance(CUMBA_K[b.district.id])))) {
       const span = Math.min(ncol, ncol >= 3 ? 2 : 1);
       const c0 = Math.floor((ncol - span) / 2);
       const along0 = c0 * cw, wid = span * cw;
@@ -296,21 +299,7 @@ function buildLaundry(city, r) {
   city.laundryCount = n;
 }
 
-export function buildSmallMosqueTop(b) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.5, roughness: 0.4 });
-  const w = Math.min(b.x1 - b.x0, b.z1 - b.z0);
-  const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(w * 0.4, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-  dome.position.set(cx, b.h, cz); g.add(dome);
-  const white = new THREE.MeshStandardMaterial({ color: 0xece8e0, roughness: 0.7 });
-  const mx = b.x1 - 1.2, mz = b.z0 + 1.2;
-  const min = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 22, 10), white); min.position.set(mx, 11, mz); g.add(min);
-  const bal = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.4, 12), white); bal.position.set(mx, 17, mz); g.add(bal);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.8, 4, 10), mat); cone.position.set(mx, 24, mz); g.add(cone);
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return g;
-}
+export function buildSmallMosqueTop(b) { return smallMosqueTop(b); }
 
 // ---- Cephe/çatı ayrıntı geometrileri (GeoBuilder, eşya malzemesi) ----
 export const FACADE_PROP_DEFS = {
