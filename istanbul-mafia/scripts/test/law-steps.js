@@ -33,6 +33,7 @@ module.exports = async (p, out) => {
         g.ambulance.fire.length = 0;
         for (const k of Object.keys(g.state.gangRel)) delete g.state.gangRel[k];
         g.input.mouse.right = false; g.player.aiming = false;
+        g.onBusted = () => { L.busted = (L.busted || 0) + 1; }; // testte gözaltı ekranı açılmasın
         L.barks.length = 0;
       },
       // uzun, düz bir yol kenarı (merkeze yakın)
@@ -43,6 +44,7 @@ module.exports = async (p, out) => {
           const k = Math.hypot(n.x - cx, n.z - cz);
           if (Lg > minL && e.width < 16 && (!best || k < best.k) && !(g.military && g.military.inZone(n.x, n.z, 40))) best = { n, o, L: Lg, k, e };
         }
+        if (!best) return L.road(cx, cz, minL * 0.75);
         const { n, o, L: Lg, e } = best; const fx = (o.x - n.x) / Lg, fz = (o.z - n.z) / Lg;
         return { n, o, L: Lg, fx, fz, e, at: (s, lat) => ({ x: n.x + fx * s - fz * lat, z: n.z + fz * s + fx * lat }) };
       },
@@ -64,7 +66,7 @@ module.exports = async (p, out) => {
       // yakında görüşte bir devriye polis, 140 m'de trafikte devriye aracı
       const c0 = R.at(72, 8.5);
       const cop = g.npcs.add('police', c0.x, c0.z, null, { state: 'idle' });
-      const pc = g.vehicles.spawnTraffic(pl.pos.x, pl.pos.z, 'police');
+      let pc = null; for (let k = 0; k < 20 && !pc; k++) pc = g.vehicles.spawnTraffic(pl.pos.x, pl.pos.z, 'police');
       const spawns = [];
       const oadd = g.npcs.add.bind(g.npcs);
       g.npcs.add = (kind, x, z, look, opts) => { const n = oadd(kind, x, z, look, opts); spawns.push({ n, d: Math.hypot(x - pl.pos.x, z - pl.pos.z) }); return n; };
@@ -149,7 +151,7 @@ module.exports = async (p, out) => {
       W.set(2);
       car.vx = car.vz = 0; car.controls.throttle = 0; car.controls.handbrake = true;
       let boxing = false, busted = false;
-      const ob = g.onBusted.bind(g); g.onBusted = () => { busted = true; };
+      const ob = g.onBusted; g.onBusted = () => { busted = true; };
       sim(14, () => { for (const u of W.units) if (u.v.ai && u.v.ai.boxing) boxing = true; car.vx *= 0.5; car.vz *= 0.5; });
       g.onBusted = ob;
       const deployed = W.units.filter((u) => u.phase === 'deployed' || u.phase === 'deploy').length;

@@ -136,10 +136,10 @@ export class Wanted {
       if (this.level >= 3 && before < 3) { this.roadblockT = Math.min(this.roadblockT, 6); this.game.ui.notify('Yollar kesiliyor: polis barikat kuruyor!', 'warn'); }
       if (this.level >= 4 && before < 4) { this.roadblockT = Math.min(this.roadblockT, 4); this.swatT = 2; this.game.ui.notify('ÖZEL HAREKAT yolda!', 'warn'); }
       if (this.level >= 5 && before < 5) { this.armyT = 3; this.heliT = 4; this.game.ui.notify('JANDARMA ve askerî birlikler yolda! Helikopter havalandı!', 'warn'); }
-      if (before === 0) this.respondT = 0;
+      if (before === 0) { this.respondT = 0; this.dispatchT = BACKUP_DT[this.level]; } // [kanun] önce devriye, takviye sonra
     }
   }
-  set(level) { this.heat = level; this.level = level; this.spotted(); this.lostT = 0; this.respondT = 0; if (level > 0) this.game.ui.flashWanted(); }
+  set(level) { const was = this.level; this.heat = level; this.level = level; this.spotted(); this.lostT = 0; this.respondT = 0; if (!was && level > 0) this.dispatchT = Math.min(this.dispatchT, 3); if (level > 0) this.game.ui.flashWanted(); }
   // oyuncu şu an görüldü: LKP güncelle
   spotted(pos) {
     const p = pos || (this.game.player.vehicle || this.game.player).pos;
@@ -643,7 +643,7 @@ export class Wanted {
       this.lawLog.responders++;
     }
     // devriye aracı: trafikteki en yakın ekip aracı olay yerine
-    if (this.chaseCars() < CAR_CAP[this.level] && Math.random() < (this.level === 1 ? 0.6 : 1)) this.redirectPatrolCar(this.lkp.x, this.lkp.z, null);
+    if (this.chaseCars() < CAR_CAP[this.level]) this.redirectPatrolCar(this.lkp.x, this.lkp.z, null);
   }
 
   update(dt) {

@@ -1545,7 +1545,7 @@ export class NPCManager {
         return;
       }
     }
-    const kind = Math.random() < 0.05 ? 'police' : 'civilian';
+    const kind = Math.random() < 0.05 && !g.wanted.level ? 'police' : 'civilian'; // [kanun] aranırken devriye gözünün önünde doğmaz
     const n = this.add(kind, s.x, s.z);
     // taraf yürüyüş yönüne göre (kenar a→b'ye göre değil)
     n.side = s.fwd ? s.side : -s.side;
