@@ -7,7 +7,8 @@ import { randomLook } from '../entities/character.js';
 import { copLook, soldierLook } from '../entities/npc.js';
 import { GANGS } from './economy.js';
 import { WEAPONS } from './weapons.js';
-import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK, summonCall } from './story_data.js';
+import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK } from './story_data.js';
+import { Baba } from './baba.js';
 import { Dialogue, shotBetween, shotOver, shotWide } from './dialogue.js';
 import { SideContent, MarkerSet } from './side_missions.js';
 import { Military, PoliceStations } from './military.js';
@@ -48,12 +49,20 @@ export class Missions {
     this.extraSets = []; // diğer sistemlerin (sevgili, ödül avı, kapkaç) işaretçileri — mini harita/harita için
     this.blinkUntil = 0; // konaktan çıkınca sıradaki hedef işaretçisi bir süre güçlü yanıp söner
     this.summonT = 0;
+    this.konakAutoT = 0; // konağa girince Reis'in değerlendirme + yeni iş sahnesi
+    this.baba = new Baba(this); // güven / şüphe / performans notu
   }
   addMarkerSet(ms) { this.extraSets.push(ms); return ms; }
   // Eski kayıtlarla uyum: hikâyeye görev eklenince storyIndex'i tamamlanan görevlerden yeniden hesapla
+  // 1.4: yeni eklenen ('added') görevler, oyuncunun zaten geçtiği bir görevin ÖNÜNE düşüyorsa atlanmış sayılır
+  // (eski kayıt hikâyenin ortasına geri atılmaz); güven/şüphe yoksa tamamlanan görevlerden başlatılır.
   syncStoryIndex() {
     const s = this.g.state;
     if (!s || !s.completed) return;
+    let last = -1;
+    STORY.forEach((d, k) => { if (s.completed.includes(d.id)) last = k; });
+    for (let k = 0; k < last; k++) { const d = STORY[k]; if (d.added && !s.completed.includes(d.id)) s.completed.push(d.id); }
+    this.baba.ensure();
     const i = STORY.findIndex((d) => !s.completed.includes(d.id));
     s.storyIndex = i < 0 ? STORY.length : i;
   }
@@ -316,25 +325,44 @@ export class Missions {
   }
 
   // ---------------- akış ----------------
-  // Reis Baba (veya hikâyeye göre Leyla) ile konuşma: sıradaki görevi başlat
+  // Reis Baba (Reis yaralıyken Leyla, devrildikten sonra sağ kolun) ile konuşma: sıradaki görevi başlat.
+  // Konakta değilse (telefon rehberinden aranınca) iş telefonda konuşulmaz: konağa çağırır.
   talkToGiver() {
     const g = this.g;
+    this.konakAutoT = 0;
     if (this.active) { g.ui.notify('Önce elindeki işi bitir: ' + this.active.title, 'warn'); return; }
     const def = STORY[this.index];
-    const giver = this.flags.reisWounded && !this.flags.reisBack ? 'Leyla' : 'Reis Baba';
+    const giver = this.baba.giver();
+    if (!this.inside('konak')) {
+      const mark = () => { const k = g.map.nearestOfType('konak', 0, 0); if (!k) return; this.blinkUntil = performance.now() + 12000; g.setGps(k.door.x, k.door.z + k.door.nz * 1.5); if (def) this.objective(`${giver} seni konakta bekliyor`); };
+      const text = def ? (giver === 'Reis Baba' ? 'Telefonda iş konuşulmaz evlat. Konağa gel.' : 'Telefonda olmaz. Konağa gel, herkes burada.') : 'İstanbul senin. Konağın kapısı her zaman açık.';
+      this.dialogue.play([[giver, text], ['Sen', 'Geliyorum.']], mark, { phone: giver });
+      return;
+    }
     const menu = [{ label: 'İş var mı?', value: 'job', hint: def ? `Sıradaki: ${def.title}` : 'Hikâye tamamlandı' }, { label: 'Görev arşivi (tekrar oyna)', value: 'replay' }, { label: 'Kontrat panosu', value: 'board' }, { label: 'Hoşça kal', value: 'bye' }];
-    this.dialogue.play([{ who: giver, text: giver === 'Leyla' ? 'Babam hâlâ hastanede. İşleri ben yürütüyorum. Ne istiyorsun?' : 'Gel evlat, otur. Ne var ne yok?', choice: menu, key: '_menu' }], (r) => {
+    this.dialogue.play([{ who: giver, text: this.baba.greeting(giver), choice: menu, key: '_menu' }], (r) => {
       if (r._menu === 'replay') return this.replayMenu();
       if (r._menu === 'board') return this.side.openBoard();
       if (r._menu !== 'job') return;
-      if (!def) { this.dialog([[giver, 'İstanbul artık senin evlat. Bölgeleri koru, işletmelerini büyüt. Kapım sana her zaman açık.']]); return; }
-      this.offer(def, giver);
+      if (!def) { this.dialog([[giver, 'İstanbul artık senin. Bölgeleri koru, işletmelerini büyüt. Kapım sana her zaman açık.']]); return; }
+      this.briefing(def);
     });
   }
-  offer(def, who) {
+  offer(def) { this.briefing(def); }
+  // Konakta sinematik sahne: önce bekleyen görev değerlendirmesi (tebrik / eleştiri, seçimlere tepki), sonra yeni iş.
+  briefing(def) {
     const g = this.g;
-    const brief = typeof def.brief === 'function' ? def.brief(this) : def.brief;
-    this.dialog([[def.giver || who || 'Reis Baba', brief]], () => g.ui.confirm(`Görev ${STORY.indexOf(def) + 1}/${STORY.length}: ${def.title}`, `Ödül: ${formatMoney(def.reward)} · Saygınlık +${def.respect}`, 'Kabul Et', () => this.start(def)));
+    this.konakAutoT = 0;
+    if (!def || this.active) return;
+    const gate = this.baba.gate(def);
+    if (!gate.ok) { this.dialog(gate.lines); return; }
+    const inK = this.inside('konak');
+    if (inK) { const p = g.player; p.pos.set(0, 0, -2.3); p.heading = Math.PI; p.vy = 0; }
+    this.dialog(this.baba.sceneLines(def, inK), () => {
+      this.flags.debrief = null;
+      this.summoned = false;
+      g.ui.confirm(`Görev ${STORY.indexOf(def) + 1}/${STORY.length}: ${def.title}`, `${ACTS[def.act] || ''} · Ödül: ${formatMoney(def.reward)} · Saygınlık +${def.respect}`, 'Kabul Et', () => this.start(def));
+    }, { act: ACTS[def.act] || '' });
   }
   replayMenu() {
     const g = this.g, ui = g.ui;
@@ -361,6 +389,8 @@ export class Missions {
     this.dialogue.hangup();
     this.active = def; this.stage = 0; this.data = {}; this.timer = 0;
     this.replay = !!opts.replay;
+    this.konakAutoT = 0;
+    if (!this.replay) this.baba.begin(def, !!opts.fromStep);
     if (this.replay) this.flagSnap = JSON.stringify(this.flags);
     this.cpIdx = opts.fromStep || 0;
     if (!opts.fromStep) g.ui.bigMessage(def.title.toUpperCase(), (ACTS[def.act] || '') + (this.replay ? ' · Tekrar' : ''), 'gold', 2.5);
@@ -399,6 +429,8 @@ export class Missions {
     if (this.step && this.step.end) this.step.end(this);
     const reward = this.replay ? Math.floor(def.reward * 0.25) : def.reward;
     g.state.money += reward;
+    const grade = this.replay ? null : this.baba.finish(def);
+    if (grade && g.phone) g.phone.notify(this.baba.giver(), `${def.title} — not: ${grade.label}. ${STORY[g.state.storyIndex + 0] ? 'Konağa uğra.' : ''}`, { silent: true, kind: 'story' });
     if (!this.replay) {
       g.state.respect += def.respect;
       if (!g.state.completed.includes(def.id)) g.state.completed.push(def.id);
@@ -406,7 +438,7 @@ export class Missions {
       if (def.onComplete) def.onComplete(this);
     } else if (this.flagSnap) g.state.storyFlags = JSON.parse(this.flagSnap);
     g.audio.success();
-    g.ui.bigMessage('GÖREV TAMAMLANDI', `${def.title}  ·  +${formatMoney(reward)}${this.replay ? '' : `  ·  Saygınlık +${def.respect}`}`, 'gold', 4);
+    g.ui.bigMessage('GÖREV TAMAMLANDI', `${def.title}  ·  +${formatMoney(reward)}${this.replay ? '' : `  ·  Saygınlık +${def.respect}`}${grade ? `  ·  Not: ${grade.label}` : ''}`, 'gold', 4);
     const wasReplay = this.replay;
     this.cleanup(false);
     g.autosave();
@@ -414,9 +446,12 @@ export class Missions {
       const nd = STORY[g.state.storyIndex];
       const prevAct = def.act;
       if (nd && nd.act !== prevAct) setTimeout(() => g.ui.bigMessage(ACTS[nd.act].toUpperCase(), 'Yeni perde başlıyor', 'gold', 4), 4600);
-      if (nd && nd.call) this.offerT = 9; else this.offerT = 0;
-      // çağrı alanı olmayan görevlerde Reis (veya Leyla/Kenan) arayıp konağa çağırır
-      this.summonT = nd && !nd.call ? 11 : 0;
+      // 1.4: her hikâye görevinden sonra Reis (ya da o an işleri yürüten kişi) arar: değerlendirir ve konağa çağırır.
+      // Görev konakta bittiyse çağrı yok; sahne birkaç saniye sonra konakta başlar.
+      this.offerT = 0;
+      const inK = this.inside('konak');
+      this.summonT = nd && !inK ? 9 : 0;
+      this.konakAutoT = nd && inK ? 6 : 0;
       if (def.credits) setTimeout(() => g.ui.credits(), 6000);
     }
   }
@@ -424,6 +459,7 @@ export class Missions {
     const g = this.g, def = this.active;
     if (!def) return;
     g.audio.fail();
+    if (!this.replay) this.baba.fail(def);
     g.ui.bigMessage('GÖREV BAŞARISIZ', reason || def.title, 'red', 3.5);
     const dead = g.player.dead || g.mode === 'dead';
     const cp = this.cpIdx;
@@ -491,6 +527,7 @@ export class Missions {
       ctx.interact.push({ x: -2, z: 3.4, r: 1.5, label: 'Kontrat panosu', action: () => this.side.openBoard() });
       ctx.interact.push({ x: 2, z: 3.4, r: 1.4, label: 'Görev arşivi (tekrar oyna)', action: () => this.replayMenu() });
     }
+    if (ctx.type === 'konak' && !this.active && STORY[this.index] && this.index > 0 && (this.flags.debrief || this.summoned)) this.konakAutoT = 1.2;
     if (ctx.type === 'cafe') ctx.interact.push({ x: 3, z: -3.6, r: 1.4, label: 'Ocakçıdan iş sor (kontratlar)', action: () => this.side.openBoard() });
     void g;
   }
@@ -506,15 +543,17 @@ export class Missions {
       if (this.active && this.objText) this.g.ui.notify('Sıradaki hedef haritada işaretlendi (J: görev defteri)', 'info');
     }
   }
-  // Reis'in "konağa gel" çağrısı: cevap verilse de verilmese de konak işaretçisi yanıp söner, GPS konağa kurulur
+  // Görev sonrası çağrı: arayan kişi performansı kısaca değerlendirir ve konağa çağırır. Cevap verilse de
+  // verilmese de konak işaretçisi yanıp söner, GPS konağa kurulur; konağa girince sahne kendiliğinden başlar.
   summon(nd) {
     const g = this.g;
-    const c = summonCall(nd, this);
+    const c = this.baba.callLines(nd);
     const mark = () => {
       const k = g.map.nearestOfType('konak', 0, 0);
       if (!k || this.active) return;
+      this.summoned = true;
       this.blinkUntil = performance.now() + 15000;
-      this.objective(`${c.who === 'Reis Baba' ? 'Reis Baba' : c.who} seni konağa çağırıyor`);
+      this.objective(`${c.who} seni konağa çağırıyor`);
       g.setGps(k.door.x, k.door.z + k.door.nz * 1.5);
     };
     this.dialogue.ring(c.who, mark, 35, { ring: c.who === 'Reis Baba' ? 'reis' : 'normal', lines: c.lines, onMiss: mark, onDecline: mark, missText: 'Konakta seni bekliyorlar.' });
@@ -533,16 +572,30 @@ export class Missions {
       for (let i = 0; i < 4; i++) { const n = I.npc(ctx, 'guard', -4 + i * 2.6, 0, Math.PI, { gang: 'kartallar' }); n.static = false; }
     }
   }
-  // konak kurucusundan çağrılır: hikâyeye göre konaktakiler
+  // konak kurucusundan çağrılır: hikâyeye göre konaktakiler (Reis yaralı / devrik, Leyla, Cin Ali, Kasap Tahsin)
   populateKonak(ctx, I, reis) {
-    const f = this.flags;
-    const idx = this.index;
-    if (f.reisWounded && !f.reisBack && reis) { this.g.npcs.remove(reis); const it = ctx.interact.find((i) => i.label === 'Reis Baba ile konuş'); if (it) it.label = 'Leyla ile konuş'; }
-    if (idx >= 1 && !(f.reisWounded && !f.reisBack && false)) {
-      const l = I.npc(ctx, 'resident', f.reisWounded && !f.reisBack ? 0 : 1.6, f.reisWounded && !f.reisBack ? -5.2 : -4.6, 0, { name: 'Leyla', look: LEYLA_LOOK() });
-      l.god = true;
+    const f = this.flags, idx = this.index;
+    const down = !!f.babaDown, wounded = f.reisWounded && !f.reisBack && !down;
+    const giver = this.baba.giver();
+    const coup = this.active && this.active.id === 'devrilme' && this.stepIdx >= 2;
+    if ((wounded || down) && reis) {
+      this.g.npcs.remove(reis);
+      const it = ctx.interact.find((i) => i.label === 'Reis Baba ile konuş'); if (it) it.label = `${giver} ile konuş`;
     }
-    if (idx >= 2) { const a = I.npc(ctx, 'resident', -4, 0.2, Math.PI / 2, { name: 'Cin Ali', look: ALI_LOOK() }); a.sitting = true; a.god = true; }
+    if (!coup) {
+      if (idx >= 1 && !(down && f.baba === 'oldur')) {
+        const l = I.npc(ctx, 'resident', wounded ? 0 : 1.6, wounded ? -5.2 : -4.6, 0, { name: 'Leyla', look: LEYLA_LOOK() });
+        l.god = true;
+      }
+      if (idx >= 2) {
+        const solo = down && f.baba === 'oldur';
+        const a = I.npc(ctx, 'resident', solo ? 1.6 : -4, solo ? -4.6 : 0.2, solo ? 0 : Math.PI / 2, { name: 'Cin Ali', look: ALI_LOOK() }); a.sitting = !solo; a.god = true;
+      }
+      const iS = STORY.findIndex((d) => d.id === 'sadakat');
+      if (iS >= 0 && idx > iS && !(this.active && this.active.id === 'sadakat')) {
+        const t = I.npc(ctx, 'guard', -3.5, 4.5, Math.PI, { name: 'Kasap Tahsin', gang: 'family' }); t.god = true;
+      }
+    }
     if (this.active && this.active.konak) this.active.konak(this, ctx, I, reis);
   }
 
@@ -655,6 +708,15 @@ export class Missions {
         if (!this.objText) this.objective(this.index === 0 ? 'Reis Baba\'nın konağına git' : 'Yeni iş için Reis Baba\'ya uğra (sarı R)');
       }
       if (this.index === 0 && !this.retry) this.start(STORY[0]);
+      // konakta bekleyen sahne (değerlendirme + yeni iş)
+      if (this.konakAutoT > 0) {
+        this.konakAutoT -= dt;
+        if (this.konakAutoT <= 0) {
+          if (!this.inside('konak')) this.konakAutoT = 0;
+          else if (this.dialogue.open || g.ui.blocking() || g.mode !== 'playing') this.konakAutoT = 0.5;
+          else this.briefing(STORY[this.index]);
+        }
+      }
       // sıradaki görev için telefon
       if (this.offerT > 0) {
         this.offerT -= dt;
@@ -673,6 +735,7 @@ export class Missions {
     } else {
       if (this.timer > 0) { this.timer -= dt; g.ui.setTimer(this.timer); if (this.timer <= 0 && this.step && this.step.time) { this.fail(this.step.timeFail || 'Süre doldu!'); return this.post(dt); } } else g.ui.setTimer(0);
       this.updateEscorts();
+      if (!this.replay) this.baba.tick(dt);
       let r = null;
       if (this.active.check) r = this.active.check(this, dt);
       if (!r) r = this.step ? (this.step.update ? this.step.update(this, dt) : (this.s.talked ? 'next' : null)) : this.active.update(this, dt);

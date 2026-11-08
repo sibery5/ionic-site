@@ -34,7 +34,7 @@ module.exports = async (p, out) => {
     await enter('konak');
     await p.evaluate(() => { sim(0.2); game.missions.talkToGiver('reis'); });
     await advance(3, 1); // menü: "İş var mı?"
-    await advance(4);
+    await advance(40); // değerlendirme + yeni iş sahnesi (1.4: uzun sinematik)
     await p.waitForTimeout(200);
     await p.click('text=Kabul Et');
     await p.evaluate(() => sim(0.3));
@@ -60,7 +60,7 @@ module.exports = async (p, out) => {
   await p.evaluate(() => { sim(0.2); game.missions.talkToGiver('reis'); });
   await p.waitForTimeout(400);
   await shot('dialog-choices.png');
-  await advance(3, 1); await advance(4); await p.waitForTimeout(200);
+  await advance(3, 1); await advance(40); await p.waitForTimeout(200);
   await p.click('text=Kabul Et');
   await p.evaluate(() => sim(0.3));
   check(await p.evaluate(() => game.missions.active && game.missions.active.id === 'eski_dost'), 'Görev 2 başladı');
