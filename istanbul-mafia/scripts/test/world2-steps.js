@@ -127,7 +127,7 @@ module.exports = async (p, out) => {
       await H.shot(p, `${out}-${name}.png`);
     };
     const S = (process.env.SHOTLIST || 'mosque,levent,mountain').split(',');
-    if (S.includes('mosque')) await shot('mosque', -160, 0, 668, Math.PI, 0.15, 10.5);
+    if (S.includes('mosque')) { const m = await p.evaluate(() => { const b = game.map.landmarkBlocks.find((q) => q.landmark === (window.__mq || 'mihrimah')); return [b.cx + 4, b.z1 + 26]; }); await shot('mosque', m[0], 0, m[1], 0, -0.05, 10.5); }
     if (S.includes('levent')) { const nd = await p.evaluate(() => { const n = game.map.nearestNode(-300, -760); return [n.x + 3, n.z + 3]; }); await shot('levent', nd[0], 0, nd[1], Math.PI, -0.3, 22.5); }
     if (S.includes('mountain')) { const m = await p.evaluate(() => { const R = game.city.mountainData.road; const q = R[40]; return [q.x, q.y, q.z, Math.atan2(R[60].x - q.x, R[60].z - q.z)]; }); await shot('mountain', m[0], m[1], m[2], m[3] + Math.PI, 0.1, 16.5); }
     if (S.includes('coast')) await shot('coast', 423, 0, -120, Math.PI / 2 + Math.PI, 0.1, 18.2);

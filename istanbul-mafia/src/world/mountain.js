@@ -154,18 +154,17 @@ export function buildMountainWorld(city) {
       n += 2;
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
-    // normaller yukarı baksın (sarım yönünden bağımsız)
-    const nn = geo.attributes.normal; for (let i = 0; i < nn.count; i++) if (nn.getY(i) < 0) nn.setXYZ(i, -nn.getX(i), -nn.getY(i), -nn.getZ(i));
+    // ön yüz yukarı baksın: sarım ters ise üçgenleri çevir (arka yüz aydınlatması yolu siyah gösteriyordu)
+    const nn = geo.attributes.normal; let sy = 0; for (let i = 0; i < nn.count; i++) sy += nn.getY(i);
+    if (sy < 0) { for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; } geo.setIndex(idx); geo.computeVertexNormals(); }
     return geo;
   };
   const inside = (i) => { const p = R[i]; return p.x >= M.x0 - 6 && p.z >= M.z0 - 16 && p.z <= M.z1 + 16; };
-  const asph = pbrMaterial(asphaltPBR(q), { color: 0x9a9a9a, scale: 0.2, rough: 1 });
-  asph.side = THREE.DoubleSide;
+  const asph = pbrMaterial(asphaltPBR(q), { color: 0xd8d8d8, scale: 0.2, rough: 1 });
   asph.polygonOffset = true; asph.polygonOffsetFactor = -1; asph.polygonOffsetUnits = -1;
   const road = new THREE.Mesh(ribbon(-hw, hw, 0.05, inside), asph); road.receiveShadow = true; road.name = 'mountainRoad';
   city.group.add(road); out.meshes.push(road);
   const white = markingMaterial(), yellow = markingMaterial(); yellow.color.set(0xe8b830);
-  white.side = yellow.side = THREE.DoubleSide;
   const edgeG = mergeGeometries([ribbon(-hw + 0.2, -hw + 0.34, 0.065, inside), ribbon(hw - 0.34, hw - 0.2, 0.065, inside)]);
   const wl = new THREE.Mesh(edgeG, white); wl.renderOrder = 1; city.group.add(wl);
   const yl = new THREE.Mesh(ribbon(-0.07, 0.07, 0.065, (i) => inside(i) && (i % 3) !== 2), yellow); yl.renderOrder = 1; city.group.add(yl);

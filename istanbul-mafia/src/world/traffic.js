@@ -85,7 +85,7 @@ export class TrafficLights {
       const px = n0.x + a.dx * (a.stop + 0.4) + rx * (a.hw + 1.0), pz = n0.z + a.dz * (a.stop + 0.4) + rz * (a.hw + 1.0);
       const rot = Math.atan2(a.dx, a.dz);
       Q.setFromAxisAngle(UP, rot);
-      const py = bridgeHeightAt(px, pz) || 0; // köprü rampasındaysa tabliye üstüne
+      const py = (px < 900 && bridgeHeightAt(px, pz)) || 0; // köprü rampasındaysa tabliye üstüne (dağ arazisi değil)
       M.compose(P.set(px, py, pz), Q, S.set(1, 1, 1)); this.poles.setMatrixAt(a.idx, M);
       cols.addCircle(px, pz, 0.2, py, py + 5.5, 'trafik');
       // kol yola doğru uzanır
