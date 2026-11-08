@@ -13,6 +13,10 @@ const VAULT_TMP = [];
 const VAULT_END = new THREE.Vector3(), VAULT_CHK = new THREE.Vector3(), VAULT_PRE = new THREE.Vector3();
 // kamera çarpışma ışınları (yan, yukarı ofsetleri): kaba küre taraması
 const CAM_RAYS = [[0, 0], [0.18, 0.1], [-0.18, 0.1], [0, -0.12]];
+// [savaş nişan] dikey bakış sınırı: yukarı ~83° (helikoptere ateş), aşağı ~69°. Kamera konumu en fazla POS_UP kadar
+// yörüngede alçalır; daha yukarı bakışta kamera başın arkasında kalıp yalnız bakış açısı döner (yere gömülmez).
+const PITCH_UP = -1.45, PITCH_DOWN = 1.2, POS_UP = -0.42;
+const _look = new THREE.Vector3();
 
 export class Player extends Actor {
   constructor(game, look) {
@@ -71,13 +75,16 @@ export class Player extends Actor {
       return;
     }
     // fare ile kamera
-    const sens = 0.0022 * s.sensitivity;
+    // [savaş nişan] yakınlaştırmada hassasiyet görüş açısıyla orantılı düşer (dürbünde titreme yok)
+    const sens = 0.0022 * s.sensitivity * (this.zoomNow > 1.01 ? 1 / Math.pow(this.zoomNow, 0.85) : 1);
     this.camYaw -= input.mouse.dx * sens;
     this.camPitch += input.mouse.dy * sens * (s.invertY ? -1 : 1);
-    this.camPitch = clamp(this.camPitch, -0.6, 1.2);
+    this.camPitch = clamp(this.camPitch, PITCH_UP, PITCH_DOWN);
     if (input.mouse.wheel && !input.down('ShiftLeft')) {
       if (!this.vehicle) this.cycleWeapon(input.mouse.wheel > 0 ? 1 : -1);
     }
+    // [kanun] betikli hareket (araç gaspı vb.): kontrol kilitli, konumu betik sürer
+    if (this.scriptCtl && !this.vehicle) { this.aiming = false; this.scriptCtl(dt); this.model.animate(dt, this.animState()); this.syncModel(); this.updateCamera(dt); return; }
     if (this.vehicle) this.updateDriving(dt, input);
     else this.updateOnFoot(dt, input);
     this.updateCamera(dt);
@@ -142,6 +149,9 @@ export class Player extends Actor {
     if (ml > 0.01) { mx /= ml; mz /= ml; }
     const busy = !!(this.vault || this.rollT > 0 || down);
     this.aiming = input.mouse.right && this.wdef.type !== 'melee' && !busy;
+    // [savaş nişan] dürbünde nefes tutma (Shift): salınım azalır, dayanıklılık harcanır
+    this.holdBreath = this.aiming && this.wdef.scope && input.down('ShiftLeft') && this.stamina > 5;
+    if (this.holdBreath) this.stamina = Math.max(0, this.stamina - dt * 14);
     const wantSprint = input.down('ShiftLeft') && ml > 0 && !this.aiming;
     if (wantSprint && this.crouch && this.stamina > 10) this.crouch = false;
     const sprint = wantSprint && this.stamina > 5 && !this.crouch && !this.swimming;
@@ -312,6 +322,9 @@ export class Player extends Actor {
     if (ah) t = ah.t;
     const vh = g.combat.rayVehicles(o, this.aimDir, t, null);
     if (vh) t = vh.t;
+    const xh = g.combat.rayTargets && g.combat.rayTargets(o, this.aimDir, t, this); // [savaş] helikopter vb.
+    if (xh) t = xh.t;
+    this.aimOnTarget = !!xh;
     // kamera ile oyuncu arasındaki engelleri atla
     t = Math.max(t, (this.camDistNow || 0) + 0.5);
     this.aimPoint = (this.aimPoint || new THREE.Vector3()).copy(o).addScaledVector(this.aimDir, t);
@@ -389,56 +402,80 @@ export class Player extends Actor {
       cam.lookAt(target.x, target.y, target.z);
       this.camTgt = null;
     } else {
-      // yaya kamerası: omuz üstü, yumuşak yakınlaşma, omuz değiştirme, koşuda gecikme
-      const aimScope = this.aiming && this.wdef.scope;
+      // yaya kamerası: omuz üstü. [savaş nişan] nişan tek bir yumuşatılmış ağırlıkla (adsK) geçer: mesafe, omuz,
+      // yükseklik ve görüş açısı aynı eğriyle değişir -> girişte/çıkışta sıçrama ve titreme yok. Omuz tarafı sabit (V).
+      const W = this.wdef;
+      const adsWant = this.aiming && !this.dead ? 1 : 0;
+      this.adsK = damp(this.adsK || 0, adsWant, adsWant ? 13 : 9, dt);
+      if (Math.abs(this.adsK - adsWant) < 0.002) this.adsK = adsWant;
+      const A = this.adsK, Ae = A * A * (3 - 2 * A);
+      const aimScope = this.aiming && W.scope && A > 0.85;
+      this.scoped = aimScope;
       const sprinting = this.speed > 5.5 && !this.aiming;
-      const wantDist = this.dead ? 6 : this.aiming ? (aimScope ? 0.6 : 1.75) : (this.crouch ? 3.4 : this.camDist) + (sprinting ? 0.6 : 0);
-      const wantSide = this.dead ? 0 : this.aiming ? 0.58 : 0.42;
-      const wantH = (this.crouch ? 1.2 : 1.58) + (this.swimming ? 0.25 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0) - (this.kdT > 0 ? 0.9 : 0);
+      const hipDist = this.dead ? 6 : (this.crouch ? 3.4 : this.camDist) + (sprinting ? 0.6 : 0);
+      const adsDist = W.scope ? 0.55 : W.oneHand ? 1.95 : 1.6;
+      const wantDist = hipDist + (adsDist - hipDist) * Ae;
+      const wantSide = this.dead ? 0 : 0.42 + (0.6 - 0.42) * Ae;
+      const wantH = (this.crouch ? 1.2 : 1.58) + 0.04 * Ae + (this.swimming ? 0.25 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0) - (this.kdT > 0 ? 0.9 : 0);
       if (!this.camInit || this.cDist === undefined) { this.cDist = wantDist; this.cSide = wantSide; this.cH = wantH; this.cSh = this.shoulder; this.cCol = 99; this.camTgt = null; }
-      this.cDist = damp(this.cDist, wantDist, this.aiming ? 14 : 7, dt);
-      this.cSide = damp(this.cSide, wantSide, 10, dt);
+      // nişanda mesafe/omuz doğrudan eğriden (ikinci bir sönüm katmanı yok: çift yumuşatma = salınım)
+      this.cDist = A > 0.001 ? wantDist : damp(this.cDist, wantDist, 7, dt);
+      this.cSide = A > 0.001 ? wantSide : damp(this.cSide, wantSide, 10, dt);
       this.cH = damp(this.cH, wantH, 8, dt);
       this.cSh = damp(this.cSh, this.shoulder, 9, dt);
-      if (aimScope) fov = 20;
-      else if (this.aiming) fov -= 14;
-      else if (sprinting) fov += 6;
-      const yaw = this.camYaw, pitch = this.dead ? 0.6 : this.camPitch;
+      const zoom = this.dead ? 1 : 1 + ((W.zoom || 1.3) - 1) * Ae;
+      this.zoomNow = zoom;
+      fov = fov / zoom;
+      if (sprinting) fov += 6;
+      // dürbün salınımı (nefes): Shift ile tutulur
+      if (aimScope) {
+        this.swayT = (this.swayT || 0) + dt;
+        const k = (this.holdBreath ? 0.15 : 1) * (this.crouch ? 0.6 : 1) * 0.0016;
+        this.camYaw += Math.cos(this.swayT * 0.9) * k * dt * 6; this.camPitch += Math.sin(this.swayT * 1.7) * k * dt * 5;
+      }
+      const yaw = this.camYaw, lookPitch = this.dead ? 0.6 : this.camPitch;
+      // yukarı bakarken kamera yörüngede en fazla POS_UP'a iner; fazlası yalnız bakış yönünü döndürür
+      const pitch = Math.max(lookPitch, POS_UP);
+      const upK = clamp((POS_UP - lookPitch) / (POS_UP - PITCH_UP), 0, 1);
       const fx = Math.sin(yaw), fz = Math.cos(yaw);
       const rx = -fz, rz = fx;
       // takip noktası: koşarken hafif gecikme
       const T = TGT.set(this.pos.x, this.pos.y + this.cH, this.pos.z);
       if (!this.camTgt) this.camTgt = new THREE.Vector3().copy(T);
-      // takip gecikmesi yumuşak geçer (koşu başlarken/biterken sıçrama yok)
-      this.camLagRate = damp(this.camLagRate || 30, sprinting ? 10 : this.vault ? 12 : 28, 3, dt);
+      // takip gecikmesi yumuşak geçer; nişanda gecikme yok (nişangâh karakterle birlikte sabit kalır)
+      this.camLagRate = damp(this.camLagRate || 30, A > 0.5 ? 60 : sprinting ? 10 : this.vault ? 12 : 28, 3, dt);
       const lagK = 1 - Math.exp(-this.camLagRate * dt);
       this.camTgt.x += (T.x - this.camTgt.x) * lagK; this.camTgt.z += (T.z - this.camTgt.z) * lagK;
       this.camTgt.y += (T.y - this.camTgt.y) * (1 - Math.exp(-(this.grounded ? 14 : 8) * dt));
       const target = tmp.copy(this.camTgt);
-      // çok hafif kafa sallanması ve iniş çökmesi
-      // kafa sallanması: pelvis sekmesiyle aynı fazda, sönümlü
+      // kafa sallanması: pelvis sekmesiyle aynı fazda, sönümlü; nişanda yok
       this.camBob = damp(this.camBob || 0, this.grounded && !this.swimming ? (this.model.bobY || 0) : 0, 12, dt);
-      target.y += this.camBob * 0.4 * (this.aiming ? 0.3 : 1);
+      target.y += this.camBob * 0.4 * (1 - Ae);
       if (this.camDip > 0) { target.y -= this.camDip; this.camDip = Math.max(0, this.camDip - dt * 1.2); }
       const side = this.cSide * this.cSh;
       target.x += rx * side; target.z += rz * side;
+      target.y += 0.25 * upK; // dik yukarı bakışta başın biraz üstünden
       const back = tmp2.set(-fx * Math.cos(pitch), Math.sin(pitch), -fz * Math.cos(pitch));
       // kamera çarpışması: birkaç ışınla kaba küre taraması; hızlı yaklaş, yavaş uzaklaş
-      let free = this.cDist;
+      let free = this.cDist * (1 - 0.35 * upK);
+      const want0 = free;
       for (const [ox, oy] of CAM_RAYS) {
-        const hit = g.physics.raycast(target.x + rx * ox, target.y + oy, target.z + rz * ox, back.x, back.y, back.z, this.cDist + 0.3);
+        const hit = g.physics.raycast(target.x + rx * ox, target.y + oy, target.z + rz * ox, back.x, back.y, back.z, want0 + 0.3);
         if (hit) free = Math.min(free, Math.max(0.35, hit.t - 0.3));
       }
       this.cCol = free < this.cCol ? damp(this.cCol, free, 30, dt) : damp(this.cCol, free, 4, dt);
       this.cCol = Math.min(this.cCol, free + 0.15);
-      const d = Math.max(0.35, Math.min(this.cDist, this.cCol));
+      const d = Math.max(0.35, Math.min(want0, this.cCol));
       this.camDistNow = d;
       this.camPos.set(target.x + back.x * d, target.y + back.y * d, target.z + back.z * d);
       this.camInit = true;
       cam.position.copy(this.camPos);
       cam.position.y = Math.max(cam.position.y, (this.inInterior ? 0.3 : this.swimming ? WATER_Y + 0.4 : 0.3));
       if (this.inInterior) cam.position.y = Math.min(cam.position.y, 3.2);
-      cam.lookAt(target.x, target.y, target.z);
+      // bakış yönü: tam eğim (yukarı bakış sınırı POS_UP'tan bağımsız)
+      const cp = Math.cos(lookPitch);
+      _look.set(cam.position.x + fx * cp * 10, cam.position.y - Math.sin(lookPitch) * 10, cam.position.z + fz * cp * 10);
+      cam.lookAt(_look);
       // silah tepmesi
       if (this.camKick > 0) { cam.rotation.x += this.camKick * 0.012; this.camKick = Math.max(0, this.camKick - dt * 6); }
     }
@@ -455,6 +492,6 @@ export class Player extends Actor {
   syncModel() {
     this.model.root.position.copy(this.pos);
     this.model.root.rotation.y = this.heading;
-    this.model.root.visible = !this.vehicle && !(this.aiming && this.wdef.scope);
+    this.model.root.visible = !this.vehicle && !this.scoped;
   }
 }

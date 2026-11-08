@@ -729,19 +729,7 @@ export class AudioEngine {
     this.osc(o.node, t, { freq: 70, freq2: 28, dur: 0.9, type: 'sine', gain: 0.8 });
     this.nz(o.node, t, { dur: 0.7, freq: 380, gain: 1.0, buf: this.brownBuf });
   }
-  // cam: isabette çatlama, kırılmada dökülen parçalar
-  glassCrack(x, z, k = 1) {
-    const o = this.spatial(x, z, 70, 0.2); if (!o) return;
-    const t = this.ctx.currentTime;
-    this.nz(o.node, t, { dur: 0.04, freq: 4500, q: 3, type: 'bandpass', gain: 0.35 * k });
-    this.clickAt(o.node, t, 3200, 0.2 * k, 0.02);
-  }
-  glassBreak(x, z, k = 1) {
-    const o = this.spatial(x, z, 110, 0.3); if (!o) return;
-    const t = this.ctx.currentTime;
-    this.nz(o.node, t, { dur: 0.25, freq: 5000, q: 0.8, type: 'highpass', gain: 0.6 * k });
-    for (let i = 0; i < 12; i++) this.nz(o.node, t + 0.03 + Math.random() * 0.6, { dur: 0.02 + Math.random() * 0.03, freq: 3500 + Math.random() * 5000, q: 6, type: 'bandpass', gain: 0.2 * k });
-  }
+  // cam sesleri: dosya sonundaki [savaş: cam ve beden sesleri] bölümünde (glassCrack / glassBreak)
   // metal ezilmesi / sürtünme (çarpışmada ek katman)
   crashMetal(x, z, k = 1) {
     const o = this.spatial(x, z, 150, 0.35); if (!o) return;
@@ -902,5 +890,141 @@ export class AudioEngine {
   }
 }
 
+
+// =====================================================================================================
+// [savaş: cam ve beden sesleri] (A2 — Çatışma ve Beden). Diğer seslerden ayrı tutulur.
+// Sesler ilk kullanımda JS ile örneklenip AudioBuffer'a yazılır (birkaç varyant); çalarken tek kaynak düğümü
+// kurulur -> yoğun çatışmada düğüm yığılması olmaz. Kaynaklar: katmanlı gürültü, rezonanslı süzgeçler (RBJ biquad),
+// çok sayıda minik rastgele "çın" taneciği (kırılmada dökülen cam), ıslak et ve kemik darbesi.
+// =====================================================================================================
+function rbjBand(f, q, sr) {
+  const w = 2 * Math.PI * f / sr, al = Math.sin(w) / (2 * q), a0 = 1 + al;
+  return { b0: al / a0, b2: -al / a0, a1: -2 * Math.cos(w) / a0, a2: (1 - al) / a0, x1: 0, x2: 0, y1: 0, y2: 0 };
+}
+function bq(F, x) { const y = F.b0 * x + F.b2 * F.x2 - F.a1 * F.y1 - F.a2 * F.y2; F.x2 = F.x1; F.x1 = x; F.y2 = F.y1; F.y1 = y; return y; }
+function normBuf(d, peak = 0.9) { let m = 0; for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i])); if (m > 0) { const k = peak / m; for (let i = 0; i < d.length; i++) d[i] *= k; } }
+// rezonanslı cam "çın" taneciği: üç uyumsuz kısmi + mikro gürültü tıkı, üstel sönüm
+function grain(d, sr, t0, f, dec, amp) {
+  const i0 = Math.floor(t0 * sr), n = Math.min(d.length - i0, Math.floor(dec * 7 * sr));
+  if (n <= 0) return;
+  const r2 = 1.47 + Math.random() * 1.3, r3 = 2.6 + Math.random() * 1.9, ph = Math.random() * 6;
+  const w1 = 2 * Math.PI * f / sr;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, e = Math.exp(-t / dec) * Math.min(1, i / 12);
+    d[i0 + i] += amp * e * (Math.sin(w1 * i + ph) + 0.55 * Math.sin(w1 * r2 * i) * Math.exp(-t / (dec * 0.6)) + 0.3 * Math.sin(w1 * r3 * i) * Math.exp(-t / (dec * 0.35)))
+      + (i < 40 ? amp * 0.6 * (Math.random() * 2 - 1) * (1 - i / 40) : 0);
+  }
+}
+function synthCrack(sr) {
+  const d = new Float32Array(Math.floor(sr * 0.42));
+  // 1) mermi darbesi: kısa geniş bant tık + boğuk gövde
+  const hp = rbjBand(5200, 0.7, sr), th = rbjBand(190, 1.2, sr);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / sr, n = Math.random() * 2 - 1;
+    d[i] += bq(hp, n) * Math.exp(-t / 0.006) * 1.4 + bq(th, n) * Math.exp(-t / 0.03) * 2.2;
+  }
+  // 2) çatlak yayılması: hızlanan mikro kırılma tıkları (3-8 kHz rezonans), 6-14 adet ~45 ms içinde
+  const N = 6 + Math.floor(Math.random() * 9);
+  let tt = 0.002;
+  for (let k = 0; k < N; k++) { tt += 0.002 + Math.random() * 0.006; grain(d, sr, tt, 3000 + Math.random() * 5200, 0.0016 + Math.random() * 0.003, 0.5 * (1 - k / N * 0.5)); }
+  // 3) camın kendi tınısı: birkaç uyumsuz kısmi, yavaş sönüm (gergin levha)
+  for (let k = 0; k < 3; k++) grain(d, sr, 0.003 + Math.random() * 0.01, 1800 + Math.random() * 4200, 0.03 + Math.random() * 0.06, 0.12);
+  // 4) ince "çıtırtı" kuyruğu: çatlak yerleşirken seyrek tanecikler
+  for (let k = 0; k < 5; k++) grain(d, sr, 0.06 + Math.random() * 0.28, 4000 + Math.random() * 4000, 0.002 + Math.random() * 0.004, 0.08);
+  normBuf(d, 0.85);
+  return d;
+}
+function synthShatter(sr, windshield) {
+  const d = new Float32Array(Math.floor(sr * 1.9));
+  // 1) kırılma anı: sert geniş bant patlama + rezonanslı çarpma gövdesi
+  const h1 = rbjBand(3800, 0.6, sr), h2 = rbjBand(7200, 1.1, sr), lo = rbjBand(420, 0.9, sr);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / sr, n = Math.random() * 2 - 1;
+    d[i] += bq(h1, n) * (Math.exp(-t / 0.05) * 1.6 + Math.exp(-t / 0.3) * 0.35) + bq(h2, n) * Math.exp(-t / 0.12) * 0.9 + bq(lo, n) * Math.exp(-t / 0.04) * (windshield ? 1.6 : 0.9);
+  }
+  // 2) yüzlerce parçanın dökülmesi: başta yoğun, zamanla seyrekleşen çın tanecikleri
+  const G = windshield ? 90 : 150;
+  for (let k = 0; k < G; k++) {
+    const u = Math.random(), t0 = 0.004 + 1.25 * Math.pow(u, 2.4);
+    const late = t0 / 1.3;
+    grain(d, sr, t0, 2200 + Math.random() * 7600 - late * 1500, 0.004 + Math.random() * 0.03, (0.07 + Math.random() * 0.16) * (1 - late * 0.7));
+  }
+  // 3) yere çarpan iri parçalar: daha alçak, iki-üç zıplama
+  for (let k = 0; k < 10; k++) { const t0 = 0.18 + Math.random() * 0.9; for (let j = 0; j < 3; j++) grain(d, sr, t0 + j * (0.05 + Math.random() * 0.05), 1400 + Math.random() * 2600, 0.01 + Math.random() * 0.02, 0.16 / (j + 1)); }
+  // 4) kumlanma: dökülürken ince tıslama (yüksek frekans gürültü, yavaş sönüm)
+  const hs = rbjBand(8500, 0.8, sr);
+  for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] += bq(hs, Math.random() * 2 - 1) * 0.18 * Math.exp(-t / 0.55) * Math.min(1, t / 0.02); }
+  normBuf(d, 0.92);
+  return d;
+}
+function synthFlesh(sr, head) {
+  const d = new Float32Array(Math.floor(sr * 0.26));
+  // ıslak darbe: alçak gürültü patlaması + perdesi düşen gövde vuruşu (tahta "tok" değil: kısa, yumuşak, sönümlü)
+  const lp = rbjBand(900, 0.5, sr), sq = rbjBand(1100, 2.2, sr), f0 = 95 + Math.random() * 35;
+  let ph = 0;
+  for (let i = 0; i < d.length; i++) {
+    const t = i / sr, n = Math.random() * 2 - 1;
+    ph += 2 * Math.PI * (f0 * (0.55 + 0.45 * Math.exp(-t / 0.025))) / sr;
+    // emişli "şlap": süzgeç merkezi zamanla iner
+    if ((i & 63) === 0) { const fc = 1150 * Math.exp(-t / 0.05) + 280; const F = rbjBand(fc, 2.2, sr); sq.b0 = F.b0; sq.b2 = F.b2; sq.a1 = F.a1; sq.a2 = F.a2; }
+    d[i] += bq(lp, n) * Math.exp(-t / 0.012) * 1.3 + Math.sin(ph) * Math.exp(-t / 0.045) * 0.9 + bq(sq, n) * Math.exp(-t / 0.06) * Math.min(1, t / 0.006) * 1.6;
+  }
+  // kan damlacıkları: birkaç küçük ıslak tıkırtı
+  for (let k = 0; k < 4; k++) { const t0 = 0.02 + Math.random() * 0.12, i0 = Math.floor(t0 * sr), F = rbjBand(1800 + Math.random() * 1800, 3, sr); for (let i = 0; i < 260 && i0 + i < d.length; i++) d[i0 + i] += bq(F, Math.random() * 2 - 1) * 0.35 * Math.exp(-i / 60); }
+  if (head) {
+    // kemik: kısa sert kırılma tıkı + kafatası rezonansı
+    const hb = rbjBand(3200, 1.4, sr), sk = rbjBand(620, 6, sr);
+    for (let i = 0; i < d.length; i++) { const t = i / sr, n = Math.random() * 2 - 1; d[i] += bq(hb, n) * Math.exp(-t / 0.004) * 2.2 + bq(sk, n) * Math.exp(-t / 0.03) * 1.1; }
+  }
+  normBuf(d, 0.9);
+  return d;
+}
+Object.assign(AudioEngine.prototype, {
+  // önceden örneklenmiş varyant kümesi (ilk çağrıda bir kez)
+  _sfxBank(key, n, fn) {
+    const B = this._bank || (this._bank = {});
+    if (B[key]) return B[key];
+    const sr = this.ctx.sampleRate, list = [];
+    for (let i = 0; i < n; i++) { const d = fn(sr, i); const b = this.ctx.createBuffer(1, d.length, sr); b.getChannelData(0).set(d); list.push(b); }
+    return (B[key] = list);
+  },
+  _playBank(list, x, z, range, rev, gain, rate = 1) {
+    const o = this.spatial(x, z, range, rev); if (!o) return false;
+    const c = this.ctx, src = c.createBufferSource();
+    src.buffer = list[Math.floor(Math.random() * list.length)];
+    src.playbackRate.value = rate * (0.93 + Math.random() * 0.14);
+    const g = c.createGain(); g.gain.value = gain;
+    src.connect(g); g.connect(o.node); src.start();
+    return true;
+  },
+  _countSfx(k) { const S = this.sfxStats || (this.sfxStats = {}); S[k] = (S[k] || 0) + 1; },
+  // cam çatlaması: mermi darbesi + yayılan mikro kırılmalar + levha tınısı
+  glassCrack(x, z, k = 1) {
+    this._countSfx('glassCrack');
+    if (!this.ctx) return;
+    this._playBank(this._sfxBank('crack', 4, (sr) => synthCrack(sr)), x, z, 80, 0.22, 0.55 * k, 1);
+  },
+  // cam kırılması: patlama + yüzlerce dökülen parça taneciği + yere çarpan iri parçalar (ön cam daha tok)
+  glassBreak(x, z, k = 1) {
+    this._countSfx('glassBreak');
+    if (!this.ctx) return;
+    const ws = k > 1.1;
+    this._playBank(this._sfxBank(ws ? 'shatterW' : 'shatter', 3, (sr) => synthShatter(sr, ws)), x, z, 120, 0.32, 0.8 * Math.min(1.3, k), ws ? 0.9 : 1);
+  },
+  // mermi ete girdi: ıslak darbe (baş: kemik kırılması eklenir)
+  fleshImpact(x, z, k = 1, head = false) {
+    this._countSfx('flesh');
+    if (!this.ctx) return;
+    this._playBank(this._sfxBank(head ? 'fleshH' : 'flesh', 3, (sr) => synthFlesh(sr, head)), x, z, 55, 0.05, 0.6 * Math.min(1.4, k), head ? 0.95 : 1);
+  },
+  // yelek plakası mermiyi durdurdu: boğuk tok darbe + kumaş sürtünmesi
+  plateHit(x, z) {
+    this._countSfx('plate');
+    const o = this.spatial(x, z, 50, 0.05); if (!o) return;
+    const t = this.ctx.currentTime;
+    this.osc(o.node, t, { freq: 150, freq2: 70, dur: 0.07, gain: 0.45 });
+    this.nz(o.node, t, { dur: 0.06, freq: 520, q: 1.2, type: 'bandpass', gain: 0.5 });
+  },
+});
 
 export const audio = new AudioEngine();

@@ -103,12 +103,13 @@ module.exports = async (p, out) => {
     const cnt = (f) => g.npcs.list.filter((n) => !n.dead && f(n)).length;
     const out = {};
     W.set(1); sim(4);
-    out.l1 = { foot: cnt((n) => n.faction === 'police'), lvl: W.level };
+    // [kanun] 1★: yaya polis belirmez; devriye/ekip aracı (içindeki ekip dahil) yola çıkar
+    out.l1 = { foot: cnt((n) => n.faction === 'police') + W.units.length, lvl: W.level };
     W.set(2); W.dispatchT = 0; sim(8);
-    out.l2 = { cars: g.vehicles.list.filter((v) => v.police && v.ai && v.ai.mode === 'chase').length, shots };
+    out.l2 = { cars: g.vehicles.list.filter((v) => v.police && v.ai && (v.ai.mode === 'chase' || v.ai.mode === 'halt' || v.lawUnit)).length, shots };
     W.set(3); W.roadblockT = 0.1; sim(4);
     out.l3 = { rb: W.roadblocks.length };
-    W.set(4); W.swatT = 0.1; sim(4);
+    W.set(4); W.swatT = 0.1; sim(4); // [kanun] özel harekât zırhlı araçla gelir (ekip araçta sayılır)
     out.l4 = { swat: cnt((n) => n.kind === 'swat'), gear: cnt((n) => n.kind === 'swat' && n.model.gear) };
     W.set(5); W.heliT = 0.1; W.armyT = 0.1; W.roadblockT = 0.1; W.clearRoadblocks(); sim(5);
     out.l5 = { heli: !!W.heli, army: W.army.filter((n) => !n.dead).length, tank: W.roadblocks.some((r) => r.tank), heliY: W.heli ? Math.round(W.heli.pos.y) : 0 };
@@ -118,7 +119,7 @@ module.exports = async (p, out) => {
     return out;
   });
   console.log('yükselme:', JSON.stringify(esc));
-  check(esc.l1.foot >= 1, '1★ yaya polis (' + esc.l1.foot + ')');
+  check(esc.l1.foot >= 1, '1★ devriye / ekip yolda (' + esc.l1.foot + ')');
   check(esc.l2.cars >= 1, '2★ ekip aracı takipte (' + esc.l2.cars + ')');
   check(esc.l3.rb >= 1, '3★ barikat (' + esc.l3.rb + ')');
   check(esc.l4.swat >= 1 && esc.l4.gear >= 1, '4★ kasklı özel harekât (' + esc.l4.swat + ')');
@@ -146,20 +147,24 @@ module.exports = async (p, out) => {
   const mil = await p.evaluate(() => {
     const g = game, m = g.military, pl = g.player;
     g.env.time = 13;
+    // [kanun] duvarın dışında (yoldan geçen gibi) uyarı yok; içeri girince uyarı -> son uyarı -> ateş
     pl.pos.set(m.zone.x1 + 20, 0, m.cz); sim(2);
     const soldiers = m.soldiers.filter((s) => !s.dead).length;
     pl.pos.set(m.zone.x1 + 20, 0, m.cz); sim(1.5);
+    const s0 = m.stage || 0;
+    pl.pos.set(m.zone.x1 - 3, 0, m.cz); sim(0.5);
     const s1 = m.stage;
-    pl.pos.set(m.zone.x1 - 8, 0, m.cz); sim(0.5);
+    sim(3.5);
     const s2 = m.stage;
-    sim(5);
+    sim(4);
     const alert = m.alert, lvl = g.wanted.level;
     pl.pos.set(m.zone.x1 + 200, 0, m.cz); m.alertT = 1; sim(2);
-    return { soldiers, s1, s2, alert, lvl, calm: !m.alert };
+    return { soldiers, s0, s1, s2, alert, lvl, calm: !m.alert };
   });
   console.log('kışla:', JSON.stringify(mil));
   check(mil.soldiers >= 4, 'Kışla devriyesi (' + mil.soldiers + ')');
-  check(mil.s1 === 1 && mil.s2 >= 2, 'Uyarı -> son uyarı');
+  check(mil.s0 === 0, 'Duvar dışında (yolda) uyarı yok');
+  check(mil.s1 === 1 && mil.s2 >= 2, 'İçeride: uyarı -> son uyarı');
   check(mil.alert && mil.lvl >= 3, 'Uyarıya uyulmayınca ateş + aranma');
   check(mil.calm, 'Uzaklaşınca alarm sona erdi');
 

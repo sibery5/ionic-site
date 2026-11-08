@@ -1453,13 +1453,15 @@ export class Vehicle {
       }
       if (t0 <= t1 && t0 < bt) { bt = t0; best = i; }
     }
-    if (best >= 0) this.paneHit(best, 1);
+    if (best >= 0) { this.lastPaneHit = best; this.paneHit(best, 1, h); } // [savaş cam] isabet noktası çatlak izine
   }
-  paneHit(i, k) {
+  paneHit(i, k, hit = null) {
     const w = this.windows[i]; if (!w || w.state >= 3) return;
     w.hits += k;
     const hp = w.p.hp;
     const st = w.hits >= hp ? 3 : w.hits >= hp * 0.5 ? 2 : 1;
+    const G = this.game.combat && this.game.combat.glass; // [savaş cam] isabet noktasında çatlak izi
+    if (G && hit && st < 3) G.crack(this, i, hit, st);
     if (st > w.state) this.setPane(i, st);
     else if (this.game.audio && this.game.audio.glassCrack) this.game.audio.glassCrack(this.pos.x, this.pos.z, 0.5);
   }
@@ -1483,12 +1485,54 @@ export class Vehicle {
     const P = this.game.particles;
     const out = Math.sign(w.p.c[0]) || 0, f = this.fwd;
     const ox = f.z * out, oz = -f.x * out;
-    if (P && P.debris && P.debris.emit) for (let k = 0; k < 18; k++) {
+    const G = this.game.combat && this.game.combat.glass; // [savaş cam] dökülen cam parçaları (havuzlu)
+    if (G) G.shatter(this, i, _v0);
+    else if (P && P.debris && P.debris.emit) for (let k = 0; k < 18; k++) {
       const c = 0.7 + Math.random() * 0.25;
       P.debris.emit(_v0.x + rnd(0.3), _v0.y + rnd(0.15), _v0.z + rnd(0.3), ox * 2 + this.vx * 0.8 + rnd(1.6), Math.random() * 2.2, oz * 2 + this.vz * 0.8 + rnd(1.6), 0.015 + Math.random() * 0.03, (this.groundY || 0) + 0.01, 0, c * 0.85, c * 0.95, c);
     }
-    if (P && P.sparks) P.sparks(_v0, 3);
+    if (P && P.sparks && !G) P.sparks(_v0, 3);
     if (a.glassBreak) a.glassBreak(_v0.x, _v0.z, w.p.tag === 'g_ws' ? 1.2 : 1);
+  }
+
+  // [kanun] kapı aç/kapa (araç gaspı, ekip inişi): kapı paneli ve camı menteşeli ayrı parçaya taşınır.
+  // tag 'doorL0' (sol ön = sürücü) gibi; ang radyan (0 kapalı .. ~1.2 açık). Kapı yoksa false.
+  setDoor(tag, ang) {
+    const T = this.T;
+    if (!T || !T.tags || !T.doors || this.kind !== 'car' || this.detached.has(tag)) return false;
+    const doors = this._doors || (this._doors = {});
+    let D = doors[tag];
+    if (!D) {
+      const dd = T.doors.find((x) => x.tag === tag);
+      if (!dd) return false;
+      const ud = this.mesh.userData, grp = new THREE.Group();
+      const hx = dd.s * T.S.hw((dd.y0 + dd.y1) / 2, dd.z1), hz = dd.z1;
+      let any = false;
+      for (const kind of ['paint', 'dark', 'chrome']) {
+        for (const r of T.tags[kind]) {
+          if (r.tag !== tag) continue;
+          const own = this.ownGeo(kind); if (!own) continue;
+          const sub = extractRange(own, r); collapseRange(own, r); sub.translate(-hx, 0, -hz);
+          grp.add(new THREE.Mesh(sub, kind === 'paint' ? ud.bodyMesh.material : kind === 'dark' ? darkMat : chromeMat));
+          any = true;
+        }
+      }
+      if (!any) return false;
+      const gl = this.ownGeo('glass');
+      if (gl) for (const w of this.windows) {
+        const c = w.p.c;
+        if (w.state >= 3 || Math.sign(c[0]) !== dd.s || c[2] >= dd.z1 || c[2] <= dd.z0) continue;
+        const sub = extractRange(gl, w.p.r); collapseRange(gl, w.p.r); sub.translate(-hx, 0, -hz);
+        const m = new THREE.Mesh(sub, ud.glassMesh.material); m.renderOrder = 2; grp.add(m);
+      }
+      for (const d of ud.decalMeshes || []) if (d.tag === tag) d.m.visible = false;
+      grp.position.set(hx, 0, hz);
+      ud.chassis.add(grp);
+      D = doors[tag] = { grp, s: dd.s, ang: 0 };
+    }
+    D.ang = ang;
+    D.grp.rotation.y = -D.s * ang;
+    return true;
   }
 
   // Parça kopar (tampon/kaput/kapı/ayna): aralığı ayrı uçan parçaya taşı, gövdede çökert
