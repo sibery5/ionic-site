@@ -161,6 +161,7 @@ export function buildForest(city) {
   initMountain();
   // dağ: arazi, yol, bariyerler, istinat duvarı, çam ormanı, kayalar, dağ evi (mountain.js)
   city.mountain = buildMountainWorld(city);
+  city.mountainData = MOUNTAIN;
   const cab = MOUNTAIN.cabin;
   void F;
   HIDEOUTS.length = 0;

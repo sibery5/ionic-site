@@ -133,6 +133,7 @@ export class Player extends Actor {
     if (input.down('KeyS')) { mx -= f.x; mz -= f.z; }
     if (input.down('KeyD')) { mx += rgt.x; mz += rgt.z; }
     if (input.down('KeyA')) { mx -= rgt.x; mz -= rgt.z; }
+    if (this.seat) { mx = 0; mz = 0; } // [dünya] bankta oturuyor (world/seating.js kaldırır)
     // [mekanik tepki] yere savrulduysa (patlama / araç): kalkana kadar kontrol yok
     const down = this.kdT > 0;
     if (down) { this.kdT -= dt; mx = 0; mz = 0; this.crouch = false; if (this.kdT <= 0) this.kdImmT = 2.5; }

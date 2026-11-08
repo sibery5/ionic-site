@@ -7,6 +7,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { WATER_Y, BRIDGES, ISLAND, SIDEWALK, MARINA, MILITARY_BASE, AIRPORT, HARBOR, districtAt } from './map.js';
 import { RNG } from '../core/util.js';
 import { MOUNTAIN, initMountain } from './terrain.js';
+import { paintCoast, buildCoast } from './coast.js';
+import { buildSeats } from './seating.js';
 import { oceanNormalTexture, makeCanvas, granitePBR, ashlarPBR, signAtlas, propAtlas, PROP_UV } from '../core/textures.js';
 import { SHARED, OCEAN, oceanMaterial, oceanGeometry, oceanObstacle, terrainMaterial, pbrMaterial, markingMaterial, propsMaterial, facadeMaterial, roofMaterial, grassField } from './shaders.js';
 import { NearInstancer, ChunkInstancer, ChunkMerger } from './instancer.js';
@@ -15,7 +17,7 @@ import { buildStreetProps, STREET_PROP_DEFS, STREET_PROP_OPTS } from './streetpr
 import { buildVegetation, PARK_PROP_DEFS, PARK_PROP_OPTS } from './vegetation.js';
 import { buildPoliceStations, POLICE_PROP_DEFS, POLICE_PROP_OPTS } from './police_station.js';
 import { buildMilitary, paintMilitary, MILITARY_PROP_DEFS, MILITARY_PROP_OPTS } from './military.js';
-import { buildLandmark } from './landmarks.js';
+import { buildLandmark, landmarkTrees } from './landmarks.js';
 import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
 import { buildHarbor, buildForest, paintLocations, LOCATION_PROP_DEFS, LOCATION_PROP_OPTS } from './locations.js';
@@ -161,6 +163,13 @@ export class City {
     const th = 0.12;
     return this.physics.city.add(Math.min(x0, x1) - th, Math.min(z0, z1) - th, Math.max(x0, x1) + th, Math.max(z0, z1) + th, 0, height + (topKind ? 0.6 : 0), 'fence');
   }
+  // Park yeri kavşak içinde mi (kesişen yolun şeridi) ya da kara dışında mı
+  parkSpotBad(x, z) {
+    const n = this.map.nearestNode(x, z);
+    if (n) { let w = 0; for (const e of n.edges) w = Math.max(w, e.width / 2); if (Math.abs(x - n.x) < w + 3.5 && Math.abs(z - n.z) < w + 3.5) return true; }
+    for (const b of this.map.buildings) if (x > b.x0 - 1 && x < b.x1 + 1 && z > b.z0 - 1 && z < b.z1 + 1) return true;
+    return false;
+  }
   onSlab(x, z) {
     for (const b of this.map.blocks) if (b.kind !== 'zone' && x >= b.x0 - SIDEWALK - 0.01 && x <= b.x1 + SIDEWALK + 0.01 && z >= b.z0 - SIDEWALK - 0.01 && z <= b.z1 + SIDEWALK + 0.01) return true;
     return false;
@@ -223,6 +232,7 @@ export class City {
     paintMilitary(paint);
     paintAirport(paint);
     paintLocations(paint);
+    paintCoast(paint);
     const maskTex = new THREE.DataTexture(mask, S, S, THREE.RGBAFormat);
     maskTex.magFilter = THREE.LinearFilter; maskTex.minFilter = THREE.LinearMipmapLinearFilter; maskTex.generateMipmaps = true; maskTex.anisotropy = 4;
     maskTex.needsUpdate = true;
@@ -401,6 +411,8 @@ export class City {
 
   buildParks() {
     buildVegetation(this);
+    for (const [k, x, z, s] of landmarkTrees) this.addTree(k, x, z, s, 0.02); // cami bahçeleri
+    landmarkTrees.length = 0;
     buildPoliceStations(this);
     buildMilitary(this);
     buildAirport(this);
@@ -408,6 +420,8 @@ export class City {
     buildVillas(this);
     buildHarbor(this);
     buildForest(this);
+    this.coast = buildCoast(this);
+    buildSeats(this); // tüm banklar → oturma yerleri (city.seats)
     this.buildLightPools();
     // çim (kamera çevresi)
     if (this.quality !== 'low') { this.grass = grassField(this.maskTex, this.quality === 'high' ? 42 : 32, this.quality === 'high' ? 0.45 : 0.55); this.group.add(this.grass); }
@@ -436,7 +450,7 @@ export class City {
     if (this.haloMat) this.haloMat.opacity = n * 0.85;
     // gerçek ışıklar yakındakileri aydınlatır; havuz çıkartması uzaktakiler için (ıslak zeminde daha parlak)
     if (this.poolMat) this.poolMat.opacity = n * (0.42 + SHARED.uWet.value * 0.25);
-    if (this.beamMat) this.beamMat.opacity = n * 0.16;
+    if (this.beamMat) this.beamMat.opacity = n * 0.09; // projektör konisi: hafif (sis gibi beyaz hale yapmasın)
   }
 }
 
@@ -470,7 +484,8 @@ function trimFinish(g, kind, col) {
 export function buildBridgesAndIsland(group, cols, uniforms, city = currentCity) {
   void uniforms;
   const q = city ? city.quality : 'medium';
-  buildBridges(group, cols, city, q);
+  const bo = buildBridges(group, cols, city, q);
+  if (city) city.bridgeBarriers = bo.barriers;
   buildMaidensTower(group, cols, q);
   hookLedMeshes(group);
 }
