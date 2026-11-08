@@ -24,3 +24,8 @@ Mekanik tepkiler (her karakter türünde baş/kol/bacak tepkisi, patlama/araç i
 topallama, sivil çömel-kaç, trafik paniği, hayvan ürkmesi):
 
     SETTINGS='{"quality":"low"}' NOSHOT=1 node scripts/test/play.js file://$PWD/app/index.html .testout/mech $PWD/scripts/test/mech-steps.js
+
+Hikâye 1.4 (perdeler, görev sonu çağrı + konak sahnesi, güven/şüphe, eski kayıt, yeni görevler, harita, telefon, açılış süresi;
+SHOTS=1 ile cinematic/map/phone ekran görüntüleri):
+
+    SETTINGS='{"quality":"low"}' SHOTS=1 node scripts/test/play.js file://$PWD/app/index.html .testout/s2 $PWD/scripts/test/story2-steps.js
