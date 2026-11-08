@@ -234,7 +234,7 @@ const ARM_R = [J.shR, J.elR, J.wrR], ARM_L = [J.shL, J.elL, J.wrL], ARMS = [J.sh
 //  v, kadans(çevrim/s), duruş oranı, ayak kaldırma, topuk savurma, kalça düşüşü, sekme, öne eğilme, kol, dirsek,
 //  kalça dönüşü, göğüs ters dönüşü, kalça yuvarlanma, yanal salınım, adım genişliği, topuk basma, parmak itiş
 const GAIT = [
-  [0, 0.8, 0.66, 0, 0, 0, 0, 0.02, 0, -0.12, 0, 0, 0, 0, 1, 0, 0],
+  [0, 0.8, 0.66, 0, 0, 0, 0, 0.02, 0, -0.2, 0, 0, 0, 0, 1.15, 0, 0],
   [1.4, 0.93, 0.62, 0.085, 0, 0.012, 0.018, 0.04, 0.3, -0.3, 0.09, 0.1, 0.045, 0.02, 0.95, 0.3, 0.42],
   [2.6, 1.18, 0.46, 0.15, 0.05, 0.03, 0.028, 0.075, 0.42, -0.85, 0.1, 0.13, 0.04, 0.012, 0.75, 0.14, 0.5],
   [3.6, 1.38, 0.33, 0.22, 0.1, 0.042, 0.032, 0.11, 0.5, -1.3, 0.1, 0.15, 0.035, 0.008, 0.6, 0.06, 0.65],
@@ -652,8 +652,9 @@ export class CharacterModel {
     // yavaşça çekilir; kalkışta kalan fark salınım boyunca sönümlenir.
     let rdx = 0, rdz = 0;
     if (!tele) { const cr = Math.cos(ry - dy), sr = Math.sin(ry - dy); rdx = (rwx * cr - rwz * sr) / sc; rdz = (rwx * sr + rwz * cr) / sc; }
-    const lockOK = !tele && moving > 0.05 && W.air < 0.3 && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead;
-    const cdy = Math.cos(dy), sdy = Math.sin(dy), kp = 1 - Math.exp(-3 * dt);
+    // ayak yerdeyken her zaman kilitli (boşta da): kalkışta/çömelirken formül konumuna çekilip kaymasın
+    const lockOK = !tele && W.air < 0.3 && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead && !st.ride;
+    const cdy = Math.cos(dy), sdy = Math.sin(dy);
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;
       const p = fract(cyc + i * 0.5);
@@ -666,7 +667,9 @@ export class CharacterModel {
       } else {
         const w = (p - beta) / (1 - beta), e = w * w * (3 - 2 * w);
         along = c0 + travel * (-0.5 + e) - kick * Math.sin(Math.PI * w) * (1.15 - w) * moving;
-        y = lift * Math.pow(Math.sin(Math.PI * w), 0.9) * moving;
+        // salınım: yürüyüş kaldırması ya da ayağın gitmesi gereken mesafe kadar (yavaşta sürünmesin, adım atsın)
+        const need = F[i].need || 0, nl = need > 0.012 ? Math.min(0.085, 0.03 + need * 0.35) : 0;
+        y = Math.max(lift * moving, nl) * Math.pow(Math.sin(Math.PI * w), 0.9);
         pitch = (toeOff * (1 - smR(0, 0.55, w)) - heel * smR(0.6, 1, w) + 0.28 * run * Math.sin(Math.PI * w)) * moving;
         toe = 0.08 * moving;
       }
@@ -681,14 +684,14 @@ export class CharacterModel {
         else {
           // vücut döndü/ilerledi: dünyada sabit nokta vücut uzayında ters yöne gider
           const lx = Fk.lx * cdy - Fk.lz * sdy - rdx, lz = Fk.lx * sdy + Fk.lz * cdy - rdz;
-          Fk.lx = lx + (fx - lx) * kp; Fk.lz = lz + (fz - lz) * kp;
+          Fk.lx = lx; Fk.lz = lz;
           const ex = Fk.lx - fx, ez = Fk.lz - fz, el = Math.hypot(ex, ez);
-          if (el > 0.2) { Fk.lx = fx + ex / el * 0.2; Fk.lz = fz + ez / el * 0.2; }
+          if (el > 0.34) { Fk.lx = fx + ex / el * 0.34; Fk.lz = fz + ez / el * 0.34; }
         }
         fx = Fk.lx; fz = Fk.lz;
         Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along;
       } else {
-        if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; }
+        if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; Fk.need = Math.hypot(Fk.ox || 0, Fk.oz || 0); }
         // kilit bırakılınca kalan fark sönümlenir (sıçrama yok): kalkışta salınım boyunca, duruşta zamanla
         if (Fk.sw > 0 && Fk.ox !== undefined) {
           let k2;
@@ -737,8 +740,9 @@ export class CharacterModel {
       const a = armA * nrm * s; // + geri, - ileri
       const ax = a < 0 ? a : a * 0.62;
       const fwd = Math.max(0, -a) / Math.max(0.01, armA);
-      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run, 0.12 * run * fwd, 0.07 + 0.025 * this.rig.bk + 0.04 * run * (1 - fwd) + 0.1 * wc);
-      setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd, 0, 0);
+      // kollar gövdeye yapışmaz: omuz/kas genişliği kadar dışarıda (kaslı/iri gövdede daha açık)
+      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.1 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
+      setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd - 0.45 * wc, 0, 0);
       setJ(P, i ? J.wrR : J.wrL, -0.08 - 0.1 * run, 0, 0.05);
     }
     // nefes, boşta ağırlık aktarma
@@ -756,23 +760,27 @@ export class CharacterModel {
     this.idleLayer(dt, st, idle, twoH);
 
     // ---- 2) havada ----
+    if (st.air) this.airT = (this.airT || 0) + dt; else this.airT = 0;
     if (W.air > 0.001) {
+      // evreler: itiş (bacaklar gerilir, kollar yukarı savrulur) -> yükseliş (dizler toplanır) -> düşüş (bacaklar yere uzanır, kollar denge)
       Q.set(P);
       const up = clamp((st.vy || 0) / 5, -1, 1);
-      const rise = clamp(up * 0.5 + 0.5, 0, 1);
-      setJ(Q, J.hipL, -0.95 * rise - 0.35 * (1 - rise), 0, 0.06); setJ(Q, J.knL, 1.35 * rise + 0.45 * (1 - rise), 0, 0); setJ(Q, J.anL, 0.2, 0, 0);
-      setJ(Q, J.hipR, 0.2 * rise - 0.25 * (1 - rise), 0, 0.06); setJ(Q, J.knR, 0.55 * rise + 0.35 * (1 - rise), 0, 0); setJ(Q, J.anR, 0.35, 0, 0);
-      setJ(Q, J.shL, -0.5 * rise, 0, 0.35 + 0.35 * (1 - rise)); setJ(Q, J.shR, 0.25 * rise, 0, 0.35 + 0.35 * (1 - rise));
-      setJ(Q, J.elL, -0.7, 0, 0); setJ(Q, J.elR, -0.5, 0, 0);
-      addJ(Q, J.spine, 0.1 * rise, 0, 0);
+      const rise = clamp(up * 0.5 + 0.5, 0, 1), push = 1 - smR(0.05, 0.2, this.airT), fall = smR(0.1, -0.6, up);
+      const tk = rise * (1 - push);
+      setJ(Q, J.hipL, -0.95 * tk - 0.35 * fall - 0.15 * push, 0, 0.06); setJ(Q, J.knL, 1.35 * tk + 0.3 * fall + 0.12 * push, 0, 0); setJ(Q, J.anL, 0.2 + 0.35 * push, 0, 0);
+      setJ(Q, J.hipR, 0.2 * tk - 0.2 * fall + 0.25 * push, 0, 0.06); setJ(Q, J.knR, 0.55 * tk + 0.25 * fall + 0.2 * push, 0, 0); setJ(Q, J.anR, 0.35 + 0.4 * push, 0, 0);
+      setJ(Q, J.shL, -0.5 * tk - 1.2 * push, 0, 0.3 + 0.55 * fall); setJ(Q, J.shR, 0.25 * tk - 0.9 * push, 0, 0.3 + 0.55 * fall);
+      setJ(Q, J.elL, -0.7 + 0.3 * fall, 0, 0); setJ(Q, J.elR, -0.5 + 0.2 * fall, 0, 0);
+      addJ(Q, J.spine, 0.1 * tk - 0.08 * push + 0.08 * fall, 0, 0); addJ(Q, J.chest, -0.06 * push, 0, 0);
       mixP(P, Q, W.air);
       lock -= W.air;
     }
     // iniş esnemesi: pelvis çöker, IK dizleri büker
     if (this.landT < 0.6) {
       const a = this.landK * Math.exp(-this.landT * 7) * Math.min(1, this.landT * 30);
-      pel.y -= 0.2 * a;
-      addJ(P, J.spine, 0.25 * a, 0, 0); addJ(P, J.shL, 0, 0, 0.25 * a); addJ(P, J.shR, 0, 0, 0.25 * a);
+      pel.y -= 0.22 * a; pel.z -= 0.04 * a;
+      addJ(P, J.hips, 0.15 * a, 0, 0); addJ(P, J.spine, 0.25 * a, 0, 0); addJ(P, J.chest, 0.08 * a, 0, 0);
+      addJ(P, J.shL, -0.35 * a, 0, 0.3 * a); addJ(P, J.shR, -0.35 * a, 0, 0.3 * a); addJ(P, J.elL, -0.4 * a, 0, 0); addJ(P, J.elR, -0.4 * a, 0, 0);
     }
 
     // ---- 3) silah tutuşu (nişan almıyorken) ----
