@@ -67,10 +67,11 @@ export function engageRange(def, kind) {
 }
 
 export function copLook(r = lookRng) { return randomLook(r, 'police'); }
-export function swatLook(r = lookRng) { return Object.assign(randomLook(r, 'police'), { top: 'jacket', topColor: '#1a1a1a', pantsColor: '#1a1a1a', hat: 'bere', hatColor: '#111111', glasses: true, shoes: 'boots', gender: 'm' }); }
-export function soldierLook(r = lookRng) { return Object.assign(randomLook(r, 'gang'), { top: 'jacket', topColor: '#4a5a30', shirtColor: '#3a4626', pants: 'slacks', pantsColor: '#3f4c2a', shoes: 'boots', shoesColor: '#2a2018', hat: 'bere', hatColor: '#3a4a28', chain: false, glasses: false, beard: 'stubble', hair: 'kisa', gender: 'm' }); }
+// [karakter] üniformalar character.js'de: taktik/kamuflaj kıyafet + görünür kask ve çelik yelek (look.helmet / look.vest)
+export function swatLook(r = lookRng) { return randomLook(r, 'swat'); }
+export function soldierLook(r = lookRng) { return randomLook(r, 'soldier'); }
 // [savaş] jandarma: daha koyu yeşil üniforma
-export function jandarmaLook(r = lookRng) { return Object.assign(soldierLook(r), { topColor: '#3c4a2c', pantsColor: '#36422a', hatColor: '#2e3a22', beard: 'mustache' }); }
+export function jandarmaLook(r = lookRng) { return randomLook(r, 'jandarma'); }
 
 // [savaş] teçhizat: kask + çelik yelek (kemiklere takılan basit ağlar; geometri/malzeme paylaşılır)
 const GEAR = {};
@@ -98,8 +99,11 @@ function gearParts() {
   return GEAR;
 }
 export function equipGear(n, type) {
-  const G = gearParts(), M = n.model;
+  const M = n.model;
   if (!M || M.gear) return;
+  // [karakter] teçhizat karakter ağının parçası (tek draw call); bayraklar look.helmet / look.vest
+  if (M.setGear) { M.setGear(type === 'swat' ? 'swat' : type === 'jandarma' ? 'jandarma' : 'army'); M.gear = true; return; }
+  const G = gearParts();
   const hm = new THREE.Mesh(G.helmet, G.mat[type] || G.mat.army);
   hm.position.set(0, 0.105, 0.005); hm.castShadow = true;
   M.head.add(hm);
@@ -1350,6 +1354,7 @@ export class NPCManager {
   }
 
   add(kind, x, z, look, opts) {
+    if (!look && kind === 'civilian') { const d = districtAt(x, z); look = randomLook(lookRng, 'civilian', null, d && d.id); } // [karakter] semte uygun giyim
     const n = new NPC(this.game, kind, look, opts);
     n.pos.set(x, opts && opts.y || 0, z);
     n.heading = opts && opts.heading !== undefined ? opts.heading : Math.random() * Math.PI * 2;
@@ -1437,8 +1442,7 @@ export class NPCManager {
     if (gangHere && Math.random() < 0.12 && !g.state.territories[d.gang]) {
       const n = 2 + Math.floor(Math.random() * 3);
       for (let i = 0; i < n; i++) {
-        const look = randomLook(lookRng, 'gang');
-        look.topColor = gangHere.color;
+        const look = randomLook(lookRng, 'gang', d.gang); // [karakter] çeteye özgü tarz (renk, ceket, bandana)
         const m = this.add('gang', s.x + Math.random() * 3 - 1.5, s.z + Math.random() * 3 - 1.5, look, { gang: d.gang, state: 'guard', home: new THREE.Vector3(s.x + i * 1.2, 0, s.z) });
         m.faceYaw = Math.random() * 6.28;
       }

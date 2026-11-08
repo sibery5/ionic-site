@@ -16,8 +16,8 @@ export const SKIN_TONES = ['#f1d0b5', '#e0b493', '#c99572', '#a8754f', '#7d5236'
 export const HAIR_COLORS = ['#1a1410', '#3b2a1e', '#6b4a2e', '#a07040', '#d8b070', '#8a8a8a', '#5a1a10'];
 // karakter yaratıcısının eski listesi (geri uyum); tüm stiller HAIR_STYLES_ALL'da
 export const HAIR_STYLES = ['kisa', 'arkaya', 'kel', 'uzun', 'kivircik', 'at_kuyrugu'];
-export const HAIR_STYLES_ALL = ['kisa', 'arkaya', 'yan_ayrik', 'asker', 'kel', 'kivircik', 'uzun', 'dalgali', 'kare', 'at_kuyrugu', 'topuz'];
-export const HAIR_STYLE_NAMES = { kisa: 'Kısa', arkaya: 'Arkaya', yan_ayrik: 'Yandan ayrık', asker: 'Asker tıraşı', kel: 'Kel', kivircik: 'Kıvırcık', uzun: 'Uzun', dalgali: 'Dalgalı', kare: 'Kâküllü kare', at_kuyrugu: 'At kuyruğu', topuz: 'Topuz' };
+export const HAIR_STYLES_ALL = ['kisa', 'arkaya', 'yan_ayrik', 'fade', 'asker', 'kel', 'kivircik', 'uzun', 'dalgali', 'kare', 'at_kuyrugu', 'topuz'];
+export const HAIR_STYLE_NAMES = { kisa: 'Kısa', arkaya: 'Arkaya', yan_ayrik: 'Yandan ayrık', fade: 'Yanlar kısa', asker: 'Asker tıraşı', kel: 'Kel', kivircik: 'Kıvırcık', uzun: 'Uzun', dalgali: 'Dalgalı', kare: 'Kâküllü kare', at_kuyrugu: 'At kuyruğu', topuz: 'Topuz' };
 export const BEARDS = ['none', 'stubble', 'mustache', 'full'];
 export const BEARDS_ALL = ['none', 'stubble', 'mustache', 'keci', 'full'];
 export const BEARD_NAMES = { none: 'Yok', stubble: 'Kirli', mustache: 'Bıyık', keci: 'Keçi sakalı', full: 'Gür' };
@@ -72,13 +72,53 @@ const ARCHETYPES = [
   ['turist_yasli', 'x', (r, L) => Object.assign(L, { age: r.float(0.75, 1), skin: '#f1d0b5', top: 'polo', topColor: pick(r, COL.pastel), pants: 'shorts', pantsColor: '#c9b48a', shoes: 'sneaker', shoesColor: '#eeeeee', hat: 'panama', hatColor: '#e8dcc0', camera: true, hairColor: '#cccccc', hair: L.gender === 'f' ? 'kare' : 'kel', glasses: true, glassesStyle: 'readers' })],
   ['universiteli', 'f', (r, L) => Object.assign(L, { age: 0, top: pick(r, ['sweater', 'denim']), topColor: pick(r, COL.pastel.concat(COL.denim)), pants: pick(r, ['jeans', 'skirt']), pantsColor: pick(r, COL.denim), shoes: pick(r, ['sneaker', 'boots']), shoesColor: pick(r, ['#eeeeee', '#3a2412']), hair: pick(r, ['uzun', 'kare', 'kivircik', 'dalgali']), glasses: r.chance(0.5), glassesStyle: 'readers', bag: r.chance(0.5) ? 'bag1' : null, bagColor: pick(r, COL.earth) })],
   ['kapali_genc', 'f', (r, L) => Object.assign(L, { age: 0, top: pick(r, ['hoodie', 'denim', 'pardesu']), topColor: pick(r, COL.pastel.concat(COL.dark)), pants: 'jeans', pantsColor: pick(r, COL.denim), shoes: 'sneaker', shoesColor: '#eeeeee', hat: 'basortusu', hatColor: pick(r, COL.scarf), bag: r.chance(0.5) ? 'bag1' : null, bagColor: pick(r, COL.bright) })],
+  // 1.4: yazlık / modern / kapalı giyim çeşitliliği
+  ['yazlik_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: pick(r, ['tank', 'crop', 'tshirt', 'tank']), topColor: pick(r, COL.pastel.concat(COL.bright)), pants: pick(r, ['shorts', 'minishort', 'mini', 'jeans']), pantsColor: pick(r, COL.denim.concat(['#e8e8e8', '#c9b48a'])), shoes: pick(r, ['sandal', 'sneaker', 'flats']), shoesColor: pick(r, ['#c9a070', '#eeeeee', '#3a2412']), hair: pick(r, ['uzun', 'at_kuyrugu', 'dalgali', 'topuz']), glasses: r.chance(0.5), glassesStyle: 'glasses', bag: r.chance(0.5) ? 'handbag' : null, bagColor: pick(r, ['#c9a070', '#e8e0d0', '#8a1a1a']), earrings: r.chance(0.6) ? pick(r, ['hoop', 'stud']) : null })],
+  ['elbiseli', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.45), top: pick(r, ['dress', 'sundress', 'dress']), dressLen: pick(r, ['mini', 'knee', 'midi', 'long']), topColor: pick(r, COL.bright.concat(COL.pastel, ['#1a1a1a'])), accentColor: pick(r, ['#1a1a1a', '#d4af37', '#f0f0f0']), shoes: pick(r, ['heels', 'flats', 'sandal']), shoesColor: pick(r, ['#111111', '#c9a070', '#8a1a1a']), hair: pick(r, ['uzun', 'dalgali', 'topuz', 'kare']), makeup: true, bag: r.chance(0.7) ? 'handbag' : null, bagColor: pick(r, ['#111111', '#3a2412', '#c9a070']), earrings: r.chance(0.7) ? pick(r, ['hoop', 'stud']) : null })],
+  ['sporcu_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: pick(r, ['crop', 'tank', 'track']), topColor: pick(r, COL.bright.concat(COL.dark)), pants: 'leggings', pantsColor: pick(r, ['#111111', '#1a1a2a', '#3a3a4a', '#5a2d5a']), shoes: 'sneaker', shoesColor: pick(r, ['#eeeeee', '#c84a6a']), hair: pick(r, ['at_kuyrugu', 'topuz']), watch: 'digital', body: 'slim' })],
+  ['sik_genc_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.35), top: pick(r, ['blouse', 'blouse', 'sweater']), topColor: pick(r, COL.pastel.concat(['#f0f0f0', '#1a1a1a'])), pants: pick(r, ['midi', 'jeans', 'slacks', 'skirt']), pantsColor: pick(r, COL.dark.concat(COL.denim, ['#c9b48a'])), shoes: pick(r, ['flats', 'heels', 'boots']), shoesColor: pick(r, ['#111111', '#3a2412']), hair: pick(r, ['uzun', 'kare', 'dalgali']), makeup: true, bag: 'handbag', bagColor: pick(r, ['#111111', '#3a2412', '#8a6a4a']), earrings: 'stud', watch: r.chance(0.5) ? 'steelwatch' : null })],
+  ['tesettur', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.7), top: 'ferace', topColor: pick(r, ['#1a1a1a', '#2a2a3a', '#4a3a3a', '#3a4a4a', '#5a4a3a', '#2a3a2a']), pants: 'longskirt', pantsColor: '#1a1a1a', shoes: pick(r, ['loafer', 'flats']), shoesColor: '#111111', hat: 'basortusu', hatColor: pick(r, COL.scarf), bag: r.chance(0.4) ? 'handbag' : null, bagColor: '#1a1a1a' })],
+  ['yazlik_e', 'm', (r, L) => Object.assign(L, { age: r.float(0, 0.5), top: pick(r, ['tank', 'tshirt', 'polo']), topColor: pick(r, COL.pastel.concat(COL.bright)), pants: 'shorts', pantsColor: pick(r, ['#c9b48a', '#2a3550', '#6a6a5a']), shoes: pick(r, ['sandal', 'sneaker']), shoesColor: pick(r, ['#3a2412', '#eeeeee']), glasses: r.chance(0.5), glassesStyle: pick(r, ['glasses', 'aviator']), hat: r.chance(0.3) ? 'cap' : 'none', hatColor: pick(r, COL.bright) })],
+  ['bomberci', 'm', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: 'bomber', topColor: pick(r, ['#2a3a2a', '#1a1a1a', '#1d2440', '#5a4a3a']), accentColor: pick(r, ['#c86a1a', '#1a1a1a', '#8a1a1a']), pants: pick(r, ['jeans', 'cargo']), pantsColor: pick(r, COL.denim.concat(COL.dark)), shoes: pick(r, ['sneaker', 'boots', 'hightop']), shoesColor: pick(r, ['#eeeeee', '#1a1a1a']), hair: pick(r, ['fade', 'kisa', 'asker']), hat: r.chance(0.35) ? pick(r, ['bere', 'cap']) : 'none', hatColor: pick(r, COL.dark), beard: pick(r, ['stubble', 'none', 'keci']) })],
 ];
 export const ARCHETYPE_IDS = ARCHETYPES.map((a) => a[0]);
+// semte göre giyim: muhafazakâr semtlerde kapalı giyim, sahil/merkez semtlerde yazlık ve modern kıyafet ağırlıklı
+const DISTRICT_W = {
+  fatih: { tesettur: 3, basortulu: 3, hoca: 2.5, yasli_k: 2, yasli_e: 1.5, esnaf: 2, simitci: 2, yazlik_k: 0.25, elbiseli: 0.4, sporcu_k: 0.4, turist_e: 2, turist_k: 1.5 },
+  eyup: { tesettur: 3, basortulu: 3, hoca: 3, yasli_k: 2, yasli_e: 2, esnaf: 1.5, yazlik_k: 0.2, elbiseli: 0.3, sporcu_k: 0.3, yazlik_e: 0.4 },
+  uskudar: { tesettur: 2, basortulu: 2.5, hoca: 1.5, yasli_e: 1.5, balikci: 2, kapali_genc: 2, yazlik_k: 0.5, elbiseli: 0.7 },
+  beyoglu: { turist_e: 2.5, turist_k: 2.5, sanatci: 2.5, sik_kadin: 2, genc_sik: 2, sik_genc_k: 2, elbiseli: 1.5, bomberci: 1.5, garson: 1.5, tesettur: 0.4 },
+  besiktas: { ogrenci_e: 2, ogrenci_k: 2, universiteli: 2, sporcu_k: 2, yazlik_k: 1.6, yazlik_e: 1.5, bomberci: 2, is_adami: 1.5, is_kadini: 1.5, tesettur: 0.5 },
+  kadikoy: { yazlik_k: 2.2, yazlik_e: 2, elbiseli: 2, sanatci: 2, universiteli: 2, sporcu_k: 1.8, sik_genc_k: 2, bomberci: 1.5, balikci: 1.5, tesettur: 0.5 },
+};
+// vücut tipleri: çoğunluk orta, bir kısmı ince/iri/kaslı
+function pickBody(r, gender, age) {
+  const x = r.next();
+  if (gender === 'f') return x < 0.3 ? 'slim' : x < 0.82 ? 'average' : x < 0.95 ? 'heavy' : 'muscular';
+  if (age > 0.6) return x < 0.2 ? 'slim' : x < 0.65 ? 'average' : 'heavy';
+  return x < 0.2 ? 'slim' : x < 0.65 ? 'average' : x < 0.82 ? 'heavy' : 'muscular';
+}
+export function applyBodyType(L, type) {
+  const B = BODY_TYPES[type]; if (!B) return L;
+  L.body = type; L.build = B.build; L.fat = B.fat; L.muscle = B.muscle; L.shoulders = B.shoulders;
+  return L;
+}
+// teçhizat: savaş modülü actor.model.look.helmet / look.vest bayraklarını okur; setGear ile değişir
+export const GEAR_TYPES = ['swat', 'police', 'army', 'jandarma'];
+// çete giyim tarzları: renk, ceket, bandana, aksesuar (economy.GANGS anahtarları)
+const GANG_STYLE = {
+  yilanlar: (r, L) => Object.assign(L, { top: pick(r, ['track', 'bomber', 'hoodie']), topColor: pick(r, ['#2d8a3d', '#1a1a1a', '#1f5a28']), accentColor: '#2d8a3d', pants: pick(r, ['track', 'jeans']), pantsColor: '#141414', shoes: 'sneaker', shoesColor: pick(r, ['#eeeeee', '#1a1a1a']), bandana: r.chance(0.55) ? 'neck' : null, bandanaColor: '#2d8a3d', chain: r.chance(0.6), glasses: r.chance(0.5), glassesStyle: 'glasses', hair: pick(r, ['fade', 'asker', 'kisa']) }),
+  kartallar: (r, L) => Object.assign(L, { top: pick(r, ['leather', 'bomber', 'track']), topColor: pick(r, ['#111111', '#1a1a1a', '#e8e8e8']), accentColor: '#e8e8e8', shirtColor: '#f0f0f0', pants: 'jeans', pantsColor: '#141414', shoes: pick(r, ['sneaker', 'boots']), shoesColor: '#eeeeee', hat: r.chance(0.4) ? 'cap' : 'none', hatColor: '#e8e8e8', chain: r.chance(0.4), chainStyle: 'silverchain', hair: pick(r, ['fade', 'arkaya', 'kisa']) }),
+  carsi: (r, L) => Object.assign(L, { top: pick(r, ['suit', 'blazer', 'vest', 'leather']), topColor: pick(r, ['#3a2a1a', '#2a2420', '#4a3a2a']), shirtColor: pick(r, ['#c98a1a', '#e8dcc0', '#1a1a1a']), tieColor: '#c98a1a', pants: 'slacks', pantsColor: '#2a2420', shoes: 'polished', shoesColor: '#2a1a10', hat: r.chance(0.5) ? 'kasket' : 'none', hatColor: '#3a2a1a', chain: true, tespih: r.chance(0.7), tespihColor: '#c98a1a', beard: pick(r, ['mustache', 'full', 'mustache']), watch: 'goldwatch', ring: r.chance(0.5) ? 'ring' : null }),
+  bogaz: (r, L) => Object.assign(L, { top: pick(r, ['jacket', 'hoodie', 'bomber']), topStyle: null, topColor: pick(r, ['#1d6ec8', '#2a4a7a', '#1a2a4a']), accentColor: '#1d6ec8', pants: pick(r, ['jeans', 'cargo']), pantsColor: pick(r, ['#1e2a40', '#2a2a2a']), shoes: pick(r, ['sneaker', 'boots']), shoesColor: '#1a1a1a', hat: r.chance(0.45) ? pick(r, ['bere', 'bandana']) : 'none', hatColor: '#1a2a4a', bandanaColor: '#1d6ec8', glasses: r.chance(0.5), glassesStyle: 'aviator' }),
+  kurtlar: (r, L) => Object.assign(L, { top: pick(r, ['leather', 'bomber', 'leather']), topColor: pick(r, ['#1c1c1c', '#2a1a14']), accentColor: '#8a1a1a', shirtColor: '#8a1a1a', pants: pick(r, ['jeans', 'cargo']), pantsColor: '#1a1a1a', shoes: 'boots', shoesColor: '#1a1a1a', hat: r.chance(0.4) ? 'bandana' : 'none', bandanaColor: '#8a1a1a', bandana: r.chance(0.3) ? 'neck' : null, beard: pick(r, ['full', 'keci', 'full']), body: 'muscular' }),
+};
+export const GANG_STYLES = Object.keys(GANG_STYLE);
 const MALE_HAIR = ['kisa', 'arkaya', 'kel', 'kivircik', 'yan_ayrik', 'kisa', 'asker'];
 const FEMALE_HAIR = ['uzun', 'at_kuyrugu', 'kivircik', 'kare', 'topuz', 'dalgali', 'uzun'];
 
-export function randomLook(r, kind = 'civilian', archetype) {
-  const gender = r.chance(kind === 'civilian' ? 0.45 : 0.08) ? 'f' : 'm';
+export function randomLook(r, kind = 'civilian', archetype, district) {
+  const gender = r.chance(kind === 'civilian' ? 0.45 : kind === 'police' ? 0.15 : kind === 'gang' ? 0.08 : 0.04) ? 'f' : 'm';
   let L = defaultLook(gender);
   L.skin = r.pick(SKIN_TONES.slice(0, 5));
   L.hairColor = r.pick(HAIR_COLORS.slice(0, 5).concat(['#1a1410', '#3b2a1e']));
@@ -95,12 +135,20 @@ export function randomLook(r, kind = 'civilian', archetype) {
   L.shoes = r.pick(['sneaker', 'polished', 'boots', 'sneaker']);
   L.shoesColor = r.pick(['#1a1a1a', '#3a2412', '#eeeeee']);
   L.glasses = r.chance(0.1);
+  applyBodyType(L, pickBody(r, gender, L.age));
+  if (gender === 'f' && r.chance(0.35)) L.earrings = r.chance(0.5) ? 'hoop' : 'stud';
   if (kind === 'civilian') {
-    // arketip: cinsiyete uygun olandan seç
+    // arketip: cinsiyete uygun olandan seç (semt varsa ağırlıklı)
     let a = archetype ? ARCHETYPES.find((x) => x[0] === archetype) : null;
-    if (!a) { const pool = ARCHETYPES.filter((x) => x[1] === 'x' || x[1] === gender); a = pool[Math.floor(r.next() * pool.length)]; }
+    if (!a) {
+      const pool = ARCHETYPES.filter((x) => x[1] === 'x' || x[1] === gender), dw = DISTRICT_W[district] || {};
+      let tot = 0; for (const x of pool) tot += dw[x[0]] !== undefined ? dw[x[0]] : 1;
+      let q = r.next() * tot; a = pool[pool.length - 1];
+      for (const x of pool) { q -= dw[x[0]] !== undefined ? dw[x[0]] : 1; if (q <= 0) { a = x; break; } }
+    }
     if (a[1] !== 'x' && a[1] !== gender) { L = Object.assign(L, defaultLook(a[1]), { skin: L.skin, eyeColor: L.eyeColor, height: L.height, build: L.build, hairColor: L.hairColor }); L.hair = a[1] === 'f' ? r.pick(FEMALE_HAIR) : r.pick(MALE_HAIR); L.beard = a[1] === 'f' ? 'none' : r.pick(BEARDS_ALL); }
     a[2](r, L);
+    if (L.body && BODY_TYPES[L.body] && (a[0] === 'sporcu_k')) applyBodyType(L, L.body);
     if (!L.pantsColor) L.pantsColor = L.topColor;
     L.archetype = a[0];
     if (L.gender === 'f') L.beard = 'none';
@@ -108,7 +156,24 @@ export function randomLook(r, kind = 'civilian', archetype) {
     const v = r.next();
     Object.assign(L, { top: 'police', topStyle: v < 0.45 ? 'police' : v < 0.85 ? 'police_shirt' : 'police_vest', topColor: '#1d2f5a', shirtColor: '#a8c0e0', pants: 'slacks', pantsColor: '#1a2440', shoes: 'boots', shoesColor: '#111111', hat: r.chance(0.8) ? 'police' : 'none', hatColor: r.chance(0.15) ? '#e8e8e8' : '#1a2440', glasses: r.chance(0.25), glassesStyle: 'aviator', age: r.float(0, 0.45), fat: r.chance(0.2) ? 0.4 : 0, beard: gender === 'f' ? 'none' : r.pick(['none', 'stubble', 'mustache']) });
     if (L.topStyle === 'police_shirt' || L.topStyle === 'police_vest') L.topColor = '#a8c0e0';
+    if (L.topStyle === 'police' && r.chance(0.35)) L.vest = 'police'; // devriye: bazılarında çelik yelek
     if (gender === 'f') L.hair = r.pick(['topuz', 'at_kuyrugu']);
+  } else if (kind === 'swat' || kind === 'soldier' || kind === 'army' || kind === 'jandarma') {
+    // üniforma + kask + çelik yelek (görünür teçhizat; savaş modülü look.helmet / look.vest okur)
+    const t = kind === 'soldier' ? 'army' : kind;
+    Object.assign(L, { top: t, topStyle: null, pants: t === 'swat' ? 'tactical' : 'camo', camo: t, pantsColor: t === 'swat' ? '#16181a' : '#3f4c2a', shoes: 'boots', shoesColor: t === 'swat' ? '#0e0e0e' : '#2a2018',
+      helmet: t, vest: t, visor: t === 'swat' && r.chance(0.5), gloves: t === 'swat' || r.chance(0.4) ? (t === 'swat' ? '#121212' : '#2e3420') : null,
+      hat: 'none', glasses: t === 'swat' && r.chance(0.3), glassesStyle: 'glasses', chain: false, tespih: false, bag: null, earrings: null,
+      hair: gender === 'f' ? 'topuz' : r.pick(['asker', 'kisa', 'fade']), beard: gender === 'f' ? 'none' : t === 'jandarma' ? r.pick(['mustache', 'stubble']) : r.pick(['none', 'stubble']), age: r.float(0, 0.3) });
+    applyBodyType(L, r.chance(0.5) ? 'muscular' : 'average');
+  } else if (kind === 'gang' && GANG_STYLE[archetype]) {
+    // çeteye özgü tarz (archetype = çete anahtarı)
+    Object.assign(L, { beard: r.pick(['stubble', 'full', 'mustache', 'keci']), hair: r.pick(['asker', 'kisa', 'arkaya', 'kel', 'fade']), age: r.float(0, 0.35), hat: 'none' });
+    applyBodyType(L, r.chance(0.5) ? 'muscular' : r.chance(0.5) ? 'heavy' : 'average');
+    GANG_STYLE[archetype](r, L);
+    if (L.body && BODY_TYPES[L.body]) applyBodyType(L, L.body);
+    L.gang = archetype;
+    if (gender === 'f') { L.beard = 'none'; L.hair = r.pick(['at_kuyrugu', 'uzun', 'topuz']); }
   } else if (kind === 'gang') {
     // çete stilleri (topColor çağıran tarafından çete rengine çevrilir)
     const st = r.pick(['leather', 'track', 'suit', 'hoodie', 'shirt', 'denim']);
@@ -342,6 +407,14 @@ export class CharacterModel {
   }
 
   setLook(look) { this.look = { ...look }; this.build(); }
+  // [savaş/karakter] görünür teçhizat: type 'swat'|'police'|'army'|'jandarma'; o = {helmet, vest} (false = çıkar)
+  setGear(type, o = {}) {
+    const L = this.look, h = o.helmet === undefined ? type : o.helmet ? (typeof o.helmet === 'string' ? o.helmet : type) : null, v = o.vest === undefined ? type : o.vest ? (typeof o.vest === 'string' ? o.vest : type) : null;
+    if ((L.helmet || null) === h && (L.vest || null) === v) return;
+    L.helmet = h; L.vest = v; this.build();
+  }
+  get hasHelmet() { return !!this.look.helmet; }
+  get hasVest() { return !!this.look.vest; }
 
   setWeapon(id) {
     if (this.weaponId === id) return;
