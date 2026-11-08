@@ -80,8 +80,14 @@ module.exports = async (p, out) => {
     pl.hp = 100; pl.armor = 100; sim(1.2);
     const vestOn = !!pl.model._vest && pl.model._vest.visible;
     fire(); const vestHit = Math.round(100 - pl.hp);
-    g.npcs.remove(n);
-    pl.hp = 30; pl.bleed = 0; pl.lastHurtT = 0; sim(12);
+    // yenilenme: çevrede saldıran kalmasın (önceki adımlar aranma seviyesi açmış olabilir)
+    for (const m of [...g.npcs.list]) g.npcs.remove(m);
+    g.wanted.reset(); g.npcs.spawnT = 999;
+    const hurt = {}; const td = pl.takeDamage.bind(pl);
+    pl.takeDamage = (a, b, kind, ...r) => { hurt[kind] = Math.round((hurt[kind] || 0) + a); return td(a, b, kind, ...r); };
+    pl.hp = 30; pl.bleed = 0; pl.lastHurtT = 0; C.bleeding.length = 0; sim(12);
+    delete pl.takeDamage;
+    console.log('yenilenme sırasında hasar:', JSON.stringify(hurt), 'kanama', pl.bleed);
     const regen = Math.round(pl.hp);
     pl.god = true; pl.hp = 100; pl.armor = 0;
     return { burstHp, vestOn, vestHit, regenTo: regen };
