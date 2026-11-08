@@ -88,6 +88,49 @@ export const WEAPONS = {
 };
 export const WEAPON_ORDER = ['fists', 'knife', 'bat', 'pistol', 'kilic', 'revolver', 'kartal', 'uzi', 'akrep', 'shotgun', 'cifte', 'ak', 'm4', 'tufan', 'sniper', 'bozkurt', 'rpg', 'simsek', 'grenade'];
 
+// ---------------- [savaş] yüzey dokuları (kodla): fırçalanmış metal, fosfat kaplama, polimer kumlama ----------------
+function canvasTex(size, draw, srgb = false) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); draw(g, size);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let rnd = 12345;
+const r01 = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
+// pürüzlülük: ince yatay işleme çizgileri + seyrek parlak aşınma lekeleri (kenar/yüzey kullanım izi)
+function brushedTex() {
+  return canvasTex(256, (g, n) => {
+    g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 900; i++) { const y = r01() * n, v = 110 + r01() * 90 | 0; g.fillStyle = `rgba(${v},${v},${v},0.35)`; g.fillRect(r01() * n, y, 20 + r01() * 120, 1); }
+    for (let i = 0; i < 40; i++) { const v = 60 + r01() * 40 | 0; g.fillStyle = `rgba(${v},${v},${v},0.5)`; g.beginPath(); g.ellipse(r01() * n, r01() * n, 2 + r01() * 10, 1 + r01() * 3, r01() * 3, 0, Math.PI * 2); g.fill(); }
+  });
+}
+// polimer: ince kumlama (kabza dokusu) — kabartma haritası
+function stippleTex() {
+  return canvasTex(256, (g, n) => {
+    g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 9000; i++) { const v = r01() < 0.5 ? 90 : 170; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(r01() * n, r01() * n, 1 + (r01() * 2 | 0), 1 + (r01() * 2 | 0)); }
+  });
+}
+// fosfat (parkerize) kaplama: hafif lekeli renk
+function parkerTex() {
+  return canvasTex(128, (g, n) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 2500; i++) { const v = 205 + r01() * 50 | 0; g.fillStyle = `rgb(${v},${v},${v - 4})`; g.fillRect(r01() * n, r01() * n, 1 + r01() * 3, 1 + r01() * 3); }
+  }, true);
+}
+// kutu izdüşümlü UV: her yüz baskın normal eksenine göre (dokular tüm parçalarda aynı ölçekte, gerilmesiz)
+function boxUV(geo, k = 22) {
+  const P = geo.attributes.position, N = geo.attributes.normal, uv = new Float32Array(P.count * 2);
+  for (let i = 0; i < P.count; i++) {
+    const ax = Math.abs(N.getX(i)), ay = Math.abs(N.getY(i)), az = Math.abs(N.getZ(i));
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    if (ax >= ay && ax >= az) { uv[i * 2] = z * k; uv[i * 2 + 1] = y * k; } else if (ay >= az) { uv[i * 2] = z * k; uv[i * 2 + 1] = x * k; } else { uv[i * 2] = x * k; uv[i * 2 + 1] = y * k; }
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
 // ---------------- malzemeler (tembel oluşturulur) ----------------
 let M = null;
 function mats() {
@@ -114,6 +157,14 @@ function mats() {
     redDot: new THREE.MeshBasicMaterial({ color: 0xff2a1a }),
     white: std({ color: 0xf2f2f2, metalness: 0, roughness: 0.4, emissive: 0x333333 }),
   };
+  // [savaş] metal: işleme izli pürüzlülük; polimer: kumlama kabartması; fosfat: lekeli renk
+  if (typeof document !== 'undefined') {
+    const br = brushedTex(), st = stippleTex(), pk = parkerTex();
+    for (const k of ['gunmetal', 'blued', 'steel', 'chrome', 'blade', 'gold', 'brass']) { M[k].roughnessMap = br; M[k].needsUpdate = true; }
+    M.parker.map = pk; M.parker.roughnessMap = br; M.olive.map = pk; M.fde.map = pk;
+    for (const k of ['polymer', 'rubber', 'olive', 'fde']) { M[k].bumpMap = st; M[k].bumpScale = 0.8; M[k].needsUpdate = true; }
+    M.parker.needsUpdate = true;
+  }
   return M;
 }
 
@@ -617,7 +668,9 @@ function getDef(id) {
   const parts = [];
   for (const [k, list] of Object.entries(d.parts)) {
     if (!list || !list.length) continue;
-    parts.push({ geo: merge(list), mat: m[k] || m.gunmetal });
+    const geo = merge(list);
+    if (k !== 'wood' && k !== 'darkWood' && k !== 'batWood') boxUV(geo); // ahşap kendi damar UV'sini korur
+    parts.push({ geo, mat: m[k] || m.gunmetal });
   }
   const out = { parts, muzzle: d.muzzle, ejector: d.ejector };
   CACHE.set(id, out);
