@@ -28,6 +28,11 @@ Masaüstü: `npx electron .` · Windows kurulum: `npm run dist:win`.
   (combat.nearMiss her atışta bir kez çağırır), `combat.trafficPanic` (silah sesinde sürücüler), `animals.onBullet`.
   Kolluk/asker `engageRange` etkili menzilinin ötesinde ateş etmez; `npc._face` ayarlıyken yol bulma tehdide dönük yürütür.
 - `ui/` ui (HUD, menüler, dükkânlar), icons (SVG)
+- Hikâye 1.4: `game/story_acts.js` (yeni görevler, 6 perde), `game/baba.js` (Reis ile güven/şüphe `storyFlags.trust/susp`,
+  görev notu, görev sonu çağrısı, konakta değerlendirme + yeni iş sahnesi; `missions.baba`). Eski kayıt: `missions.syncStoryIndex()`
+  yeni ('added') görevleri oyuncunun geçtiği yerin önündeyse atlar.
+- Telefon: `ui/phone.js` (`game.phone.notify(başlık, metin, {from, kind, silent})` → Mesajlar + kayan bildirim; `game.phone.open(app)`).
+  Büyük harita / mini harita tabanı: `ui/bigmap.js` (`mapBase(game)` önbellekli 2048 tuval).
 - `main.js` Game sınıfı: tüm sistemleri bağlar; `game.updateGame(dt,t)` her kare.
 
 ## Game nesnesi API (sık kullanılanlar)

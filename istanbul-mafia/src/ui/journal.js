@@ -45,6 +45,10 @@ const CSS = `
 .jr-heart span { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.08); }
 .jr-heart span.on { background: linear-gradient(90deg, #ff4a8a, #ff9ac8); }
 .jr-av { width: 46px; height: 46px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font: 900 20px var(--serif); color: #1a0a10; }
+.jr-meter { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 11px; color: #c9b88e; }
+.jr-meter span { width: 46px; } .jr-meter em { width: 24px; text-align: right; font-style: normal; color: #fff; }
+.jr-meter i { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.jr-meter i b { display: block; height: 100%; border-radius: 4px; transition: width 0.4s; }
 .jr-empty { text-align: center; padding: 24px 10px; color: #8a7e68; font-size: 12px; }
 .jr-keys { text-align: center; font-size: 10px; color: #6a6258; padding: 4px 0 2px; }
 `;
@@ -122,19 +126,38 @@ export const JournalMethods = {
       const def = STORY[s.storyIndex];
       const card = el('div', 'jr-card hot');
       if (def) {
-        const giver = def.call || def.giver || (M.flag('reisWounded') && !M.flag('reisBack') ? 'Leyla' : 'Reis Baba');
-        card.innerHTML = `<div class="k">Sıradaki · ${esc(ACTS[def.act] || '')}</div><h3>${esc(def.title)}</h3><div class="jr-obj">${def.call ? `${esc(def.call)} seni arayacak` : `${esc(giver)} ile konakta konuş`}</div><p>${esc(def.short || '')}</p><div class="jr-meta"><span>Görev ${s.storyIndex + 1}/${STORY.length}</span><span>${formatMoney(def.reward)}</span></div>`;
+        const giver = M.baba ? M.baba.giver() : 'Reis Baba';
+        const gate = M.baba ? M.baba.gate(def) : { ok: true };
+        card.innerHTML = `<div class="k">Sıradaki · ${esc(ACTS[def.act] || '')}</div><h3>${esc(def.title)}</h3><div class="jr-obj">${gate.ok ? `${esc(giver)} seni konakta bekliyor` : `Kilitli: Reis'in güveni ${M.baba.trust}/${def.needTrust || '?'} — kontrat panosundan iş al`}</div><p>${esc(def.short || '')}</p><div class="jr-meta"><span>Görev ${s.storyIndex + 1}/${STORY.length}</span><span>${formatMoney(def.reward)}</span></div>`;
         const row = el('div', 'jr-row');
-        row.appendChild(B('Rota: Reis\'in konağı', () => { const k = g.map.nearestOfType('konak', 0, 0); if (k) { g.setGps(k.door.x, k.door.z + k.door.nz * 1.5); M.blinkUntil = performance.now() + 10000; } this.closeModal(m); }, 'gold'));
+        row.appendChild(B('Rota: konak', () => { const k = g.map.nearestOfType('konak', 0, 0); if (k) { g.setGps(k.door.x, k.door.z + k.door.nz * 1.5); M.blinkUntil = performance.now() + 10000; } this.closeModal(m); }, 'gold'));
         card.appendChild(row);
       } else card.innerHTML = '<div class="k">Hikâye</div><h3>İstanbul senin</h3><p>Bütün hikâye görevleri tamamlandı. Görev arşivinden tekrar oynayabilirsin.</p>';
       c.appendChild(card);
     }
+    this.journalTrust(c);
     // şu anki diğer uğraşlar
     const busy = this.journalBusy();
     c.appendChild(el('h4', '', 'Şu an'));
     if (!busy.length) c.appendChild(el('div', 'jr-empty', 'Yan uğraş yok. Kontrat panosu güvenli evde ve çay ocaklarında.'));
     for (const b of busy) c.appendChild(el('div', 'jr-m cur', `<span class="dot">•</span><div><b>${esc(b[0])}</b><small>${esc(b[1])}</small></div>`));
+  },
+  // Reis ile ilişki: güven ve şüphe göstergesi (Reis devrildikten sonra "aile sadakati")
+  journalTrust(c) {
+    const M = this.game.missions;
+    if (!M.baba || !this.game.state) return;
+    const B = M.baba, f = M.flags, t = B.trust, s = B.susp;
+    const card = el('div', 'jr-card jr-trust');
+    if (f.babaDown) {
+      card.innerHTML = `<div class="k">Aile</div><h3>${esc(f.baba === 'sur' ? 'Reis sürgünde' : 'Reis toprağın altında')}</h3><p>${esc(f.baba === 'sur' ? 'Leyla sağ kolun. Konak senin.' : 'Cin Ali sağ kolun. Leyla gitti. Konak senin.')}</p>`;
+    } else {
+      const mood = t >= 75 ? 'Seni oğlu gibi görüyor' : t >= 45 ? 'Güveni artıyor' : 'Seni hâlâ tartıyor';
+      card.innerHTML = `<div class="k">Reis Baba ile ilişki</div><h3>${esc(mood)}</h3>
+        <div class="jr-meter"><span>Güven</span><i><b style="width:${t}%;background:linear-gradient(90deg,#8a6a1a,#f0d68a)"></b></i><em>${t}</em></div>
+        <div class="jr-meter"><span>Şüphe</span><i><b style="width:${s}%;background:linear-gradient(90deg,#6a1a1a,#ff5a46)"></b></i><em>${s}</em></div>
+        <p>${esc(s >= 60 ? 'Reis bir şeylerden şüpheleniyor. Adımlarına dikkat et.' : t >= 60 ? 'Reis sana artık en gizli işlerini veriyor.' : 'Temiz iş ve sadakat güveni artırır. Kontratlar da sayılır.')}</p>`;
+    }
+    c.appendChild(card);
   },
   journalBusy() {
     const g = this.game, side = g.missions.side, out = [];
@@ -157,7 +180,7 @@ export const JournalMethods = {
   journal_hikaye(c) {
     const g = this.game, s = g.state;
     let act = -1;
-    const done = s.completed.length;
+    const done = STORY.filter((d) => s.completed.includes(d.id)).length;
     c.appendChild(el('div', 'jr-card', `<div class="k">İlerleme</div><h3>${done}/${STORY.length} görev</h3><div class="jr-prog"><b style="width:${Math.round(done / STORY.length * 100)}%"></b></div><div class="jr-meta"><span>Saygınlık ${s.respect}</span><span>${formatMoney(s.money)}</span></div>`));
     STORY.forEach((def, i) => {
       if (def.act !== act) { act = def.act; c.appendChild(el('div', 'jr-act', esc(ACTS[act] || ''))); }
