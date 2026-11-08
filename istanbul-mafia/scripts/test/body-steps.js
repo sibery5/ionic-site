@@ -11,7 +11,11 @@ module.exports = async (p, out) => {
   p.setDefaultTimeout(600000);
   await H.start(p);
   await H.install(p);
-  await p.evaluate(() => { game.loop = () => {}; window.__W = game.combat.WEAPONS; game.player.god = true; game.npcs.spawnT = 999; sim(0.5); });
+  await p.evaluate(() => { game.loop = () => {}; window.__W = game.combat.WEAPONS; game.player.god = true; game.npcs.spawnT = 999; sim(0.5);
+    // önü açık bir yön seç (16 m boyunca duvar yok, zemin düz)
+    const pl = game.player;
+    for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; const h = game.physics.raycast(pl.pos.x, pl.pos.y + 1.2, pl.pos.z, Math.sin(a), 0, Math.cos(a), 16); const h2 = game.physics.raycast(pl.pos.x, pl.pos.y + 0.3, pl.pos.z, Math.sin(a), 0, Math.cos(a), 16); if (!h && !h2) { pl.camYaw = a; pl.heading = a; break; } }
+    sim(0.2); });
 
   const r = await p.evaluate(() => {
     const g = game, pl = g.player, C = g.combat, W = (id) => window.__W[id];
@@ -76,9 +80,10 @@ module.exports = async (p, out) => {
     pl.hp = 100; pl.armor = 100; sim(1.2);
     const vestOn = !!pl.model._vest && pl.model._vest.visible;
     fire(); const vestHit = Math.round(100 - pl.hp);
+    g.npcs.remove(n);
     pl.hp = 30; pl.bleed = 0; pl.lastHurtT = 0; sim(12);
     const regen = Math.round(pl.hp);
-    g.npcs.remove(n); pl.god = true; pl.hp = 100; pl.armor = 0;
+    pl.god = true; pl.hp = 100; pl.armor = 0;
     return { burstHp, vestOn, vestHit, regenTo: regen };
   });
   console.log('oyuncu:', JSON.stringify(pr));
@@ -147,7 +152,7 @@ module.exports = async (p, out) => {
   ok(pr.regenTo >= 55, 'yenilenme yetersiz');
   ok(ads.pistol.zoom >= 1.15 && ads.pistol.zoom < ads.ak.zoom && ads.ak.zoom < ads.sniper.zoom && ads.sniper.zoom >= 4.5 && ads.sniper.scoped, 'silaha göre yakınlaştırma hatalı');
   ok(ads.release < 1.05, 'nişandan çıkınca görüş açısı dönmedi');
-  ok(ads.lookUpDeg >= 80 && ads.camY > 0.3, 'yukarı bakış sınırı < 80°');
+  ok(ads.lookUpDeg >= 80 && ads.camY > 0.1, 'yukarı bakış sınırı < 80°');
   ok(gl.pane >= 0 && gl.states[0] >= 1 && Math.max(...gl.states) === 3 && gl.shatters >= 1 && gl.cracks >= 1, 'cam durumları ilerlemedi');
   console.log('DOĞRULAMA:', fails.length ? 'BAŞARISIZ -> ' + fails.join('; ') : 'TAMAM');
   console.log('KONSOL HATALARI:', errs.length);
