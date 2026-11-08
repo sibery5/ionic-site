@@ -15,7 +15,7 @@ module.exports = async (p, out) => {
   const br = await p.evaluate(() => {
     const g = game; g.vehicles.clear(); g.vehicles.spawnT = 999;
     const zc = -450, res = [];
-    for (const [x, s] of [[312, 1], [250, -1], [205, 1]]) {
+    for (const [x, s] of [[312, 1], [250, -1], [212, 1]]) {
       const pl = g.player; if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);
       const v = g.vehicles.add('sedan', x, zc - s * 2, s > 0 ? 0 : Math.PI); g.enterVehicle(v, true);
       let vmax = 0; hold('KeyW', true);

@@ -86,25 +86,26 @@ export function buildBridges(group, cols, city, quality = 'medium') {
     girderG.push(sweep('x', BOS_X0, BOS_X1, N, yf, zc, [[hw, -0.02], [hw + 0.25, -0.55], [hw - 3.2, -2.6], [-hw + 3.2, -2.6], [-hw - 0.25, -0.55], [-hw, -0.02]]));
     // bariyerler (yol kenarı çelik bariyer) ve dış korkuluk — uçlarda kavşak şeridine taşmaz: kesişen caddelerin
     // (x=190 ve x=435, 16 m) kaldırım kenarından başlar/biter; bariyer ucu dışa kıvrılan uç elemanıyla kapanır.
-    const BX0 = BAR_X0, BX1 = BAR_X1, NB = Math.round((BX1 - BX0) / 2.5);
+    // çelik bariyer trafik ışığı direğinin (kavşaktan ~13 m) ötesinden başlar; dış korkuluk kıyıdan önce başlar
+    const BX0 = BAR_X0, BX1 = BAR_X1, NB = Math.round((BX1 - BX0) / 2.5), BB0 = BAR_X0 + 5.5, BB1 = BAR_X1 - 5.5, NBB = Math.round((BB1 - BB0) / 2.5);
     for (const s of [-1, 1]) {
-      railG.push(sweep('x', BX0, BX1, NB, yf, zc, s > 0 ? [[9.25, 0.0], [9.25, 0.85], [9.45, 0.85], [9.45, 0.0]] : [[-9.45, 0.0], [-9.45, 0.85], [-9.25, 0.85], [-9.25, 0.0]]));
+      railG.push(sweep('x', BB0, BB1, NBB, yf, zc, s > 0 ? [[9.25, 0.0], [9.25, 0.85], [9.45, 0.85], [9.45, 0.0]] : [[-9.45, 0.0], [-9.45, 0.85], [-9.25, 0.85], [-9.25, 0.0]]));
       // W profilli çelik kuşak (bariyerin yol yüzü)
-      railG.push(sweep('x', BX0, BX1, NB, yf, zc, s > 0 ? [[9.18, 0.45], [9.18, 0.75], [9.25, 0.75], [9.25, 0.45]] : [[-9.25, 0.45], [-9.25, 0.75], [-9.18, 0.75], [-9.18, 0.45]]));
+      railG.push(sweep('x', BB0, BB1, NBB, yf, zc, s > 0 ? [[9.18, 0.45], [9.18, 0.75], [9.25, 0.75], [9.25, 0.45]] : [[-9.25, 0.45], [-9.25, 0.75], [-9.18, 0.75], [-9.18, 0.45]]));
       railG.push(sweep('x', BX0, BX1, NB, yf, zc, s > 0 ? [[hw - 0.12, 1.05], [hw - 0.12, 1.15], [hw - 0.02, 1.15]] : [[-hw + 0.02, 1.15], [-hw + 0.12, 1.15], [-hw + 0.12, 1.05]]));
       railG.push(sweep('x', BX0, BX1, NB, yf, zc, s > 0 ? [[hw - 0.1, 0.55], [hw - 0.1, 0.6], [hw - 0.05, 0.6]] : [[-hw + 0.05, 0.6], [-hw + 0.1, 0.6], [-hw + 0.1, 0.55]]));
       for (let x = BX0; x <= BX1 + 0.01; x += 2.5) railG.push(box(0.07, 1.15, 0.07, x, yf(x) + 0.575, zc + s * (hw - 0.07)));
       // uç elemanları: bariyer ucu yola değil kaldırıma doğru alçalarak kıvrılır
-      for (const [xe, dir] of [[BX0, -1], [BX1, 1]]) {
+      for (const [xe, dir] of [[BB0, -1], [BB1, 1]]) {
         const y = yf(xe);
-        railG.push(rod(xe, y + 0.85, zc + s * 9.35, xe + dir * 1.6, y + 0.1, zc + s * 10.2, 0.12, 6));
-        railG.push(box(0.35, 0.3, 0.35, xe + dir * 1.6, y + 0.15, zc + s * 10.2));
+        railG.push(rod(xe, y + 0.85, zc + s * 9.35, xe + dir * 1.6, y + 0.1, zc + s * 9.6, 0.12, 6));
+        railG.push(box(0.35, 0.3, 0.35, xe + dir * 1.6, y + 0.15, zc + s * 9.6));
       }
       // çarpışma: çelik bariyer (araçlar) + dış korkuluk (yayalar, araçlar); eğim boyunca 2.5 m'lik parçalar
       for (let x = BX0; x < BX1 - 0.01; x += 2.5) {
         const x2 = Math.min(BX1, x + 2.5), a = yf(x), b = yf(x2);
         const lo = Math.min(a, b) - 0.4, hiB = Math.max(a, b) + 1.0, hiR = Math.max(a, b) + 1.25;
-        BARRIERS.push(cols.add(x, zc + s * 9.35 - 0.16, x2, zc + s * 9.35 + 0.16, lo, hiB, 'bridgeBarrier'));
+        if (x2 > BB0 && x < BB1) BARRIERS.push(cols.add(Math.max(x, BB0), zc + s * 9.35 - 0.16, Math.min(x2, BB1), zc + s * 9.35 + 0.16, lo, hiB, 'bridgeBarrier'));
         BARRIERS.push(cols.add(x, zc + s * (hw - 0.07) - 0.14, x2, zc + s * (hw - 0.07) + 0.14, lo, hiR, 'bridgeRail'));
       }
     }
