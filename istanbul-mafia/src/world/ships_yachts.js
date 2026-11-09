@@ -112,7 +112,7 @@ export function yachtParts(type, hullColor = 0xf6f6f4, accent = 0x1a2a3a) {
   const zw0 = -L * 0.12, zw1 = L * (mega ? 0.2 : 0.14), nw = mega ? 5 : 3;
   for (let i = 0; i < nw; i++) {
     const z = zw0 + (zw1 - zw0) * (i + 0.5) / nw, u = uz(z), y = dk(u) - (mega ? 0.85 : 0.6);
-    for (const s of [-1, 1]) Gl.push(bare(new THREE.SphereGeometry(1, 12, 6).scale(0.05, mega ? 0.26 : 0.16, (zw1 - zw0) / nw * 0.42).translate(s * (hw(u) * (1 + 0.36 * 0.3 * Math.max(0, (u - 0.6) / 0.4)) + 0.005), y, z)));
+    for (const s of [-1, 1]) Gl.push(bare(new THREE.SphereGeometry(1, 12, 6).scale(0.05, mega ? 0.13 : 0.09, (zw1 - zw0) / nw * 0.36).translate(s * (hw(u) * (1 + 0.36 * 0.3 * Math.max(0, (u - 0.6) / 0.4)) + 0.005), y, z)));
   }
   // salon (ana güverte üst yapısı): eğik ön cam, arkada gölgelik çıkıntı
   const sw = B * (mega ? 0.8 : 0.78), z0 = -L * (mega ? 0.3 : 0.26), z1 = L * (mega ? 0.12 : 0.1), hS = mega ? 2.3 : 1.75;

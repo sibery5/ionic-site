@@ -104,11 +104,11 @@ module.exports = async (p, out) => {
     check('mega yat motoryattan geç döner (ağır)', r.megaDrive && r.yatDrive && r.megaDrive.maxYawRate < r.yatDrive.maxYawRate * 0.8, [r.megaDrive && r.megaDrive.maxYawRate, r.yatDrive && r.yatDrive.maxYawRate]);
     check('liman gemisine iskele merdiveniyle çıkılıp güvertede yürünür', r.ship.onDeck, r.ship);
     if (process.env.SHOTS === '1') {
-      await p.evaluate(() => { const g = game, pl = g.player; if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle); g.env.time = 17.6; pl.pos.set(207, 0, -628); pl.camYaw = -2.2; pl.camPitch = 0.12; pl.heading = pl.camYaw + Math.PI; sim(0.2); });
+      await p.evaluate(() => { const g = game, pl = g.player; if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle); g.env.time = 17.7; pl.swimming = false; pl.pos.set(215, 0, -572); pl.vy = 0; pl.camYaw = Math.PI - 0.25; pl.camPitch = 0.1; pl.heading = pl.camYaw; sim(0.4); });
       await H.shot(p, out + '-marina.png');
-      await p.evaluate(() => { const g = game, pl = g.player, v = (g.mooredBoats || []).find((b) => b.type === 'megayat' && g.vehicles.list.includes(b)); pl.pos.set(v.pos.x - 8, 0, v.pos.z + (v.pos.z > -620 ? -10 : 10) * 0 - 4.5); pl.camYaw = 2.3; pl.camPitch = 0.05; sim(0.2); });
+      await p.evaluate(() => { const g = game, pl = g.player, v = (g.mooredBoats || []).find((b) => b.type === 'megayat' && g.vehicles.list.includes(b) && b.moored); pl.pos.set(203, 0, v.pos.z - 2); pl.vy = 0; pl.camYaw = Math.PI / 2 + 0.15; pl.camPitch = 0.06; pl.heading = pl.camYaw; sim(0.4); });
       await H.shot(p, out + '-yacht.png');
-      await p.evaluate(() => { const g = game, pl = g.player, Hs = g.harborShip; pl.pos.set(Hs.cx - 70, 0, Hs.cz - 16); pl.camYaw = -2.0; pl.camPitch = 0.08; sim(0.2); });
+      await p.evaluate(() => { const g = game, pl = g.player, Hs = g.harborShip; pl.pos.set(Hs.cx - 78, 0, Hs.cz - 13); pl.vy = 0; pl.camYaw = Math.PI / 2 + 0.25; pl.camPitch = 0.04; pl.heading = pl.camYaw; sim(0.4); });
       await H.shot(p, out + '-harbor.png');
     }
   }
