@@ -1885,41 +1885,75 @@ export class Vehicle {
     if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65 && P.turbo) { const a = g.audio || audio; if (a.turbo) a.turbo(0.6); }
     this._thrPrev = throttle;
     this.rpm += (rpmT - this.rpm) * Math.min(1, dt * (this.shiftT > 0 ? 18 : 8));
-    // boylamsal kuvvetler (fren: ABS benzeri sabit yavaşlama, hız yükseldikçe biraz daha güçlü)
+    // ===== [B1 sürüş hissi] boylamsal: vites/devir tork eğrisi, çekiş sınırı, kademeli fren, ağırlık aktarımı =====
     const terrain = offRoad && !P.offroad ? 0.8 : 1;
+    const heavy = def.len > 6 || (def.mass || 0) > 6000;
+    const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
+    const muGrip = P.grip * wet * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
+    const muRoad = muGrip * 0.8; // yanal: binek ~1.05 g, spor ~1.35 g
+    // fren basıncı ~0.1 sn'de oluşur (ani duvar etkisi yok); ABS'li ~1.1 g, ağır araç daha zayıf
+    const brakeWant = throttle < 0 && fs > 0.5 ? -throttle : 0;
+    this.brakeP = (this.brakeP || 0) + (brakeWant - (this.brakeP || 0)) * Math.min(1, dt * (brakeWant > (this.brakeP || 0) ? 10 : 16));
+    this.brakeDecel = Math.min(muGrip * 0.85, heavy ? 7 : 10.5);
     if (throttle > 0) {
-      if (fs < -0.5) fs += 22 * throttle * dt;
+      if (fs < -0.5) fs += this.brakeDecel * throttle * dt; // geri giderken ileri gaz = fren
       else {
-        const torque = (1.2 - 0.35 * this.rpm) * (1 + (nG - 1 - this.gear) * 0.1);
-        fs += def.accel * terrain * throttle * torque * (this.shiftT > 0 ? 0.3 : 1) * Math.max(0, 1 - (fs / max) ** 2) * dt;
+        // vites çarpanı (1. vites güçlü, son vites zayıf) x devir tork eğrisi (orta devirde tepe) x hava direnci
+        const gm = 1.3 - 0.6 * (this.gear / Math.max(1, nG - 1));
+        const tq = 0.72 + 0.4 * Math.sin(Math.PI * clamp(this.rpm, 0.15, 1));
+        let a = def.accel * 0.5 * gm * tq * terrain * throttle * Math.max(0, 1 - (fs / max) ** 2);
+        if (this.shiftT > 0) a *= 0.08; // vites geçişinde gaz kesilir (duyulur ve hissedilir)
+        a = Math.min(a, muGrip * (P.rwd ? 0.8 : 0.72)); // çekiş sınırı (patinaj)
+        fs += a * dt;
       }
     } else if (throttle < 0) {
-      if (fs > 0.5) fs += (22 + Math.min(6, sp * 0.15)) * throttle * dt;
-      else if (fs > -max * 0.3) fs += def.accel * 0.6 * throttle * dt;
-    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (1.8 + (offRoad ? 1.5 : 0)) * dt);
-    if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), 7.5 * dt);
+      if (fs > 0.5) fs -= Math.min(fs, (this.brakeDecel + Math.min(1.5, sp * 0.04)) * this.brakeP * dt);
+      else if (fs > -max * 0.3) fs += def.accel * 0.35 * throttle * dt;
+    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (0.7 + sp * 0.012 + (offRoad ? 1.5 : 0)) * dt); // motor freni + yuvarlanma
+    if (throttle >= 0) this.brakeP *= Math.exp(-dt * 16);
+    // el freni: arka tekerlekler kilitlenir -> ~0.45 g yavaşlama (eskiden aracı olduğu yerde durduruyordu)
+    if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), (canDrive ? 3.2 : 7.5) * dt);
     fs -= fs * Math.abs(fs) * 0.0008 * dt;
-    // yanal tutunma (kayma açısı → sınırlı yanal kuvvet)
-    const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
-    let mu = P.grip * wet * (hb ? 0.33 : 1) * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
-    if (P.rwd && throttle > 0.5 && Math.abs(ls) > 2.5) mu *= 0.78;
+    // ağırlık aktarımı (yumuşatılmış boylamsal ivme, g): fren -> ön lastik yükü artar (dönüşe girer), gaz -> arka
+    const lAcc = clamp((fs - fs0) / Math.max(dt, 1e-3) / 9.81, -1.2, 1.2);
+    this.lt = (this.lt || 0) + (lAcc - (this.lt || 0)) * Math.min(1, dt * 8);
+    const front = clamp(1 - 0.28 * this.lt, 0.75, 1.3), rear = clamp(1 + 0.18 * this.lt, 0.8, 1.2);
+    // el freni sonrası tutunma kademeli döner (ani "yapışma" ile savrulma yok)
+    this.hbRec = hb && sp > 3 ? 0 : Math.min(1, (this.hbRec ?? 1) + dt * 2.2);
+    // yanal tutunma eğrisi: tepe kaymaya kadar tam, kayarken ~%82 (kontrol edilebilir kayma)
+    const slipPk = 1.4 + sp * 0.035, als = Math.abs(ls);
+    const curve = als <= slipPk ? 1 : 0.82 + 0.18 * Math.exp(-(als - slipPk) / 2.5);
+    let mu = muRoad * curve * (hb && sp > 3 ? 0.32 : 0.32 + 0.68 * this.hbRec) * rear;
+    if (P.rwd && throttle > 0.5 && this.gear <= 1 && als > 2) mu *= 0.8; // güçlü arkadan itiş: gazla kuyruk kayar
     const dls = clamp(-ls * P.cs * dt, -mu * dt, mu * dt);
     ls += dls;
-    // direksiyon ve dönüş
+    // direksiyon: hıza göre kilit açısı ve yumuşatma (düşük hızda nazik, yüksek hızda sakin), merkeze dönüş hızlı
     let wT;
     if (P.steer === 0) {
       // palet: yerinde dönebilir
       this.steerAng = steer;
       wT = steer * 0.8 * (fs < -0.3 ? -1 : 1) / (1 + sp / 25);
     } else {
-      const steerMax = P.steer / (1 + (fs * fs) / 700);
-      this.steerAng += (steer * steerMax - this.steerAng) * Math.min(1, dt * 7);
+      const steerMax = P.steer / (1 + (fs * fs) / 520);
+      const tgtA = steer * steerMax;
+      const engaging = Math.abs(tgtA) > Math.abs(this.steerAng) && Math.sign(tgtA || 1) === Math.sign(this.steerAng || tgtA || 1);
+      const tau = engaging ? 0.13 + sp * 0.006 : 0.07;
+      this.steerAng += (tgtA - this.steerAng) * Math.min(1, dt / tau);
       const wb = this.T ? this.T.wheelbase || def.len * 0.6 : def.len * 0.6;
       wT = (fs * Math.tan(this.steerAng)) / wb;
-      const wMax = (mu * 1.15) / Math.max(3, sp);
-      if (!hb) wT = clamp(wT, -wMax, wMax); else wT *= 1.5;
+      // ön lastik sınırı: frende daha keskin, gazda hafif önden kayma
+      const wMax = (muRoad * curve * front * 1.05) / Math.max(3, sp);
+      if (!hb || sp < 3) wT = clamp(wT, -wMax, wMax);
+      else {
+        // el freni kayması: kuyruk dışa açılır, direksiyon yönünde dönüş artar (sınırlı)
+        // kayma açısı ~40°'yi aşınca dönüş kendini sınırlar (tam tur atıp durmak yerine tutulabilir drift)
+        const slipA = Math.atan2(als, Math.max(1, Math.abs(fs)));
+        wT = clamp(wT * 1.3 + Math.sign(this.steerAng) * Math.min(0.5, sp * 0.025), -1.6, 1.6) * clamp(1 - (slipA - 0.45) / 0.3, 0, 1);
+      }
     }
-    this.yawRate += (wT - this.yawRate) * Math.min(1, dt * (hb ? 4 : 9));
+    // yaw tepkisi: düşük hızda çevik, yüksek hızda sönümlü (savrulmaz)
+    const yk = hb ? 5 : clamp(10 - sp * 0.15, 4.5, 10);
+    this.yawRate += (wT - this.yawRate) * Math.min(1, dt * yk);
     // [çarpışma] darbe kaynaklı ek açısal hız (vehicle_physics.js), lastik sürtünmesiyle söner
     const spin = this.spin || 0;
     this.heading += (this.yawRate + spin) * dt;
