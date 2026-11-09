@@ -96,7 +96,7 @@ export function buildMooredShips(game) {
     stacks.push({ z, top: dy + 1.3 + tiers * 2.6 });
   }
   // yan korkuluklar (borda boyunca, rıhtım tarafında iskele boşluğu)
-  const gx = -12; // iskele merdiveni yeri (yerel z)
+  const gx = 23; // iskele merdiveni yeri (yerel z): rıhtım usturmaçaları ve STS vinç bacaklarının arasında
   for (const s of [-1, 1]) {
     const x = s * (B / 2 - 0.35);
     if (s > 0) { railing(S, YEL, x, -L / 2 + 22, x, gx - 1.2, dy, 1.05, 1.6); railing(S, YEL, x, gx + 1.2, x, fz0, dy, 1.05, 1.6); }
@@ -156,7 +156,7 @@ export function buildMooredShips(game) {
   const tr = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.4), new THREE.MeshBasicMaterial({ map: signTexture('MERİDYEN · İSTANBUL', '#1e3a5c', '#f2f0ea', 512, 96) })); tr.position.set(0, dy - 0.8, -L / 2 - 0.05); tr.rotation.y = Math.PI; grp.add(tr);
   game.scene.add(grp);
   // gangway: dünya koordinatında (rıhtımda, gemiye paralel; x boyunca yükselir)
-  const qz = T.z1 - 1.1; // basamak hattı (rıhtım kenarına yakın)
+  const qz = T.z1 - 2.2; // basamak hattı (rıhtım kenarından geride; usturmaçalar serbest)
   const g0x = cx + gx - steps * 0.55 - 1.2;
   for (let i = 0; i < steps; i++) {
     const x = g0x + i * 0.55, y = (i + 1) * rise;
@@ -165,7 +165,7 @@ export function buildMooredShips(game) {
   }
   const topY = WATER_Y + dy, px0 = cx + gx - 1.2, px1 = cx + gx + 1.2;
   gw.push(vc(B3(2.4, 0.15, cz - B / 2 + 1.2 - (qz - 0.65), (px0 + px1) / 2, topY - 0.08, (qz - 0.65 + cz - B / 2 + 1.2) / 2), 0x8a8a84));
-  cols.add(px0, qz - 0.65, px1, cz - B / 2 + 1.2, WATER_Y - 1, topY, 'gangway');
+  cols.add(px0, qz - 0.65, px1, cz - B / 2 + 1.2, topY - 0.3, topY, 'gangway'); // ince köprü (altından su/usturmaça serbest)
   for (const s of [-1, 1]) {
     const zz = qz + s * 0.65;
     gw.push(vc(rod(g0x, 1.0, zz, g0x + steps * 0.55, topY + 1.0, zz, 0.03, 5), 0xd8d8d8));

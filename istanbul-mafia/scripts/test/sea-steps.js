@@ -112,6 +112,74 @@ module.exports = async (p, out) => {
       await H.shot(p, out + '-harbor.png');
     }
   }
+
+  if (want('swim')) {
+    const r = await p.evaluate(() => {
+      const g = game, pl = g.player, m = pl.model, WY = -2.2;
+      if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);
+      const v = new THREE_V();
+      function THREE_V() { return m.head.position.clone(); }
+      const hw = (b) => { b.updateWorldMatrix(true, false); const e = b.matrixWorld.elements; return { x: e[12], y: e[13], z: e[14] }; };
+      const res = {};
+      // açık suya düş (Marmara sahili, kıyıdan 9 m)
+      pl.pos.set(-200, 0.5, 829); pl.vy = 0; pl.swimming = false; pl.camYaw = Math.PI / 2; pl.heading = Math.PI / 2;
+      let entered = false, minDive = 0;
+      sim(1.5, () => { if (pl.swimming) entered = true; minDive = Math.min(minDive, pl.pos.y - WY); });
+      res.entered = entered; res.dive = +minDive.toFixed(2);
+      // boşta su çiğneme
+      let headMin = 9, vert = 9, n = 0;
+      sim(3, () => {
+        const h = hw(m.head), hp = hw(m.hips), nk = hw(m.neck);
+        headMin = Math.min(headMin, h.y - WY);
+        const dx = nk.x - hp.x, dy = nk.y - hp.y, dz = nk.z - hp.z; vert = Math.min(vert, dy / Math.hypot(dx, dy, dz)); n++;
+      });
+      res.idle = { swimming: pl.swimming, headAboveWater: +headMin.toFixed(2), bodyUpright: +vert.toFixed(2), rootY: +(pl.pos.y - WY).toFixed(2) };
+      // ileri yüzme (crawl)
+      hold('KeyW', true);
+      sim(1);
+      const L = [], R = [], FL = [], FR = []; headMin = 9;
+      sim(4, () => {
+        const f = { x: Math.sin(pl.heading), z: Math.cos(pl.heading) };
+        const hp = hw(m.hips), a = hw(m.arms[0].wr), b = hw(m.arms[1].wr), fa = hw(m.legs[0].an), fb = hw(m.legs[1].an);
+        L.push((a.x - hp.x) * f.x + (a.z - hp.z) * f.z); R.push((b.x - hp.x) * f.x + (b.z - hp.z) * f.z);
+        FL.push(fa.y); FR.push(fb.y);
+        headMin = Math.min(headMin, hw(m.head).y - WY);
+      });
+      hold('KeyW', false);
+      const corr = (A, B) => { const ma = A.reduce((s, x) => s + x, 0) / A.length, mb = B.reduce((s, x) => s + x, 0) / B.length; let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < A.length; i++) { sab += (A[i] - ma) * (B[i] - mb); saa += (A[i] - ma) ** 2; sbb += (B[i] - mb) ** 2; } return sab / Math.sqrt(saa * sbb + 1e-9); };
+      const amp = (A) => Math.max(...A) - Math.min(...A);
+      res.crawl = { speed: +pl.speed.toFixed(2), headAboveWater: +headMin.toFixed(2), armCorr: +corr(L, R).toFixed(2), armAmp: +amp(L).toFixed(2), kickCorr: +corr(FL, FR).toFixed(2), kickAmp: +amp(FL).toFixed(2), phase: +(m.swimInfo ? m.swimInfo.phase : -1).toFixed(2) };
+      // rıhtım merdiveninden çıkış (Anadolu yakası sahil rıhtımı)
+      const lad = (g.seaLadders || []).find((l) => l.seg === 'z420' && l.z > 300) || (g.seaLadders || [])[0];
+      pl.pos.set(lad.x + lad.nx * 5, WY, lad.z + lad.nz * 5); pl.vy = 0; pl.swimming = true; pl.vx = pl.vz = 0;
+      pl.camYaw = Math.atan2(-lad.nx, -lad.nz); pl.heading = pl.camYaw;
+      sim(0.5);
+      hold('KeyW', true);
+      let climbT = -1, t = 0, sawClimb = false;
+      sim(9, () => { t += 1 / 30; if (pl.seaClimbing) sawClimb = true; if (sawClimb && !pl.seaClimbing && climbT < 0) climbT = t; });
+      hold('KeyW', false); sim(0.3);
+      res.ladder = { at: [lad.x, lad.z], usedLadder: sawClimb, done: climbT, y: +pl.pos.y.toFixed(2), swimming: pl.swimming, onLand: !g.physics.inWater(pl.pos.x, pl.pos.z) };
+      // alçak kenardan çıkış (marina iskelesi)
+      pl.pos.set(258, WY, -646); pl.vy = 0; pl.swimming = true; pl.camYaw = Math.PI; pl.heading = Math.PI;
+      sim(0.3); hold('KeyW', true); sawClimb = false;
+      sim(6, () => { if (pl.seaClimbing) sawClimb = true; else if (sawClimb) hold('KeyW', false); });
+      hold('KeyW', false); sim(0.3);
+      res.ledge = { climbed: sawClimb, y: +pl.pos.y.toFixed(2), swimming: pl.swimming, z: +pl.pos.z.toFixed(1) };
+      return res;
+    });
+    console.log('swim', JSON.stringify(r));
+    check('suya düşünce yüzmeye geçer (dalış + yükselme)', r.entered && r.dive < -0.05, [r.entered, r.dive]);
+    check('boşta: baş suyun üstünde, gövde dik', r.idle.swimming && r.idle.headAboveWater > 0.05 && r.idle.bodyUpright > 0.8, r.idle);
+    check('kulaç: baş suyun üstünde', r.crawl.headAboveWater > 0.0, r.crawl);
+    check('kulaç: kollar karşılıklı (ters fazlı) ve geniş', r.crawl.armCorr < -0.5 && r.crawl.armAmp > 0.5, r.crawl);
+    check('kulaç: ayak çırpma (karşılıklı)', r.crawl.kickCorr < -0.3 && r.crawl.kickAmp > 0.08, r.crawl);
+    check('rıhtım merdiveninden tırmanıp çıkar', r.ladder.usedLadder && r.ladder.done > 0 && !r.ladder.swimming && r.ladder.onLand && Math.abs(r.ladder.y) < 0.2, r.ladder);
+    check('alçak iskele kenarından asılıp çıkar', r.ledge.climbed && !r.ledge.swimming && Math.abs(r.ledge.y) < 0.3, r.ledge);
+    if (process.env.SHOTS === '1') {
+      await p.evaluate(() => { const g = game, pl = g.player; g.env.time = 10.5; pl.pos.set(-150, -2.2, 829); pl.swimming = true; pl.camYaw = -2.4; pl.camPitch = 0.18; hold('KeyW', true); sim(2); hold('KeyW', false); pl.camYaw = pl.heading + Math.PI * 0.75; });
+      await H.shot(p, out + '-swim.png');
+    }
+  }
   console.log(fail ? `SONUÇ: ${fail} hata` : 'SONUÇ: tümü geçti');
   void out;
 };

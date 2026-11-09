@@ -21,6 +21,7 @@ import { buildLandmark, landmarkTrees } from './landmarks.js';
 import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
 import { buildHarbor, buildForest, paintLocations, LOCATION_PROP_DEFS, LOCATION_PROP_OPTS } from './locations.js';
+import { LADDER_GAPS } from './sea_ladders.js'; // [deniz] rıhtım merdiveni hizasında korkuluk boşluğu
 
 export const PALETTE = BPAL;
 export const SHOP_SIGNS = BSIGNS;
@@ -385,7 +386,8 @@ export class City {
       const wg = new THREE.BoxGeometry(s.axis === 'z' ? 1.2 : len, 4.2, s.axis === 'z' ? len : 1.2);
       if (s.axis === 'z') wg.translate(s.v + off, -2.1, mid); else wg.translate(mid, -2.1, s.v + off);
       walls.push(wg);
-      const railParts = s.axis === 'z' && s.v === 200 ? split(s.a, s.b, marinaGaps) : s.axis === 'x' && s.v === 820 && s.a >= 420 ? split(s.a, s.b, harborGaps) : [[s.a, s.b]];
+      const railParts0 = s.axis === 'z' && s.v === 200 ? split(s.a, s.b, marinaGaps) : s.axis === 'x' && s.v === 820 && s.a >= 420 ? split(s.a, s.b, harborGaps) : [[s.a, s.b]];
+      const railParts = railParts0.flatMap(([a, b]) => split(a, b, LADDER_GAPS[s.axis + s.v] || [])); // [deniz]
       for (const [ra, rb] of railParts) {
         const rl = rb - ra, rm = (ra + rb) / 2;
         const rx = s.axis === 'z' ? s.v + s.side * 0.4 : rm, rz = s.axis === 'z' ? rm : s.v + s.side * 0.4;

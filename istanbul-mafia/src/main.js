@@ -21,6 +21,7 @@ import { VehicleManager } from './entities/vehicles.js';
 import { TrafficLights } from './world/traffic.js';
 import { ShipTraffic } from './world/ships.js';
 import { spawnMooredFleet, buildMooredShips } from './world/ships_moored.js'; // [deniz]
+import { buildLadders } from './world/sea_ladders.js'; // [deniz]
 import { BoatManager, nearestWaterSpot } from './entities/boats.js';
 import { spawnWorldVehicles } from './entities/military_vehicles.js';
 import { AircraftManager } from './entities/aircraft.js';
@@ -212,6 +213,7 @@ class Game {
     this.aircraft = new AircraftManager(this);
     this.ships = new ShipTraffic(this);
     this.harborShip = buildMooredShips(this); // [deniz] rıhtımda bağlı, yürünebilir konteyner gemisi
+    buildLadders(this); // [deniz] rıhtım merdivenleri (this.seaLadders)
     this.npcs = new NPCManager(this);
     this.pickups = new Pickups(this);
     this.wanted = new Wanted(this);
