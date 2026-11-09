@@ -1,12 +1,12 @@
 // [ses B2] Anons çalıcı: megafon (ekip aracı / polis), helikopter hoparlörü ve çıplak bağırma.
-// Satırlar ilk kullanımda (ya da boşta önceden) örneklenir ve önbelleğe alınır (en çok 28 satır, LRU).
+// Satırlar ilk kullanımda (ya da boşta önceden) örneklenir ve önbelleğe alınır (en çok 16 satır, LRU).
 // Yakında ve işletim sisteminde Türkçe ses varsa (Seçenek A) speechSynthesis kullanılır: WebAudio'ya yönlendirilemez,
 // bu yüzden önüne/arkasına telsiz cırtı + PA uğultusu çalınır. Ayar: audio.ttsMode = 'auto' | 'off'.
 import { synthSpeech, speakerChain, SPEECH_SR, probeTTS, ttsVoice } from './speech.js';
 import { toBuffer } from './dsp.js';
 import { play } from './voices.js';
 
-const MAXC = 28;
+const MAXC = 16;
 export const HELI_LINES = [
   'Hava biriminden uyarı! Olduğun yerde kal!',
   'Helikopter seni görüyor! Kaçamazsın!',

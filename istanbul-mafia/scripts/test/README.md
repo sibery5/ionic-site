@@ -29,3 +29,9 @@ Hikâye 1.4 (perdeler, görev sonu çağrı + konak sahnesi, güven/şüphe, esk
 SHOTS=1 ile cinematic/map/phone ekran görüntüleri):
 
     SETTINGS='{"quality":"low"}' SHOTS=1 node scripts/test/play.js file://$PWD/app/index.html .testout/s2 $PWD/scripts/test/story2-steps.js
+
+Ses (B2): önemli sesleri çevrimdışı WAV'a yazar (`.testout/audio/`: siren geçişleri, megafon/helikopter anonsları,
+silah başına atış, yakın/uzak/iç mekân, patlama, ayak sesleri, kapı, ambiyans, arayüz, 20 sn menü teması);
+NaN / 0 dBFS kırpma / 200 ses sonrası düğüm sızıntısı ve oyun içi konumlu siren denetimi:
+
+    SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/a2 $PWD/scripts/test/audio2-steps.js
