@@ -19,35 +19,53 @@ export const CLOTHING_CATS = [
 export const CLOTHES = [
   // üstler
   { id: 'tshirt', slot: 'top', cat: 'top', name: 'Tişört', price: 150, colors: ['#e8e8e8', '#1a1a1a', '#8a1a1a', '#1d3d6e', '#2d5a2d'], desc: 'Pamuklu, rahat kesim.' },
-  { id: 'polo', slot: 'top', cat: 'top', model: 'tshirt', name: 'Polo Yaka Tişört', price: 480, colors: ['#ffffff', '#1d2440', '#2d5a2d', '#c9b48a'], desc: 'Kulüp üyesi havası.' },
+  { id: 'polo', slot: 'top', cat: 'top', name: 'Polo Yaka Tişört', price: 480, colors: ['#ffffff', '#1d2440', '#2d5a2d', '#c9b48a'], desc: 'Kulüp üyesi havası.' },
   { id: 'shirt', slot: 'top', cat: 'top', name: 'Gömlek', price: 400, colors: ['#ffffff', '#a8c8e8', '#e8d8c8', '#2a2a2a'], desc: 'Ütülü, kolalı.' },
-  { id: 'hoodie', slot: 'top', cat: 'top', model: 'track', name: 'Kapüşonlu Sweatshirt', price: 750, colors: ['#3a3a3a', '#1a1a1a', '#5a1a1a', '#6e8a9e'], desc: 'Gece işleri için ideal.' },
+  { id: 'hoodie', slot: 'top', cat: 'top', name: 'Kapüşonlu Sweatshirt', price: 750, colors: ['#3a3a3a', '#1a1a1a', '#5a1a1a', '#6e8a9e'], desc: 'Gece işleri için ideal.' },
   { id: 'track', slot: 'top', cat: 'top', name: 'Eşofman Üstü', price: 650, colors: ['#1a1a1a', '#1d3d6e', '#8a1a1a', '#e8e8e8', '#2d5a2d'], desc: 'Mahallenin resmî kıyafeti.' },
   { id: 'jacket', slot: 'top', cat: 'top', name: 'Kot Ceket', price: 1100, colors: ['#3a4a6a', '#2a2a2a', '#6a5a4a'], desc: 'Yıkanmış kot, eskimez.' },
-  { id: 'blazer', slot: 'top', cat: 'top', model: 'jacket', name: 'Spor Ceket', price: 3400, colors: ['#5a4a3a', '#2a2a3a', '#6a2a2a'], desc: 'Yarı resmî, tam karizma.' },
+  { id: 'blazer', slot: 'top', cat: 'top', name: 'Spor Ceket', price: 3400, colors: ['#5a4a3a', '#2a2a3a', '#6a2a2a'], desc: 'Yarı resmî, tam karizma.' },
   { id: 'leather', slot: 'top', cat: 'top', name: 'Deri Ceket', price: 2500, colors: ['#1c1c1c', '#4a2c1a', '#5a1a1a'], desc: 'Hakiki kuzu derisi.' },
   { id: 'coat', slot: 'top', cat: 'top', name: 'Uzun Palto', price: 5200, colors: ['#1a1a1a', '#5a4a3a', '#2a2a3a', '#8a7a6a'], desc: 'Boğaz rüzgârına karşı.' },
   { id: 'suit', slot: 'top', cat: 'top', name: 'Takım Elbise', price: 7500, colors: ['#111111', '#1d2440', '#3a3a3a', '#e8e0d0', '#5a1a1a'], desc: 'İtalyan kumaşı, terzi dikimi.' },
+  { id: 'bomber', slot: 'top', cat: 'top', name: 'Bomber Ceket', price: 1700, colors: ['#2a3a2a', '#1a1a1a', '#1d2440', '#5a4a3a'], desc: 'Kaburgalı yaka, turuncu astar.' },
+  { id: 'crop', slot: 'top', cat: 'top', name: 'Crop Bluz', price: 280, colors: ['#e8e8e8', '#1a1a1a', '#e8c8c8', '#c84a6a', '#a8c8e8'], desc: 'Kısa kesim, göbek açık.' },
+  { id: 'tank', slot: 'top', cat: 'top', name: 'Askılı / Atlet', price: 120, colors: ['#e8e8e8', '#1a1a1a', '#c84a6a', '#2d5a2d'], desc: 'Yaz sıcağı için.' },
+  { id: 'blouse', slot: 'top', cat: 'top', name: 'Bluz', price: 650, colors: ['#f0ece0', '#1a1a1a', '#a8c8e8', '#e8c8c8', '#5a2d5a'], desc: 'V yaka, fırfırlı, 3/4 kol.' },
+  { id: 'dress', slot: 'top', cat: 'top', name: 'Elbise', price: 1800, colors: ['#8a1a1a', '#1a1a1a', '#1d3d6e', '#2d5a2d', '#e8c8c8'], desc: 'Belden kuşaklı, diz boyu.' },
+  { id: 'sundress', slot: 'top', cat: 'top', name: 'Yazlık Elbise', price: 1100, colors: ['#f0ece0', '#c9a020', '#a8c8e8', '#c84a6a'], desc: 'İnce askılı, hafif kumaş.' },
+  { id: 'ferace', slot: 'top', cat: 'top', name: 'Ferace', price: 2400, colors: ['#1a1a1a', '#2a2a3a', '#4a3a3a', '#3a4a4a'], desc: 'Bileğe kadar, ağırbaşlı kesim.' },
   { id: 'tuxedo', slot: 'top', cat: 'top', model: 'suit', name: 'Smokin', price: 18000, colors: ['#0a0a0a', '#f0ece0', '#3a0d1a'], desc: 'Gala gecesi ve düğün için.' },
   // altlar
   { id: 'jeans', slot: 'pants', cat: 'pants', name: 'Kot Pantolon', price: 450, colors: ['#2a3550', '#1a1a1a', '#5a6a8a'], desc: 'Klasik beş cep.' },
   { id: 'cargo', slot: 'pants', cat: 'pants', model: 'jeans', name: 'Kargo Pantolon', price: 600, colors: ['#4a4a3a', '#2a2a2a', '#6a5a3a'], desc: 'Bol cep, bol iş.' },
   { id: 'slacks', slot: 'pants', cat: 'pants', name: 'Kumaş Pantolon', price: 900, colors: ['#111111', '#3a3a3a', '#5a4a3a', '#e8e0d0'], desc: 'Ütü izi keskin.' },
-  { id: 'chino', slot: 'pants', cat: 'pants', model: 'slacks', name: 'Chino Pantolon', price: 1200, colors: ['#c9b48a', '#2a3a5a', '#5a2a2a'], desc: 'Sahil kasabası şıklığı.' },
+  { id: 'chino', slot: 'pants', cat: 'pants', name: 'Chino Pantolon', price: 1200, colors: ['#c9b48a', '#2a3a5a', '#5a2a2a'], desc: 'Sahil kasabası şıklığı.' },
   { id: 'track', slot: 'pants', cat: 'pants', name: 'Eşofman Altı', price: 350, colors: ['#1a1a1a', '#1d3d6e', '#8a1a1a'], desc: 'Üç bantlı efsane.' },
+  { id: 'leggings', slot: 'pants', cat: 'pants', name: 'Tayt', price: 300, colors: ['#111111', '#3a3a4a', '#5a2d5a'], desc: 'Streç, spor ve günlük.' },
+  { id: 'minishort', slot: 'pants', cat: 'pants', name: 'Kısa Şort', price: 220, colors: ['#5a6a8a', '#1a1a1a', '#e8e8e8'], desc: 'Kot, kıvrık paça.' },
+  { id: 'mini', slot: 'pants', cat: 'pants', name: 'Mini Etek', price: 400, colors: ['#2a3550', '#1a1a1a', '#8a1a1a'], desc: 'Kalçadan açılan kısa etek.' },
+  { id: 'skirt', slot: 'pants', cat: 'pants', name: 'Etek', price: 550, colors: ['#1a1a1a', '#3a3a3a', '#5a2d5a', '#c9b48a'], desc: 'Diz üstü, A kesim.' },
+  { id: 'midi', slot: 'pants', cat: 'pants', name: 'Midi Etek', price: 700, colors: ['#1a1a1a', '#c9b48a', '#2d5a2d'], desc: 'Baldır boyu, akışkan.' },
+  { id: 'longskirt', slot: 'pants', cat: 'pants', name: 'Uzun Etek', price: 650, colors: ['#1a1a1a', '#2a2a3a', '#5a4a3a'], desc: 'Bileğe kadar.' },
   { id: 'shorts', slot: 'pants', cat: 'pants', name: 'Şort', price: 200, colors: ['#c9b48a', '#2a3550', '#1a1a1a'], desc: 'Yaz sıcağında kurtarıcı.' },
   // ayakkabılar
   { id: 'sneaker', slot: 'shoes', cat: 'shoes', name: 'Spor Ayakkabı', price: 800, colors: ['#eeeeee', '#1a1a1a', '#8a1a1a'], desc: 'Kaçarken de rahat.' },
-  { id: 'hightop', slot: 'shoes', cat: 'shoes', model: 'sneaker', name: 'Basketbol Botu', price: 1900, colors: ['#e8e8e8', '#c81010', '#111111'], desc: 'Sınırlı üretim.' },
-  { id: 'loafer', slot: 'shoes', cat: 'shoes', model: 'polished', name: 'Süet Loafer', price: 1600, colors: ['#5a3a20', '#1d2440', '#2a2a2a'], desc: 'Çorapsız giyilir.' },
+  { id: 'hightop', slot: 'shoes', cat: 'shoes', name: 'Basketbol Botu', price: 1900, colors: ['#e8e8e8', '#c81010', '#111111'], desc: 'Sınırlı üretim.' },
+  { id: 'loafer', slot: 'shoes', cat: 'shoes', name: 'Süet Loafer', price: 1600, colors: ['#5a3a20', '#1d2440', '#2a2a2a'], desc: 'Çorapsız giyilir.' },
   { id: 'polished', slot: 'shoes', cat: 'shoes', name: 'Rugan Ayakkabı', price: 2200, colors: ['#0a0a0a', '#4a2412'], desc: 'Aynada yüzünü görürsün.' },
+  { id: 'heels', slot: 'shoes', cat: 'shoes', name: 'Topuklu Ayakkabı', price: 2100, colors: ['#111111', '#8a1a1a', '#c9a070'], desc: 'İnce topuk, sivri burun.' },
+  { id: 'flats', slot: 'shoes', cat: 'shoes', name: 'Babet', price: 700, colors: ['#111111', '#c9a070', '#e8c8c8'], desc: 'Rahat ve şık.' },
+  { id: 'sandal', slot: 'shoes', cat: 'shoes', name: 'Sandalet', price: 450, colors: ['#5a3a20', '#111111', '#c9a070'], desc: 'Deri bantlı.' },
   { id: 'boots', slot: 'shoes', cat: 'shoes', name: 'Bot', price: 1400, colors: ['#3a2412', '#1a1a1a'], desc: 'Kış ve kavga için.' },
   // şapkalar
   { id: 'none', slot: 'hat', cat: 'hat', name: 'Şapkasız', price: 0, colors: ['#000000'], desc: 'Saçın görünsün.' },
-  { id: 'cap', slot: 'hat', cat: 'hat', model: 'kasket', name: 'Beyzbol Şapkası', price: 250, colors: ['#1a1a1a', '#8a1a1a', '#1d3d6e', '#e8e8e8'], desc: 'Siper öne ya da arkaya.' },
+  { id: 'cap', slot: 'hat', cat: 'hat', name: 'Beyzbol Şapkası', price: 250, colors: ['#1a1a1a', '#8a1a1a', '#1d3d6e', '#e8e8e8'], desc: 'Siper öne ya da arkaya.' },
   { id: 'kasket', slot: 'hat', cat: 'hat', name: 'Kasket', price: 300, colors: ['#2a2a2a', '#5a4a3a', '#3a3a4a'], desc: 'Kahvehane klasiği.' },
   { id: 'bere', slot: 'hat', cat: 'hat', name: 'Bere', price: 150, colors: ['#1a1a1a', '#8a1a1a', '#2d5a2d'], desc: 'Örgü yün.' },
-  { id: 'panama', slot: 'hat', cat: 'hat', model: 'fedora', name: 'Panama Şapka', price: 1400, colors: ['#e8dcc0', '#c9b48a'], desc: 'Yazlık hasır.' },
+  { id: 'panama', slot: 'hat', cat: 'hat', name: 'Panama Şapka', price: 1400, colors: ['#e8dcc0', '#c9b48a'], desc: 'Yazlık hasır.' },
+  { id: 'bandana', slot: 'hat', cat: 'hat', name: 'Bandana', price: 120, colors: ['#8a1a1a', '#1d3d6e', '#1a1a1a', '#2d8a3d'], desc: 'Arkadan bağlı, sokak usulü.' },
+  { id: 'basortusu', slot: 'hat', cat: 'hat', name: 'Başörtüsü', price: 350, colors: ['#6a1a2a', '#1a3a5a', '#3a5a3a', '#b08a6a', '#2a2a2a'], desc: 'İpek, desenli kenar.' },
   { id: 'fedora', slot: 'hat', cat: 'hat', name: 'Fötr Şapka', price: 1800, colors: ['#151515', '#3a2a1a', '#e8e0d0'], desc: 'Eski İstanbul beyefendisi.' },
   // gözlükler
   { id: 'noglasses', slot: 'glasses', cat: 'glasses', name: 'Gözlüksüz', price: 0, colors: ['#000000'], desc: 'Gözlerin konuşsun.' },
@@ -61,6 +79,9 @@ export const CLOTHES = [
   { id: 'oltutespih', slot: 'tespih', cat: 'jewelry', name: 'Oltu Taşı Tespih', price: 4200, colors: ['#111111'], desc: 'Erzurum oltu taşı, gümüş püskül.' },
   { id: 'ring', slot: 'ring', cat: 'jewelry', name: 'Altın Yüzük', price: 6500, colors: ['#d4af37'], desc: 'Aile yüzüğü.' },
   { id: 'diamondring', slot: 'ring', cat: 'jewelry', name: 'Pırlanta Yüzük', price: 48000, colors: ['#e8f4ff'], desc: '2 karat. Elini masaya koy.' },
+  { id: 'noearrings', slot: 'earrings', cat: 'jewelry', name: 'Küpesiz', price: 0, colors: ['#000000'], desc: 'Sade.' },
+  { id: 'stud', slot: 'earrings', cat: 'jewelry', name: 'Taş Küpe', price: 1800, colors: ['#d4af37', '#cfd2d6'], desc: 'Küçük, zarif.' },
+  { id: 'hoop', slot: 'earrings', cat: 'jewelry', name: 'Halka Küpe', price: 2200, colors: ['#d4af37', '#cfd2d6'], desc: 'İnce altın halka.' },
   // saatler
   { id: 'nowatch', slot: 'watch', cat: 'watch', name: 'Saatsiz', price: 0, colors: ['#000000'], desc: 'Zaman senin kontrolünde.' },
   { id: 'digital', slot: 'watch', cat: 'watch', name: 'Dijital Saat', price: 350, colors: ['#1a1a1a', '#c9b48a'], desc: 'Hesap makineli.' },
@@ -72,10 +93,12 @@ export const CLOTHES = [
   { id: 'briefcase', slot: 'bag', cat: 'bag', name: 'Evrak Çantası', price: 900, capacity: 35, colors: ['#3a2412', '#111111'], desc: 'Kilitli, şifreli. Kapasite 35.' },
   { id: 'bag1', slot: 'bag', cat: 'bag', name: 'Sırt Çantası', price: 1500, capacity: 50, colors: ['#1a1a1a', '#2d5a2d', '#8a1a1a'], desc: 'Kapasite 50.' },
   { id: 'duffel', slot: 'bag', cat: 'bag', name: 'Spor Çanta', price: 3200, capacity: 70, colors: ['#1a1a1a', '#1d3d6e'], desc: 'İçinde forma yok. Kapasite 70.' },
+  { id: 'handbag', slot: 'bag', cat: 'bag', name: 'El Çantası', price: 2800, capacity: 25, colors: ['#3a2412', '#111111', '#c9a070', '#8a1a1a'], desc: 'Deri, altın tokalı. Kapasite 25.' },
+  { id: 'tote', slot: 'bag', cat: 'bag', name: 'Omuz Çantası', price: 1300, capacity: 40, colors: ['#c9b48a', '#111111'], desc: 'Geniş, her işe yarar. Kapasite 40.' },
   { id: 'bag2', slot: 'bag', cat: 'bag', name: 'Büyük Valiz', price: 6000, capacity: 100, colors: ['#111111', '#5a1a1a'], desc: 'Tekerlekli, gümrüksüz. Kapasite 100.' },
 ];
 // Ücretsiz "çıkar" seçenekleri (her zaman sahip olunmuş sayılır)
-export const FREE_ITEM_IDS = ['none', 'noglasses', 'nowatch', 'nobag'];
+export const FREE_ITEM_IDS = ['none', 'noglasses', 'nowatch', 'nobag', 'noearrings'];
 
 // Kıyafeti bir görünüme uygula (karakter modelinin tanımadığı yeni alanlar yok sayılabilir)
 export function applyClothing(look, it, color) {
@@ -91,6 +114,7 @@ export function applyClothing(look, it, color) {
     case 'ring': look.ring = it.id; look.ringColor = color; break;
     case 'watch': look.watch = it.id === 'nowatch' ? null : it.id; look.watchColor = color; break;
     case 'bag': look.bag = it.id === 'nobag' ? null : it.id; look.bagColor = color; break;
+    case 'earrings': look.earrings = it.id === 'noearrings' ? null : it.id; look.earringColor = color; break;
     default: break;
   }
   return look;
@@ -115,11 +139,12 @@ export function wornClothing(look, it) {
     case 'ring': return look.ring === it.id;
     case 'watch': return (look.watch || 'nowatch') === it.id;
     case 'bag': return (look.bag || 'nobag') === it.id;
+    case 'earrings': return (look.earrings || 'noearrings') === it.id;
     default: return false;
   }
 }
 export function clothingColor(look, it) {
-  const k = { top: 'topColor', pants: 'pantsColor', shoes: 'shoesColor', hat: 'hatColor', glasses: 'glassesColor', chain: 'chainColor', tespih: 'tespihColor', ring: 'ringColor', watch: 'watchColor', bag: 'bagColor' }[it.slot];
+  const k = { top: 'topColor', pants: 'pantsColor', shoes: 'shoesColor', hat: 'hatColor', glasses: 'glassesColor', chain: 'chainColor', tespih: 'tespihColor', ring: 'ringColor', watch: 'watchColor', bag: 'bagColor', earrings: 'earringColor' }[it.slot];
   return (k && look[k]) || it.colors[0];
 }
 

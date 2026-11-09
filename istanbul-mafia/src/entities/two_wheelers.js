@@ -4,6 +4,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Parts, finishTemplate, colorize, bx, rbx, cyl, beam, darkMat, chromeMat, paintMat } from './vehicles.js';
+import { CharacterModel, randomLook } from './character.js';
+import { RNG } from '../core/util.js';
+const riderRng = new RNG(4242);
+const _gp = [new THREE.Vector3(), new THREE.Vector3()];
 
 const tube = (B, a, b, r, hex) => B.d(beam(a[0], a[1], a[2], b[0], b[1], b[2], r * 2, r * 2, true), hex);
 const ptube = (B, a, b, r) => B.p(beam(a[0], a[1], a[2], b[0], b[1], b[2], r * 2, r * 2, true));
@@ -68,8 +72,11 @@ function buildBike(def) {
   for (const s of [1, -1]) { ptube(B, ST, [s * 0.055, r, zr], 0.011); ptube(B, BB, [s * 0.055, r, zr], 0.012); }
   // sele borusu + sele, arka bagaj, çamurluk, sehpa
   B.c(cyl(0.013, 0.013, 0.16, 8, 'y', 0, 0.9, -0.235));
-  B.d(rbx(0.15, 0.06, 0.27, 0.03, 0, 0.99, -0.25), 0x1a1a1a);
-  B.d(rbx(0.07, 0.05, 0.1, 0.02, 0, 0.99, -0.12), 0x1a1a1a);
+  // sele: arkası geniş, buruna doğru daralan üç kademe + çelik raylar
+  B.d(rbx(0.17, 0.055, 0.12, 0.026, 0, 0.995, -0.3), 0x1a1a1a);
+  B.d(rbx(0.12, 0.05, 0.1, 0.022, 0, 0.99, -0.2), 0x1a1a1a);
+  B.d(rbx(0.055, 0.042, 0.1, 0.016, 0, 0.985, -0.12), 0x1a1a1a);
+  for (const s of [1, -1]) tube(B, [s * 0.03, 0.96, -0.33], [s * 0.02, 0.965, -0.1], 0.004, 0x9a9a9a);
   for (const s of [1, -1]) tube(B, [s * 0.06, 0.82, -0.3], [s * 0.06, r, zr], 0.006, 0x222222);
   B.d(bx(0.14, 0.012, 0.34, 0, 0.82, -0.47), 0x222222);
   const fenR = new THREE.TorusGeometry(r + 0.03, 0.025, 4, 16, Math.PI * 0.8); fenR.rotateY(Math.PI / 2); fenR.rotateX(0.3); fenR.translate(0, r, zr);
@@ -78,7 +85,16 @@ function buildBike(def) {
   // aktarma: aynakol dişlisi, arka dişli, zincir (sağ taraf = -x)
   const cr = new THREE.TorusGeometry(0.1, 0.008, 4, 24); cr.rotateY(Math.PI / 2); cr.translate(-0.07, BB[1], BB[2]); B.c(cr);
   B.c(cyl(0.04, 0.04, 0.02, 12, 'x', -0.06, r, zr));
-  for (const y of [0.1, -0.1]) tube(B, [-0.07, BB[1] + y, BB[2]], [-0.065, r + y * 0.4, zr], 0.005, 0x3a3a3a);
+  {
+    const cx = -0.068, A = [BB[1], BB[2], 0.104], Cg = [r, zr, 0.044], pts = [];
+    // yz düzleminde: u = aynakoldan dişliye, n = ona dik (üst taraf); θ=0 -> +n, π/2 -> +u
+    let uy = Cg[0] - A[0], uz = Cg[1] - A[1]; const ul = Math.hypot(uy, uz); uy /= ul; uz /= ul;
+    let ny = -uz, nz = uy; if (ny < 0) { ny = -ny; nz = -nz; }
+    const at = (c, rad, th) => [c[0] + (Math.cos(th) * ny + Math.sin(th) * uy) * rad, c[1] + (Math.cos(th) * nz + Math.sin(th) * uz) * rad];
+    for (let i = 0; i <= 8; i++) pts.push(at(Cg, Cg[2], (Math.PI * i) / 8)); // dişlinin arkası (üstten alta)
+    for (let i = 0; i <= 14; i++) pts.push(at(A, A[2], Math.PI + (Math.PI * i) / 14)); // aynakolun önü (alttan üste)
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; tube(B, [cx, a[0], a[1]], [cx, b[0], b[1]], 0.0045, 0x2e2e2e); }
+  }
   B.d(cyl(0.028, 0.028, 0.12, 10, 'x', 0, BB[1], BB[2]), 0x333333);
   const T = { S: { st: 'bike', L: def.len, W: def.wid, H: def.hei }, decals: [], extras: [], plates: [], siren: false, wheelR: r, moto: true, bike: true, matte: false };
   // ışıklar: ön far (gidonda değil, çatal tacında; direksiyonla dönmez – küçük), arka reflektör
@@ -91,7 +107,7 @@ function buildBike(def) {
   T.seats = [{ x: 0, y: 1.0, z: -0.25 }];
   T.pool = { w: 1.6, d: 5, z: 3 };
   T.riderPose = { seat: [0, 1.0, -0.25], grips: [[0.27, 1.02, 0.31], [-0.27, 1.02, 0.31]], pedals: [[0.12, 0.3, -0.06], [-0.12, 0.3, -0.06]], crank: 0, lean: 0, steer: 0, crouch: 0.3 };
-  T.dummyGeo = riderTorso(false);
+  T.dummyGeo = new THREE.BufferGeometry(); // sürücü: gerçek karakter modeli (T.animate), kaba gövde yok
   finishTemplate(T, B);
   // direksiyon grubu (çatal + gidon + sepet) ve krank grubu
   const SG = new Parts();
@@ -100,6 +116,7 @@ function buildBike(def) {
   SG.c(beam(0, 0.12, 0, 0, 0.13, -0.06, 0.03, 0.03, true));
   SG.c(beam(-0.27, 0.14, -0.06, 0.27, 0.14, -0.06, 0.022, 0.022, true));
   for (const s of [1, -1]) SG.d(cyl(0.017, 0.017, 0.11, 8, 'x', s * 0.24, 0.14, -0.06), 0x111111);
+  for (const s of [1, -1]) { SG.c(beam(s * 0.17, 0.15, -0.05, s * 0.22, 0.13, 0.03, 0.012, 0.006, true)); SG.d(beam(s * 0.16, 0.14, -0.05, s * 0.06, 0.02, 0.02, 0.006, 0.006, true), 0x111111); }
   SG.d(bx(0.3, 0.2, 0.22, 0, 0.02, 0.2), 0x6a4a2a); // hasır sepet
   const fenF = new THREE.TorusGeometry(r + 0.03, 0.025, 4, 14, Math.PI * 0.6); fenF.rotateY(Math.PI / 2); fenF.rotateX(-Math.PI * 0.05); fenF.translate(0, r - 0.88, zf - 0.37);
   SG.d(fenF, 0x2a2a2a);
@@ -122,19 +139,30 @@ function buildBike(def) {
   T.animate = (v, dt) => {
     const ud = v.mesh.userData, rp = v.riderPose;
     ud.steerGrp.rotation.y = v.steerAng * 0.9;
-    if (v.controls.throttle > 0 && (v.driver || (v.ai && !v.ai.empty))) v.crank = (v.crank || 0) + Math.max(0.8 * dt, (v.fs * dt) / r) * 0.42;
+    // pedal krankı: katedilen yoldan (tekerlek dönüşü × 0.42 vites oranı); kare başına birden çok çağrıya karşı sağlam
+    const dpos = ud.lpx === undefined ? 0 : Math.hypot(v.pos.x - ud.lpx, v.pos.z - ud.lpz); ud.lpx = v.pos.x; ud.lpz = v.pos.z;
+    if (v.controls.throttle > 0 && (v.driver || (v.ai && !v.ai.empty))) v.crank = (v.crank || 0) + (dpos < 1.5 ? dpos / r : 0) * 0.42 + (dpos < 1e-4 ? 0.34 * dt : 0);
     ud.crankGrp.rotation.x = -(v.crank || 0);
-    const vis = ud.driverDummy.visible;
-    for (const L of ud.legs) { L.thigh.visible = L.shin.visible = vis; }
+    const drv = v.driver && v.driver.model ? v.driver : null;
+    const vis = !!drv || !!(v.ai && !v.ai.empty);
+    for (const L of ud.legs) { L.thigh.visible = L.shin.visible = false; }
     rp.crank = v.crank || 0; rp.lean = v.lean; rp.steer = v.steerAng;
-    if (!vis) return;
     const c = v.crank || 0;
     for (let i = 0; i < 2; i++) {
-      const a = c + i * Math.PI, s = i ? -1 : 1;
-      const fy = BB[1] + Math.sin(-a) * 0.17, fz = BB[2] + Math.cos(-a) * 0.17;
-      rp.pedals[i][1] = fy; rp.pedals[i][2] = fz;
-      legIK(ud.legs[i], s * 0.1, 0.98, -0.24, s * 0.12, fy + 0.04, fz, 0.46, 0.47);
+      const a = c + i * Math.PI;
+      rp.pedals[i][1] = BB[1] + Math.sin(-a) * 0.17; rp.pedals[i][2] = BB[2] + Math.cos(-a) * 0.17;
     }
+    if (ud.rider) ud.rider.root.visible = vis;
+    if (!vis) return;
+    // sürücü: oyuncu/NPC'nin kendi görünüşü (trafik bisikletinde rastgele sivil); pedal krankı hızla senkron
+    const look = drv ? drv.model.look : (ud.aiLook || (ud.aiLook = randomLook(riderRng, 'civilian')));
+    if (!ud.rider) { ud.rider = new CharacterModel(look); v.mesh.userData.chassis.add(ud.rider.root); ud.riderLook = look; }
+    else if (ud.riderLook !== look) { ud.rider.setLook(look); ud.riderLook = look; }
+    v.mesh.updateMatrixWorld(true);
+    for (let i = 0; i < 2; i++) ud.steerGrp.localToWorld(_gp[i].set(i ? -0.25 : 0.25, 0.14, -0.06));
+    const R = ud.rideSt || (ud.rideSt = { speed: 0, ride: { seat: [0, 1.0, -0.25], pedals: rp.pedals, grips: _gp, crank: 0, steer: 0, lean: 0, speed: 0 } });
+    R.ride.crank = c; R.ride.steer = v.steerAng; R.ride.lean = v.lean; R.ride.speed = Math.abs(v.fs || 0);
+    ud.rider.animate(dt, R);
   };
   return T;
 }
