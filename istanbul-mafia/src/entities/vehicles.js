@@ -261,10 +261,23 @@ function liveryTex(kind) {
   g.clearRect(0, 0, 1024, 256);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   if (kind === 'police') {
-    g.fillStyle = '#1d3d8e'; g.fillRect(0, 70, 1024, 120);
-    g.fillStyle = '#c81414'; g.fillRect(0, 196, 1024, 14);
-    g.fillStyle = '#fff'; g.font = 'bold 96px Arial'; g.fillText('POLİS', 470, 132);
-    g.font = 'bold 44px Arial'; g.fillText('155', 860, 132);
+    // [B1] kurgusal Türk tarzı ekip aracı kaplaması: lacivert alt bant (önde eğik), kırmızı ince şerit,
+    // dama şerit, POLİS yazısı, 155 ve birim no; kurgusal arma (kalkan + defne), gerçek logo değil
+    g.fillStyle = '#16307a';
+    g.beginPath(); g.moveTo(0, 96); g.lineTo(1024, 70); g.lineTo(1024, 200); g.lineTo(0, 200); g.closePath(); g.fill();
+    g.fillStyle = '#c81414'; g.beginPath(); g.moveTo(0, 86); g.lineTo(1024, 60); g.lineTo(1024, 66); g.lineTo(0, 92); g.closePath(); g.fill();
+    for (let i = 0; i < 64; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (i + j) % 2 ? '#16307a' : '#f4f4f4'; g.fillRect(i * 16, 204 + j * 12, 16, 12); }
+    g.fillStyle = '#fff'; g.font = 'bold 92px Arial'; g.fillText('POLİS', 520, 142);
+    g.font = 'bold 40px Arial'; g.fillText('155', 900, 120); g.font = 'bold 22px Arial'; g.fillText('34 · 1207', 900, 162);
+    // arma: kalkan + iki defne yayı + yıldız (kurgusal)
+    g.save(); g.translate(160, 140);
+    g.fillStyle = '#f4f4f4'; g.beginPath(); g.moveTo(-34, -40); g.lineTo(34, -40); g.lineTo(34, 2); g.quadraticCurveTo(30, 34, 0, 48); g.quadraticCurveTo(-30, 34, -34, 2); g.closePath(); g.fill();
+    g.fillStyle = '#16307a'; g.beginPath(); g.moveTo(-27, -33); g.lineTo(27, -33); g.lineTo(27, 0); g.quadraticCurveTo(24, 27, 0, 39); g.quadraticCurveTo(-24, 27, -27, 0); g.closePath(); g.fill();
+    g.fillStyle = '#e8c040';
+    g.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 7 : 16, a = -Math.PI / 2 + k * Math.PI / 5; g.lineTo(Math.cos(a) * r, Math.sin(a) * r - 4); } g.closePath(); g.fill();
+    g.strokeStyle = '#e8c040'; g.lineWidth = 3;
+    for (const sx of [-1, 1]) { g.beginPath(); g.arc(0, 4, 46, Math.PI / 2 + sx * 0.5, Math.PI / 2 + sx * 1.9, sx < 0); g.stroke(); for (let k = 0; k < 6; k++) { const a = Math.PI / 2 + sx * (0.65 + k * 0.22); g.beginPath(); g.ellipse(Math.cos(a) * 46, 4 + Math.sin(a) * 46, 6, 2.5, a, 0, Math.PI * 2); g.fillStyle = '#e8c040'; g.fill(); } }
+    g.restore();
   } else if (kind === 'policeHood') {
     g.fillStyle = '#1d3d8e'; g.font = 'bold 150px Arial'; g.fillText('POLİS', 512, 128);
   } else if (kind === 'swat') {
@@ -607,6 +620,21 @@ function sideStripH(B, S, y, z0, z1, h, hex, chrome) {
   }
 }
 // yan yüzeye oturan dekal ızgarası (yazı okunur yönde)
+// [B1] yan kaplamayı gerçek gövdeye oturt: S.hw pahlı/kabarık gövdeden dar kalıyordu, kaplama gövdenin içinde
+// kalıp görünmüyordu. Her köşe, gövdenin o yükseklik/boydaki en dış |x| değerinin hemen dışına itilir (şablonda bir kez).
+function fitSideDecal(geo, body) {
+  if (!body || !geo.attributes.position) return;
+  const bp = body.attributes.position, cell = new Map(), key = (y, z) => Math.round(y / 0.08) * 1000 + Math.round(z / 0.15);
+  for (let i = 0; i < bp.count; i++) { const k = key(bp.getY(i), bp.getZ(i)), x = Math.abs(bp.getX(i)); if (!(cell.get(k) >= x)) cell.set(k, x); }
+  const dp = geo.attributes.position;
+  for (let i = 0; i < dp.count; i++) {
+    const x = dp.getX(i), y = dp.getY(i), z = dp.getZ(i);
+    let m = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = cell.get(key(y + a * 0.08, z + b * 0.15)); if (c > m) m = c; }
+    if (m > Math.abs(x) - 0.005) dp.setX(i, Math.sign(x) * (m + 0.012));
+  }
+  dp.needsUpdate = true; geo.computeBoundingBox();
+}
 export function sideDecal(S, z0, z1, y0, y1) {
   const parts = [];
   for (const s of [1, -1]) {
@@ -619,7 +647,8 @@ export function sideDecal(S, z0, z1, y0, y1) {
     }
     for (let j = 0; j < NY; j++) for (let i = 0; i < NZ; i++) {
       const a = j * (NZ + 1) + i, b = a + 1, c = a + NZ + 1, d = c + 1;
-      if (s > 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+      // [B1] sarım dışa bakmalı (eskisi içe bakıyordu: tüm yan kaplamalar arka yüz ayıklamasıyla görünmüyordu)
+      if (s > 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -868,6 +897,31 @@ function buildInterior(B, S, def) {
 }
 
 // ---- özel donanımlar ----
+// [B1] polis tepe lambası: alçak profil gövde, ayaklar, 6 bölmeli kırmızı/mavi modül (kanal 5/6), ortada beyaz
+// arama lambaları (kanal 0, far ile yanar), bölme araları koyu; anten
+function policeBar(B, y, z, w) {
+  for (const s of [1, -1]) B.d(rbx(0.08, 0.05, 0.3, 0.015, s * w * 0.42, y + 0.025, z), 0x1a1a1a);
+  B.d(rbx(w, 0.06, 0.3, 0.025, 0, y + 0.075, z), 0x141414);
+  const m = w / 7;
+  for (let i = 0; i < 6; i++) {
+    const side = i < 3 ? 1 : -1, k = i % 3, x = side * (w / 2 - m * (k + 0.55));
+    B.l(rbx(m * 0.92, 0.085, 0.26, 0.03, x, y + 0.145, z), side > 0 ? 0x6a1414 : 0x14246a, side > 0 ? 0xff2020 : 0x2a5cff, side > 0 ? 5 : 6);
+  }
+  for (const s of [1, -1]) B.l(rbx(m * 0.4, 0.06, 0.2, 0.02, s * m * 0.24, y + 0.14, z), 0xbfc4c8, 0xffffff, 0);
+  B.d(cyl(0.006, 0.01, 0.5, 5, 'y', -w * 0.6, y + 0.25, z - 0.8), 0x111111);
+}
+// [B1] itme tamponu (push bar): ön tamponun önünde boru çerçeve, iki dikme, iki yatay kiriş, flaşörler
+function pushBar(B, W, cl, zf) {
+  const z = zf + 0.2, y0 = cl + 0.12, y1 = cl + 0.7, x = W * 0.3;
+  for (const s of [1, -1]) {
+    B.d(beam(s * x, y0, z, s * x, y1, z, 0.06, 0.06, true), 0x0c0c0c);
+    B.d(beam(s * x, y0 + 0.05, z, s * x, y0 + 0.1, zf - 0.05, 0.05, 0.05, true), 0x0c0c0c);
+    B.l(rbx(0.05, 0.12, 0.03, 0.01, s * (x - 0.07), y1 - 0.1, z + 0.02), s > 0 ? 0x6a1414 : 0x14246a, s > 0 ? 0xff2020 : 0x2a5cff, s > 0 ? 5 : 6);
+  }
+  B.d(beam(-x, y1 - 0.06, z, x, y1 - 0.06, z, 0.05, 0.05, true), 0x0c0c0c);
+  B.d(beam(-x, y0 + 0.2, z, x, y0 + 0.2, z, 0.05, 0.05, true), 0x0c0c0c);
+  B.d(rbx(x * 2 - 0.08, 0.22, 0.02, 0.01, 0, y0 + 0.32, z + 0.01), 0x161616);
+}
 function lightbar(B, x, y, z, w, kindA = 0xd01010, kindB = 0x1040e0) {
   B.d(rbx(w, 0.07, 0.24, 0.03, x, y + 0.035, z), 0x151515);
   B.l(rbx(w * 0.46, 0.1, 0.2, 0.04, x + w * 0.25, y + 0.1, z), 0x601010, kindA, 5);
@@ -925,8 +979,12 @@ function buildCarTemplate(type, def) {
   if (liv === 'police' || st === 'swat' || st === 'ambulance') {
     T.siren = true;
     const zl = liv === 'police' ? (S.cab.rf[0] + S.cab.rr[0]) / 2 + 0.15 : S.cab.rf[0] - 0.15;
-    lightbar(B, 0, H, zl, liv === 'police' ? 1.1 : 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
+    if (liv === 'police') policeBar(B, H, zl, Math.min(1.25, W * 0.72));
+    else lightbar(B, 0, H, zl, 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
     if (liv === 'police') {
+      pushBar(B, W, cl, fr.zFb);
+      // sürücü tarafı A direği arama projektörü
+      B.c(cyl(0.05, 0.06, 0.12, 10, 'z', W / 2 - 0.02, S.belt + 0.12, S.cab.ws[0] - 0.05));
       T.decals.push({ geo: sideDecal(S, S.axles[1] + 0.2, S.axles[0] - 0.2, cl + 0.18, S.belt - 0.05), kind: 'police' });
       B.d(rbx(W * 0.7, 0.3, 0.08, 0.03, 0, cl + 0.3, fr.zFb + 0.1), 0x111111);
       // ızgara içi flaşörler ve tavan numarası
@@ -1185,6 +1243,7 @@ export function buildCarModel(type, color) {
   const lightsMat = makeLightsMat();
   if (T.lights) chassis.add(new THREE.Mesh(T.lights, lightsMat));
   const decalMeshes = [];
+  for (const d of T.decals) if (!d.fitted && !d.truck && d.tag !== 'hood') { fitSideDecal(d.geo, T.paint); d.fitted = true; }
   for (const d of T.decals) {
     const m = new THREE.Mesh(d.geo, decalMat(d.kind));
     if (d.truck) {
