@@ -504,6 +504,20 @@ export class AudioEngine {
     this.nz(o.node, t, { dur: 0.38, freq: 3200, q: 3, type: 'bandpass', gain: 0.22 * k, sweep: 1400 });
     this.osc(o.node, t, { freq: 5200, freq2: 2600, dur: 0.3, type: 'sine', gain: 0.025 * k });
   }
+  // [B1] egzoz patlamaları: yüksek devirde gaz kesilince (spor/V8/motosiklet) birkaç düzensiz boğuk "pat"
+  exhaustPops(kind = 'sport', k = 1) {
+    if (!this.ctx) return;
+    const o = this.spatial(undefined, undefined, 0, 0.12); if (!o) return;
+    const t0 = this.ctx.currentTime, n = 2 + Math.floor(Math.random() * (kind === 'v8' ? 3 : 4));
+    const f = kind === 'v8' ? 420 : kind === 'moto' ? 900 : 650;
+    let t = t0 + 0.05 + Math.random() * 0.06;
+    for (let i = 0; i < n; i++) {
+      const g = (0.5 + Math.random() * 0.5) * k * (1 - i / (n + 1));
+      this.nz(o.node, t, { dur: 0.035 + Math.random() * 0.03, freq: f * (0.7 + Math.random() * 0.6), q: 0.9, type: 'lowpass', gain: 0.55 * g, attack: 0.001 });
+      this.osc(o.node, t, { freq: 70 + Math.random() * 40, freq2: 40, dur: 0.05, type: 'sine', gain: 0.25 * g, attack: 0.001 });
+      t += 0.045 + Math.random() * 0.11;
+    }
+  }
   // korna: araç türüne göre (player.js horn(x,z) çağırır; tür araçta hornKind ile seçilir)
   horn(x, z, kind) {
     const k = kind || this.hornKind || 'car';
@@ -584,10 +598,18 @@ function grain(d, sr, t0, f, dec, amp) {
   if (n <= 0) return;
   const r2 = 1.47 + Math.random() * 1.3, r3 = 2.6 + Math.random() * 1.9, ph = Math.random() * 6;
   const w1 = 2 * Math.PI * f / sr;
+  // [B1 performans] örnek başına sin/exp yerine dönen fazörler ve çarpımsal sönüm (aynı sinyal, ~10x hızlı)
+  let c1 = Math.cos(ph), s1 = Math.sin(ph), c2 = 1, s2 = 0, c3 = 1, s3 = 0;
+  const k1c = Math.cos(w1), k1s = Math.sin(w1), k2c = Math.cos(w1 * r2), k2s = Math.sin(w1 * r2), k3c = Math.cos(w1 * r3), k3s = Math.sin(w1 * r3);
+  const m1 = Math.exp(-1 / (sr * dec)), m2 = Math.exp(-1 / (sr * dec * 0.6)), m3 = Math.exp(-1 / (sr * dec * 0.35));
+  let e1 = 1, e2 = 1, e3 = 1;
   for (let i = 0; i < n; i++) {
-    const t = i / sr, e = Math.exp(-t / dec) * Math.min(1, i / 12);
-    d[i0 + i] += amp * e * (Math.sin(w1 * i + ph) + 0.55 * Math.sin(w1 * r2 * i) * Math.exp(-t / (dec * 0.6)) + 0.3 * Math.sin(w1 * r3 * i) * Math.exp(-t / (dec * 0.35)))
-      + (i < 40 ? amp * 0.6 * (Math.random() * 2 - 1) * (1 - i / 40) : 0);
+    const v = s1 + 0.55 * s2 * e2 + 0.3 * s3 * e3;
+    d[i0 + i] += amp * e1 * (i < 12 ? i / 12 : 1) * v + (i < 40 ? amp * 0.6 * (Math.random() * 2 - 1) * (1 - i / 40) : 0);
+    let t = c1 * k1c - s1 * k1s; s1 = s1 * k1c + c1 * k1s; c1 = t;
+    t = c2 * k2c - s2 * k2s; s2 = s2 * k2c + c2 * k2s; c2 = t;
+    t = c3 * k3c - s3 * k3s; s3 = s3 * k3c + c3 * k3s; c3 = t;
+    e1 *= m1; e2 *= m2; e3 *= m3;
   }
 }
 function synthCrack(sr) {
@@ -659,9 +681,31 @@ Object.assign(AudioEngine.prototype, {
   _sfxBank(key, n, fn) {
     const B = this._bank || (this._bank = {});
     if (B[key]) return B[key];
-    const sr = this.ctx.sampleRate, list = [];
-    for (let i = 0; i < n; i++) { const d = fn(sr, i); const b = this.ctx.createBuffer(1, d.length, sr); b.getChannelData(0).set(d); list.push(b); }
-    return (B[key] = list);
+    while (!this._sfxBankStep(key, n, fn)) { /* kalan varyantlar */ }
+    return B[key];
+  },
+  // [B1 performans] tek varyant üret (boşta önceden örnekleme için parça parça); bitince true
+  _sfxBankStep(key, n, fn) {
+    const B = this._bank || (this._bank = {});
+    if (B[key]) return true;
+    const W = this._bankWip || (this._bankWip = {}), list = W[key] || (W[key] = []);
+    const sr = this.ctx.sampleRate, d = fn(sr, list.length);
+    const b = this.ctx.createBuffer(1, d.length, sr); b.getChannelData(0).set(d); list.push(b);
+    if (list.length < n) return false;
+    B[key] = list; delete W[key];
+    return true;
+  },
+  // [B1 performans] cam/et ses bankaları ilk çarpışmada ana iş parçacığında 1-4 sn sentezleniyordu (sürüşte donma):
+  // boşta ön örnekleme kuyruğuna varyant başına bir görev
+  glassPrewarm() {
+    const T = [];
+    const add = (key, n, fn) => { for (let i = 0; i < n; i++) T.push(() => this._sfxBankStep(key, n, fn)); };
+    add('crack', 4, (sr) => synthCrack(sr));
+    add('shatter', 3, (sr) => synthShatter(sr, false));
+    add('shatterW', 3, (sr) => synthShatter(sr, true));
+    add('flesh', 3, (sr) => synthFlesh(sr, false));
+    add('fleshH', 3, (sr) => synthFlesh(sr, true));
+    return T;
   },
   _playBank(list, x, z, range, rev, gain, rate = 1) {
     const o = this.spatial(x, z, range, rev); if (!o) return false;

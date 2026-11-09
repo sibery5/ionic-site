@@ -17,7 +17,7 @@ import { Animals } from './world/animals.js';
 import { Player } from './entities/player.js';
 import { CharacterModel, defaultLook } from './entities/character.js';
 import { NPCManager } from './entities/npc.js';
-import { VehicleManager } from './entities/vehicles.js';
+import { VehicleManager, vehicleWarmGroup } from './entities/vehicles.js';
 import { TrafficLights } from './world/traffic.js';
 import { ShipTraffic } from './world/ships.js';
 import { BoatManager, nearestWaterSpot } from './entities/boats.js';
@@ -246,6 +246,11 @@ class Game {
     this.uniforms.uNight.value = this.env.nightFactor;
     await step(1, 'Hazır!');
     mark('Gölgelendirici derleme');
+    // [B1] gölgelendirici hata denetimi her yeni programda GPU'yu eşzamanlı bekletir (getProgramInfoLog):
+    // yayın sürümünde kapalı (?debug ile açılır). Araç şablonları ve malzemeleri burada önceden derlenir.
+    this.renderer.debug.checkShaderErrors = /[?&]debug/.test(location.search);
+    const warm = vehicleWarmGroup(this.combat && this.combat.glass ? this.combat.glass.decalMats : []);
+    this.scene.add(warm);
     this.renderer.compile(this.scene, this.camera);
     // [hikâye] ısınma karesi: son işlem geçişleri, gölge derinlik şaderleri ve doku/geometri yüklemeleri ilk
     // menü karesinde değil, yükleme ekranı açıkken çok küçük bir çizim tamponunda yapılır (ilk kare sıçraması).
@@ -255,11 +260,16 @@ class Game {
     try {
       const pr0 = this.renderer.getPixelRatio();
       this.camera.position.set(480, 110, -120); this.camera.lookAt(60, 10, -40);
+      // ısınma grubu kameranın önünde: araç geometri/dokuları da bu karede yüklenir
+      warm.position.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 45); warm.lookAt(this.camera.position);
+      warm.updateMatrixWorld(true);
       this.renderer.setPixelRatio(0.1); this.composer.setPixelRatio(0.1);
       this.renderer.shadowMap.needsUpdate = true;
       this.composer.render();
       this.renderer.setPixelRatio(pr0); this.composer.setPixelRatio(pr0);
     } catch (e) { console.error(e); }
+    this.scene.remove(warm);
+    for (const c of warm.children) { const ud = c.userData; if (ud && ud.lightsMat) ud.lightsMat.dispose(); if (ud && ud.plateGeo) ud.plateGeo.dispose(); }
     mark('Menü');
     this.ui.hideLoading();
     this.mode = 'menu';

@@ -261,10 +261,23 @@ function liveryTex(kind) {
   g.clearRect(0, 0, 1024, 256);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   if (kind === 'police') {
-    g.fillStyle = '#1d3d8e'; g.fillRect(0, 70, 1024, 120);
-    g.fillStyle = '#c81414'; g.fillRect(0, 196, 1024, 14);
-    g.fillStyle = '#fff'; g.font = 'bold 96px Arial'; g.fillText('POLİS', 470, 132);
-    g.font = 'bold 44px Arial'; g.fillText('155', 860, 132);
+    // [B1] kurgusal Türk tarzı ekip aracı kaplaması: lacivert alt bant (önde eğik), kırmızı ince şerit,
+    // dama şerit, POLİS yazısı, 155 ve birim no; kurgusal arma (kalkan + defne), gerçek logo değil
+    g.fillStyle = '#16307a';
+    g.beginPath(); g.moveTo(0, 96); g.lineTo(1024, 70); g.lineTo(1024, 200); g.lineTo(0, 200); g.closePath(); g.fill();
+    g.fillStyle = '#c81414'; g.beginPath(); g.moveTo(0, 86); g.lineTo(1024, 60); g.lineTo(1024, 66); g.lineTo(0, 92); g.closePath(); g.fill();
+    for (let i = 0; i < 64; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (i + j) % 2 ? '#16307a' : '#f4f4f4'; g.fillRect(i * 16, 204 + j * 12, 16, 12); }
+    g.fillStyle = '#fff'; g.font = 'bold 92px Arial'; g.fillText('POLİS', 520, 142);
+    g.font = 'bold 40px Arial'; g.fillText('155', 900, 120); g.font = 'bold 22px Arial'; g.fillText('34 · 1207', 900, 162);
+    // arma: kalkan + iki defne yayı + yıldız (kurgusal)
+    g.save(); g.translate(160, 140);
+    g.fillStyle = '#f4f4f4'; g.beginPath(); g.moveTo(-34, -40); g.lineTo(34, -40); g.lineTo(34, 2); g.quadraticCurveTo(30, 34, 0, 48); g.quadraticCurveTo(-30, 34, -34, 2); g.closePath(); g.fill();
+    g.fillStyle = '#16307a'; g.beginPath(); g.moveTo(-27, -33); g.lineTo(27, -33); g.lineTo(27, 0); g.quadraticCurveTo(24, 27, 0, 39); g.quadraticCurveTo(-24, 27, -27, 0); g.closePath(); g.fill();
+    g.fillStyle = '#e8c040';
+    g.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 7 : 16, a = -Math.PI / 2 + k * Math.PI / 5; g.lineTo(Math.cos(a) * r, Math.sin(a) * r - 4); } g.closePath(); g.fill();
+    g.strokeStyle = '#e8c040'; g.lineWidth = 3;
+    for (const sx of [-1, 1]) { g.beginPath(); g.arc(0, 4, 46, Math.PI / 2 + sx * 0.5, Math.PI / 2 + sx * 1.9, sx < 0); g.stroke(); for (let k = 0; k < 6; k++) { const a = Math.PI / 2 + sx * (0.65 + k * 0.22); g.beginPath(); g.ellipse(Math.cos(a) * 46, 4 + Math.sin(a) * 46, 6, 2.5, a, 0, Math.PI * 2); g.fillStyle = '#e8c040'; g.fill(); } }
+    g.restore();
   } else if (kind === 'policeHood') {
     g.fillStyle = '#1d3d8e'; g.font = 'bold 150px Arial'; g.fillText('POLİS', 512, 128);
   } else if (kind === 'swat') {
@@ -607,6 +620,21 @@ function sideStripH(B, S, y, z0, z1, h, hex, chrome) {
   }
 }
 // yan yüzeye oturan dekal ızgarası (yazı okunur yönde)
+// [B1] yan kaplamayı gerçek gövdeye oturt: S.hw pahlı/kabarık gövdeden dar kalıyordu, kaplama gövdenin içinde
+// kalıp görünmüyordu. Her köşe, gövdenin o yükseklik/boydaki en dış |x| değerinin hemen dışına itilir (şablonda bir kez).
+function fitSideDecal(geo, body) {
+  if (!body || !geo.attributes.position) return;
+  const bp = body.attributes.position, cell = new Map(), key = (y, z) => Math.round(y / 0.08) * 1000 + Math.round(z / 0.15);
+  for (let i = 0; i < bp.count; i++) { const k = key(bp.getY(i), bp.getZ(i)), x = Math.abs(bp.getX(i)); if (!(cell.get(k) >= x)) cell.set(k, x); }
+  const dp = geo.attributes.position;
+  for (let i = 0; i < dp.count; i++) {
+    const x = dp.getX(i), y = dp.getY(i), z = dp.getZ(i);
+    let m = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = cell.get(key(y + a * 0.08, z + b * 0.15)); if (c > m) m = c; }
+    if (m > Math.abs(x) - 0.005) dp.setX(i, Math.sign(x) * (m + 0.012));
+  }
+  dp.needsUpdate = true; geo.computeBoundingBox();
+}
 export function sideDecal(S, z0, z1, y0, y1) {
   const parts = [];
   for (const s of [1, -1]) {
@@ -619,7 +647,8 @@ export function sideDecal(S, z0, z1, y0, y1) {
     }
     for (let j = 0; j < NY; j++) for (let i = 0; i < NZ; i++) {
       const a = j * (NZ + 1) + i, b = a + 1, c = a + NZ + 1, d = c + 1;
-      if (s > 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+      // [B1] sarım dışa bakmalı (eskisi içe bakıyordu: tüm yan kaplamalar arka yüz ayıklamasıyla görünmüyordu)
+      if (s > 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -868,6 +897,31 @@ function buildInterior(B, S, def) {
 }
 
 // ---- özel donanımlar ----
+// [B1] polis tepe lambası: alçak profil gövde, ayaklar, 6 bölmeli kırmızı/mavi modül (kanal 5/6), ortada beyaz
+// arama lambaları (kanal 0, far ile yanar), bölme araları koyu; anten
+function policeBar(B, y, z, w) {
+  for (const s of [1, -1]) B.d(rbx(0.08, 0.05, 0.3, 0.015, s * w * 0.42, y + 0.025, z), 0x1a1a1a);
+  B.d(rbx(w, 0.06, 0.3, 0.025, 0, y + 0.075, z), 0x141414);
+  const m = w / 7;
+  for (let i = 0; i < 6; i++) {
+    const side = i < 3 ? 1 : -1, k = i % 3, x = side * (w / 2 - m * (k + 0.55));
+    B.l(rbx(m * 0.92, 0.085, 0.26, 0.03, x, y + 0.145, z), side > 0 ? 0x6a1414 : 0x14246a, side > 0 ? 0xff2020 : 0x2a5cff, side > 0 ? 5 : 6);
+  }
+  for (const s of [1, -1]) B.l(rbx(m * 0.4, 0.06, 0.2, 0.02, s * m * 0.24, y + 0.14, z), 0xbfc4c8, 0xffffff, 0);
+  B.d(cyl(0.006, 0.01, 0.5, 5, 'y', -w * 0.6, y + 0.25, z - 0.8), 0x111111);
+}
+// [B1] itme tamponu (push bar): ön tamponun önünde boru çerçeve, iki dikme, iki yatay kiriş, flaşörler
+function pushBar(B, W, cl, zf) {
+  const z = zf + 0.2, y0 = cl + 0.12, y1 = cl + 0.7, x = W * 0.3;
+  for (const s of [1, -1]) {
+    B.d(beam(s * x, y0, z, s * x, y1, z, 0.06, 0.06, true), 0x0c0c0c);
+    B.d(beam(s * x, y0 + 0.05, z, s * x, y0 + 0.1, zf - 0.05, 0.05, 0.05, true), 0x0c0c0c);
+    B.l(rbx(0.05, 0.12, 0.03, 0.01, s * (x - 0.07), y1 - 0.1, z + 0.02), s > 0 ? 0x6a1414 : 0x14246a, s > 0 ? 0xff2020 : 0x2a5cff, s > 0 ? 5 : 6);
+  }
+  B.d(beam(-x, y1 - 0.06, z, x, y1 - 0.06, z, 0.05, 0.05, true), 0x0c0c0c);
+  B.d(beam(-x, y0 + 0.2, z, x, y0 + 0.2, z, 0.05, 0.05, true), 0x0c0c0c);
+  B.d(rbx(x * 2 - 0.08, 0.22, 0.02, 0.01, 0, y0 + 0.32, z + 0.01), 0x161616);
+}
 function lightbar(B, x, y, z, w, kindA = 0xd01010, kindB = 0x1040e0) {
   B.d(rbx(w, 0.07, 0.24, 0.03, x, y + 0.035, z), 0x151515);
   B.l(rbx(w * 0.46, 0.1, 0.2, 0.04, x + w * 0.25, y + 0.1, z), 0x601010, kindA, 5);
@@ -925,8 +979,12 @@ function buildCarTemplate(type, def) {
   if (liv === 'police' || st === 'swat' || st === 'ambulance') {
     T.siren = true;
     const zl = liv === 'police' ? (S.cab.rf[0] + S.cab.rr[0]) / 2 + 0.15 : S.cab.rf[0] - 0.15;
-    lightbar(B, 0, H, zl, liv === 'police' ? 1.1 : 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
+    if (liv === 'police') policeBar(B, H, zl, Math.min(1.25, W * 0.72));
+    else lightbar(B, 0, H, zl, 1.4, 0xd01010, st === 'ambulance' ? 0xd01010 : 0x1040e0);
     if (liv === 'police') {
+      pushBar(B, W, cl, fr.zFb);
+      // sürücü tarafı A direği arama projektörü
+      B.c(cyl(0.05, 0.06, 0.12, 10, 'z', W / 2 - 0.02, S.belt + 0.12, S.cab.ws[0] - 0.05));
       T.decals.push({ geo: sideDecal(S, S.axles[1] + 0.2, S.axles[0] - 0.2, cl + 0.18, S.belt - 0.05), kind: 'police' });
       B.d(rbx(W * 0.7, 0.3, 0.08, 0.03, 0, cl + 0.3, fr.zFb + 0.1), 0x111111);
       // ızgara içi flaşörler ve tavan numarası
@@ -1185,6 +1243,7 @@ export function buildCarModel(type, color) {
   const lightsMat = makeLightsMat();
   if (T.lights) chassis.add(new THREE.Mesh(T.lights, lightsMat));
   const decalMeshes = [];
+  for (const d of T.decals) if (!d.fitted && !d.truck && d.tag !== 'hood') { fitSideDecal(d.geo, T.paint); d.fitted = true; }
   for (const d of T.decals) {
     const m = new THREE.Mesh(d.geo, decalMat(d.kind));
     if (d.truck) {
@@ -1284,7 +1343,7 @@ const PHYS = {
   hatch3: { grip: 12.5, cs: 11.5, steer: 0.66, gears: 5, rev: 1.15, soft: 1.05, snd: 'small' },
   estate: { grip: 12, cs: 10.5, steer: 0.62, gears: 5, rev: 0.95, soft: 1.2, snd: 'car' },
   taxi: { grip: 12.5, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1.1, snd: 'car' },
-  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9, snd: 'car' },
+  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9, snd: 'v8' },
   sport: { grip: 17, cs: 13, steer: 0.55, gears: 6, rev: 1.3, soft: 0.6, rwd: true, snd: 'sport', turbo: true },
   coupe: { grip: 16, cs: 13, steer: 0.56, gears: 6, rev: 1.25, soft: 0.7, rwd: true, snd: 'sport', turbo: true },
   cabrio: { grip: 15, cs: 12.5, steer: 0.58, gears: 6, rev: 1.2, soft: 0.8, rwd: true, snd: 'sport' },
@@ -1419,7 +1478,18 @@ export class Vehicle {
     else if (ray) this.bulletHit(ray);
     else if (amount > 25 && Math.random() < 0.25) this.crackRandom();
     if (this.hp < this.def.hp * 0.3 && Math.random() < 0.1) this.crackRandom();
-    if (this.hp <= 0 && this.burnT <= 0) { this.burnT = 4.5; this.lastAttacker = attacker; }
+    if (this.burnT > 0) return;
+    if (this.kind !== 'car') { if (this.hp <= 0) { this.burnT = 4.5; this.lastAttacker = attacker; } return; }
+    // [B1 hasar dengesi] hp 0'da motor ölür ve yoğun duman çıkar ama hemen yanmaz. Alev ancak ağır hasarda
+    // (hp <= -%30) ya da hurdaya dönmüş araca büyük tek darbede (patlama/roket) başlar; fitil uzun (~11 sn),
+    // oyuncu inebilir. Çok büyük darbe (hp <= -%100) kısa fitille patlar.
+    const H = this.def.hp;
+    if (this.hp <= -H * 0.3 || (this.hp <= 0 && amount >= 150)) {
+      this.burnT = this.hp <= -H ? 1.2 + Math.random() * 0.8 : 10 + Math.random() * 2.5;
+      this.burnT0 = this.burnT;
+      this.lastAttacker = attacker;
+      if (this.driver && this.driver.isPlayer && this.burnT > 3 && this.game.ui) this.game.ui.notify('Araç alev aldı! Hemen in (F)!', 'warn');
+    } else if (this.hp <= 0 && !this._deadNote && this.driver && this.driver.isPlayer && this.game.ui) { this._deadNote = true; this.game.ui.notify('Motor durdu — araç ağır hasarlı.', 'warn'); }
   }
   // eski API
   breakGlass() { this.crackRandom(3); }
@@ -1680,12 +1750,18 @@ export class Vehicle {
     const g = this.game, f = this.fwd, L = this.def.len;
     if (this.burnT > 0 && !this.destroyed) {
       this.burnT -= dt;
-      g.particles.fire({ x: this.pos.x + f.x * L * 0.35, y: this.pos.y + this.def.hei * 0.6, z: this.pos.z + f.z * L * 0.35 }, 1.2);
+      // alev motor bölmesinden başlar, fitil kısaldıkça büyür; kara duman eşlik eder
+      const k = this.burnT0 ? clamp(1 - this.burnT / this.burnT0, 0, 1) : 1;
+      if (Math.random() < 0.45 + k * 0.55) g.particles.fire({ x: this.pos.x + f.x * L * 0.35, y: this.pos.y + this.def.hei * 0.6, z: this.pos.z + f.z * L * 0.35 }, 0.45 + k * 0.9);
+      if (Math.random() < 0.35) g.particles.smoke({ x: this.pos.x + f.x * L * 0.3, y: this.pos.y + this.def.hei * 0.9, z: this.pos.z + f.z * L * 0.3 }, 1.1 + k * 0.6);
       if (this.burnT <= 0) this.explode();
-    } else if (!this.destroyed && this.hp < this.def.hp * 0.45 && Math.random() < (this.hp < this.def.hp * 0.25 ? 0.5 : 0.2)) {
-      const p = { x: this.pos.x + f.x * L * 0.4, y: this.pos.y + this.def.hei * 0.7, z: this.pos.z + f.z * L * 0.4 };
-      if (this.hp < this.def.hp * 0.25) g.particles.fire(p, 0.35);
-      g.particles.smoke(p, this.hp < this.def.hp * 0.25 ? 1.2 : 0.7);
+    } else if (!this.destroyed && this.hp < this.def.hp * 0.6) {
+      // duman kademeleri: %60 açık gri buhar, %35 koyu duman, 0'da (motor ölü) yoğun kara duman — alev yok
+      const H = this.def.hp, dead = this.hp <= 0, heavy = this.hp < H * 0.35;
+      if (Math.random() < (dead ? 0.6 : heavy ? 0.35 : 0.12)) {
+        const p = { x: this.pos.x + f.x * L * 0.4, y: this.pos.y + this.def.hei * 0.7, z: this.pos.z + f.z * L * 0.4 };
+        g.particles.smoke(p, dead ? 1.3 : heavy ? 0.9 : 0.5);
+      }
     }
     if (!this.destroyed) return;
     this.wreckT -= dt;
@@ -1847,7 +1923,9 @@ export class Vehicle {
 
     const c = this.controls;
     const canDrive = !this.destroyed && this.sinking <= 0 && (this.driver || this.ai);
-    const throttle = canDrive ? c.throttle : 0;
+    // [B1] motor ölü (hp <= 0, yalnız kara aracı): gaz yok, fren/direksiyon çalışır
+    const engineDead = this.kind === 'car' && this.hp <= 0;
+    const throttle = canDrive ? (engineDead ? Math.min(0, c.throttle) : c.throttle) : 0;
     const steer = canDrive ? c.steer : 0;
     const hb = canDrive ? c.handbrake : !this.destroyed && !this.driver;
     const isPlayer = !!(this.driver && this.driver.isPlayer);
@@ -1877,49 +1955,93 @@ export class Vehicle {
       const a = g.audio || audio;
       if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
       if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
+      // [B1] vites küçültmede devir eşleme gazı (blip): devir anında yükselir
+      if (this.gear < g0 && fs > 3) this.rpm = Math.min(1.05, this.rpm + 0.22);
     }
     const lo = this.gear > 0 ? top(this.gear - 1) * 0.55 : 0, hi = top(this.gear);
     let rpmT = 0.18 + 0.82 * clamp((sp - lo) / (hi - lo), 0, 1);
     if (throttle > 0 && sp < 2) rpmT = Math.max(rpmT, 0.45 + 0.35 * throttle);
     if (this.shiftT > 0) rpmT *= 0.72;
-    if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65 && P.turbo) { const a = g.audio || audio; if (a.turbo) a.turbo(0.6); }
+    if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65) {
+      const a = g.audio || audio;
+      if (P.turbo && a.turbo) a.turbo(0.6); // turbo boşaltma "pışşt"
+      // [B1] egzoz patlamaları: spor/V8/motosiklet sınıfı gaz kesince
+      if ((P.snd === 'sport' || P.snd === 'v8' || P.snd === 'moto') && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(P.snd, Math.min(1, this.rpm));
+    }
+    // [B1] devir sınırlayıcı: vites sonunda tam gazda devir titrer (son vites hariç)
+    if (throttle > 0.8 && this.gear === nG - 1 && sp > max * 0.97) rpmT = Math.min(rpmT, 0.97);
+    else if (throttle > 0.8 && this.rpm > 0.96 && this.shiftT <= 0) rpmT = 0.9 + 0.08 * ((this._lim = !this._lim) ? 1 : 0);
     this._thrPrev = throttle;
     this.rpm += (rpmT - this.rpm) * Math.min(1, dt * (this.shiftT > 0 ? 18 : 8));
-    // boylamsal kuvvetler (fren: ABS benzeri sabit yavaşlama, hız yükseldikçe biraz daha güçlü)
+    // ===== [B1 sürüş hissi] boylamsal: vites/devir tork eğrisi, çekiş sınırı, kademeli fren, ağırlık aktarımı =====
     const terrain = offRoad && !P.offroad ? 0.8 : 1;
+    const heavy = def.len > 6 || (def.mass || 0) > 6000;
+    const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
+    const muGrip = P.grip * wet * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
+    const muRoad = muGrip * 0.8; // yanal: binek ~1.05 g, spor ~1.35 g
+    // fren basıncı ~0.1 sn'de oluşur (ani duvar etkisi yok); ABS'li ~1.1 g, ağır araç daha zayıf
+    const brakeWant = throttle < 0 && fs > 0.5 ? -throttle : 0;
+    this.brakeP = (this.brakeP || 0) + (brakeWant - (this.brakeP || 0)) * Math.min(1, dt * (brakeWant > (this.brakeP || 0) ? 10 : 16));
+    this.brakeDecel = Math.min(muGrip * 0.85, heavy ? 7 : 10.5);
     if (throttle > 0) {
-      if (fs < -0.5) fs += 22 * throttle * dt;
+      if (fs < -0.5) fs += this.brakeDecel * throttle * dt; // geri giderken ileri gaz = fren
       else {
-        const torque = (1.2 - 0.35 * this.rpm) * (1 + (nG - 1 - this.gear) * 0.1);
-        fs += def.accel * terrain * throttle * torque * (this.shiftT > 0 ? 0.3 : 1) * Math.max(0, 1 - (fs / max) ** 2) * dt;
+        // vites çarpanı (1. vites güçlü, son vites zayıf) x devir tork eğrisi (orta devirde tepe) x hava direnci
+        const gm = 1.3 - 0.6 * (this.gear / Math.max(1, nG - 1));
+        const tq = 0.72 + 0.4 * Math.sin(Math.PI * clamp(this.rpm, 0.15, 1));
+        let a = def.accel * 0.5 * gm * tq * terrain * throttle * Math.max(0, 1 - (fs / max) ** 2);
+        if (this.shiftT > 0) a *= 0.08; // vites geçişinde gaz kesilir (duyulur ve hissedilir)
+        a = Math.min(a, muGrip * (P.rwd ? 0.8 : 0.72)); // çekiş sınırı (patinaj)
+        fs += a * dt;
       }
     } else if (throttle < 0) {
-      if (fs > 0.5) fs += (22 + Math.min(6, sp * 0.15)) * throttle * dt;
-      else if (fs > -max * 0.3) fs += def.accel * 0.6 * throttle * dt;
-    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (1.8 + (offRoad ? 1.5 : 0)) * dt);
-    if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), 7.5 * dt);
+      if (fs > 0.5) fs -= Math.min(fs, (this.brakeDecel + Math.min(1.5, sp * 0.04)) * this.brakeP * dt);
+      else if (fs > -max * 0.3) fs += def.accel * 0.35 * throttle * dt;
+    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (0.7 + sp * 0.012 + (offRoad ? 1.5 : 0)) * dt); // motor freni + yuvarlanma
+    if (throttle >= 0) this.brakeP *= Math.exp(-dt * 16);
+    // el freni: arka tekerlekler kilitlenir -> ~0.45 g yavaşlama (eskiden aracı olduğu yerde durduruyordu)
+    if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), (canDrive ? 3.2 : 7.5) * dt);
     fs -= fs * Math.abs(fs) * 0.0008 * dt;
-    // yanal tutunma (kayma açısı → sınırlı yanal kuvvet)
-    const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
-    let mu = P.grip * wet * (hb ? 0.33 : 1) * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
-    if (P.rwd && throttle > 0.5 && Math.abs(ls) > 2.5) mu *= 0.78;
+    // ağırlık aktarımı (yumuşatılmış boylamsal ivme, g): fren -> ön lastik yükü artar (dönüşe girer), gaz -> arka
+    const lAcc = clamp((fs - fs0) / Math.max(dt, 1e-3) / 9.81, -1.2, 1.2);
+    this.lt = (this.lt || 0) + (lAcc - (this.lt || 0)) * Math.min(1, dt * 8);
+    const front = clamp(1 - 0.28 * this.lt, 0.75, 1.3), rear = clamp(1 + 0.18 * this.lt, 0.8, 1.2);
+    // el freni sonrası tutunma kademeli döner (ani "yapışma" ile savrulma yok)
+    this.hbRec = hb && sp > 3 ? 0 : Math.min(1, (this.hbRec ?? 1) + dt * 2.2);
+    // yanal tutunma eğrisi: tepe kaymaya kadar tam, kayarken ~%82 (kontrol edilebilir kayma)
+    const slipPk = 1.4 + sp * 0.035, als = Math.abs(ls);
+    const curve = als <= slipPk ? 1 : 0.82 + 0.18 * Math.exp(-(als - slipPk) / 2.5);
+    let mu = muRoad * curve * (hb && sp > 3 ? 0.32 : 0.32 + 0.68 * this.hbRec) * rear;
+    if (P.rwd && throttle > 0.5 && this.gear <= 1 && als > 2) mu *= 0.8; // güçlü arkadan itiş: gazla kuyruk kayar
     const dls = clamp(-ls * P.cs * dt, -mu * dt, mu * dt);
     ls += dls;
-    // direksiyon ve dönüş
+    // direksiyon: hıza göre kilit açısı ve yumuşatma (düşük hızda nazik, yüksek hızda sakin), merkeze dönüş hızlı
     let wT;
     if (P.steer === 0) {
       // palet: yerinde dönebilir
       this.steerAng = steer;
       wT = steer * 0.8 * (fs < -0.3 ? -1 : 1) / (1 + sp / 25);
     } else {
-      const steerMax = P.steer / (1 + (fs * fs) / 700);
-      this.steerAng += (steer * steerMax - this.steerAng) * Math.min(1, dt * 7);
+      const steerMax = P.steer / (1 + (fs * fs) / 520);
+      const tgtA = steer * steerMax;
+      const engaging = Math.abs(tgtA) > Math.abs(this.steerAng) && Math.sign(tgtA || 1) === Math.sign(this.steerAng || tgtA || 1);
+      const tau = engaging ? 0.13 + sp * 0.006 : 0.07;
+      this.steerAng += (tgtA - this.steerAng) * Math.min(1, dt / tau);
       const wb = this.T ? this.T.wheelbase || def.len * 0.6 : def.len * 0.6;
       wT = (fs * Math.tan(this.steerAng)) / wb;
-      const wMax = (mu * 1.15) / Math.max(3, sp);
-      if (!hb) wT = clamp(wT, -wMax, wMax); else wT *= 1.5;
+      // ön lastik sınırı: frende daha keskin, gazda hafif önden kayma
+      const wMax = (muRoad * curve * front * 1.05) / Math.max(3, sp);
+      if (!hb || sp < 3) wT = clamp(wT, -wMax, wMax);
+      else {
+        // el freni kayması: kuyruk dışa açılır, direksiyon yönünde dönüş artar (sınırlı)
+        // kayma açısı ~40°'yi aşınca dönüş kendini sınırlar (tam tur atıp durmak yerine tutulabilir drift)
+        const slipA = Math.atan2(als, Math.max(1, Math.abs(fs)));
+        wT = clamp(wT * 1.3 + Math.sign(this.steerAng) * Math.min(0.5, sp * 0.025), -1.6, 1.6) * clamp(1 - (slipA - 0.45) / 0.3, 0, 1);
+      }
     }
-    this.yawRate += (wT - this.yawRate) * Math.min(1, dt * (hb ? 4 : 9));
+    // yaw tepkisi: düşük hızda çevik, yüksek hızda sönümlü (savrulmaz)
+    const yk = hb ? 5 : clamp(10 - sp * 0.15, 4.5, 10);
+    this.yawRate += (wT - this.yawRate) * Math.min(1, dt * yk);
     // [çarpışma] darbe kaynaklı ek açısal hız (vehicle_physics.js), lastik sürtünmesiyle söner
     const spin = this.spin || 0;
     this.heading += (this.yawRate + spin) * dt;
@@ -2000,8 +2122,9 @@ export class Vehicle {
     if (isPlayer) {
       const r = this.rpm * P.rev;
       const o = this._snd || (this._snd = { kind: 'car', gear: 0, throttle: 0, speed: 0, surface: 'concrete', slip: 0 });
-      o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = throttle; o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
-      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
+      // [B1] vites geçişinde gaz kesik: yük düşer (motor sesi kısa süre boşa çıkar)
+      o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = this.shiftT > 0 ? 0 : Math.max(0, throttle); o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
+      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0 && !engineDead, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
     }
     ud.driverDummy.visible = !!(this.driver && !this.driver.isPlayer) || !!(this.ai && !this.ai.empty) || isPlayer;
     this._ray = null;
@@ -2282,12 +2405,17 @@ export class VehicleManager {
       g.combat.rayVehicles = (o, d, m, ig) => { const r = orig(o, d, m, ig); if (r) r.vehicle._ray = { x: o.x + d.x * r.t, y: o.y + d.y * r.t, z: o.z + d.z * r.t, dx: d.x, dy: d.y, dz: d.z }; return r; };
     }
     this.parkTick(dt, px, pz, parkedCount);
-    const base = g.settings.quality === 'low' ? 14 : g.settings.quality === 'medium' ? 20 : 28;
-    const maxTraffic = Math.round(base * this.densityFactor());
+    // [B1 trafik] yoğunluk ayarı (trafficDensity: düşük 0.5, orta 1, yüksek 1.25, ultra 1.5) x uyarlamalı ölçek x saat.
+    // Orta: 30 seyir + 18 park (eski 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
+    const dens = g.density ? g.density('traffic') : 1;
+    const maxTraffic = Math.round(30 * dens * this.densityFactor());
+    const maxParked = Math.round(18 * Math.max(0.5, dens));
+    this.maxParked = maxParked;
     if (this.spawnT <= 0 && !p.inInterior) {
-      this.spawnT = 0.4;
+      this.spawnT = trafficCount < maxTraffic * 0.6 ? 0.25 : 0.4;
       if (trafficCount < maxTraffic) this.spawnTraffic(px, pz);
-      if (parkedCount < 10) this.spawnParked(px, pz);
+      // park yeri doğrulaması (bina/eşya/kavşak, city.parkSpotBad) sık reddeder: tur başına iki deneme
+      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7) this.spawnParked(px, pz);
     }
     const night = g.env ? g.env.nightFactor : 0;
     headPoolMat().opacity = Math.min(0.55, night * 0.6);
@@ -2310,6 +2438,9 @@ export class VehicleManager {
         if (d > 150 && v.ai.mode === 'traffic') { v.aiAcc = (v.aiAcc || 0) + dt; if (v.aiAcc >= 0.2) { this.driveAI(v, v.aiAcc); v.aiAcc = 0; } }
         else this.driveAI(v, dt);
       }
+      // [B1 performans] duran park aracı (sürücüsüz, hareketsiz, sağlam): fizik/süspansiyon atlanır; itilince/hasarda uyanır
+      if (v.parked && !v.driver && !v.ai && !v.destroyed && v.burnT <= 0 && v.hp >= v.def.hp * 0.6 && !v._pushed && v.vx * v.vx + v.vz * v.vz < 1e-4 && !(v.spin) && d > 25 && v._settled > 1) continue;
+      v._settled = v.parked && v.vx * v.vx + v.vz * v.vz < 1e-4 ? (v._settled || 0) + dt : 0;
       v.update(dt);
     }
     this.collideVehicles();
@@ -2330,7 +2461,7 @@ export class VehicleManager {
     const v = L[Math.floor(Math.random() * L.length)];
     const d = Math.hypot(v.pos.x - px, v.pos.z - pz);
     if (d < 30 || d > 150) return;
-    if (v.ai && v.ai.mode === 'traffic' && !v.ai.empty && parkedCount < 14 && Math.random() < 0.12) maybePark(this, v);
+    if (v.ai && v.ai.mode === 'traffic' && !v.ai.empty && parkedCount < (this.maxParked || 14) && Math.random() < 0.12) maybePark(this, v);
     else if (v.parked && v.parkedAI && d > 80 && v !== this.game.player.lastVehicle && this.clock - (v.bornAt ?? (v.bornAt = this.clock)) > 120 && Math.random() < 0.15) maybeUnpark(this, v);
   }
 
@@ -2358,4 +2489,19 @@ function pickTrafficType(game) {
   const T = [[0.38, 'kartal'], [0.47, 'hatch'], [0.53, 'hatch3'], [0.6, 'sedan'], [0.64, 'estate'], [0.7, 'dolmus'], [0.74, 'suv'], [0.76, 'offroad'], [0.79, 'bus'], [0.83, 'motor'], [0.845, 'bisiklet'], [0.88, 'kamyon'], [0.9, 'gt'], [0.92, 'coupe'], [0.935, 'cabrio'], [0.955, 'ambulans'], [0.975, 'police'], [1, 'polsuv']];
   for (const [p, t] of T) if (r < p) return t;
   return 'kartal';
+}
+
+// [B1 performans] Açılış ısınması: her araç türünden bir model (şablon önbelleği dolar) + yanmış/çatlak cam
+// malzemeleri. main.js yükleme ekranında sahneye ekler, gölgelendiricileri derler ve kaldırır. Böylece sürüş
+// sırasında ilk kez görünen araç türü şablon kurma ve gölgelendirici derleme takılması yaratmaz.
+export function vehicleWarmGroup(extraMats = []) {
+  const grp = new THREE.Group();
+  let i = 0;
+  const put = (o) => { o.position.set((i % 8) * 6 - 21, 0, -12 - Math.floor(i / 8) * 7); i++; grp.add(o); };
+  for (const type of Object.keys(CARS)) {
+    try { put(buildCarModel(type)); } catch (e) { /* araç dışı tür (hava/deniz) kendi modülünde */ }
+  }
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  for (const m of [burntMat, crackedGlassMat(), ...extraMats]) put(new THREE.Mesh(box, m));
+  return grp;
 }

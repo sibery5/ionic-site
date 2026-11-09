@@ -13,6 +13,9 @@ const VAULT_TMP = [];
 const VAULT_END = new THREE.Vector3(), VAULT_CHK = new THREE.Vector3(), VAULT_PRE = new THREE.Vector3();
 // kamera çarpışma ışınları (yan, yukarı ofsetleri): kaba küre taraması
 const CAM_RAYS = [[0, 0], [0.18, 0.1], [-0.18, 0.1], [0, -0.12]];
+// [B1] araç kamerası çarpışma ışınları (yan, üst): bom duvara/direğe girmez
+const VCAM_RAYS = [[0, 0], [0.5, 0.15], [-0.5, 0.15], [0, 0.45]];
+const angleWrap = (a) => angleDiff(0, a);
 // [savaş nişan] dikey bakış sınırı: yukarı ~83° (helikoptere ateş), aşağı ~69°. Kamera konumu en fazla POS_UP kadar
 // yörüngede alçalır; daha yukarı bakışta kamera başın arkasında kalıp yalnız bakış açısı döner (yere gömülmez).
 const PITCH_UP = -1.45, PITCH_DOWN = 1.2, POS_UP = -0.42;
@@ -340,7 +343,7 @@ export class Player extends Actor {
     c.handbrake = input.down('Space');
     if (v.readInput) v.readInput(input, dt);
     if (input.hit('KeyH')) g.audio.horn(v.pos.x, v.pos.z);
-    if (input.hit('KeyC')) this.carCam = (this.carCam + 1) % 3;
+    if (input.hit('KeyC')) { this.carCam = (this.carCam + 1) % (v.kind === 'car' && !v.mesh.userData.moto ? 5 : 3); this.camInit = false; if (g.ui && g.ui.notify) g.ui.notify(['Kamera: yakın', 'Kamera: uzak', 'Kamera: çok yakın', 'Kamera: kaput', 'Kamera: tampon'][this.carCam], 'info'); }
     if ((v.type === 'police' || v.type === 'swat') && input.hit('KeyN')) v.sirenOn = !v.sirenOn;
     this.pos.copy(v.pos);
     this.heading = v.heading;
@@ -375,31 +378,68 @@ export class Player extends Actor {
     const cam = g.camera;
     let fov = g.settings.fov;
     if (this.vehicle) {
+      // [B1 kamera] takip kamerası: hıza göre mesafe/FOV, virajda gidiş yönüne bakış, çok ışınlı çarpışma bomu
+      // (hızlı yaklaşır, yavaş açılır), fare bakışından sonra yumuşak dönüş. C: yakın/uzak/çok yakın/kaput/tampon.
       const v = this.vehicle;
-      // araç kamerası: belli bir süre sonra arkaya döner
-      if (this.carCamIdle > 1.2 && Math.abs(v.fs) > 3) {
-        const behind = v.fs >= 0 ? v.heading : v.heading + Math.PI;
-        this.camYaw = dampAngle(this.camYaw, behind, 3, dt);
-        this.camPitch = damp(this.camPitch, 0.22, 2, dt);
+      const sp = Math.hypot(v.vx || 0, v.vz || 0);
+      const isCar = v.kind === 'car' && !v.mesh.userData.moto;
+      if (!isCar && this.carCam > 2) this.carCam = 0;
+      const fwdSpd = v.fs !== undefined ? v.fs : sp;
+      // gidiş yönü: kayarken/driftte kamera hareket yönüne kayar (virajın içine bakış)
+      const velYaw = sp > 4 ? Math.atan2(v.vx, v.vz) : v.heading;
+      const travel = fwdSpd >= -0.5 ? v.heading + angleWrap(velYaw - v.heading) * 0.45 : v.heading + Math.PI;
+      const lead = clamp((v.yawRate || 0) * 0.22, -0.3, 0.3); // dönüşe doğru öne bakış
+      const idle = this.carCamIdle;
+      if (idle > 1.0 && (Math.abs(fwdSpd) > 2 || this.carCam > 2)) {
+        // fare bakışından sonra: yavaşça hızlanan dönüş (ani savrulma yok)
+        const rate = 4.2 * Math.min(1, (idle - 1.0) / 0.7);
+        this.camYaw = dampAngle(this.camYaw, travel + lead, rate, dt);
+        this.camPitch = damp(this.camPitch, this.carCam > 2 ? 0.04 : 0.2 - Math.min(0.06, sp * 0.002), rate * 0.7, dt);
       }
-      const yaw = this.camYaw, pitch = this.camPitch;
-      const big = v.def.len > 6;
-      const dist = [v.def.len * 1.3 + 3, v.def.len * 2 + 6, v.def.len * 0.9 + 2][this.carCam] * (big ? 1.2 : 1);
-      const target = tmp.set(v.pos.x, v.pos.y + v.def.hei + 0.4, v.pos.z);
-      fov += Math.min(15, Math.abs(v.fs) * 0.3);
-      const back = tmp2.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
-      let d = dist;
-      const hit = g.physics.raycast(target.x, target.y, target.z, back.x, back.y, back.z, dist + 0.3);
-      if (hit) d = Math.max(0.4, hit.t - 0.3);
-      this.camDistNow = d;
-      const px = target.x + back.x * d, py = target.y + back.y * d, pz = target.z + back.z * d;
-      const k = 1 - Math.exp(-18 * dt);
-      if (!this.camInit) { this.camPos.set(px, py, pz); this.camInit = true; }
-      this.camPos.x += (px - this.camPos.x) * k; this.camPos.y += (py - this.camPos.y) * k; this.camPos.z += (pz - this.camPos.z) * k;
-      if (hit) this.camPos.set(px, py, pz);
-      cam.position.copy(this.camPos);
-      cam.position.y = Math.max(cam.position.y, 0.3);
-      cam.lookAt(target.x, target.y, target.z);
+      fov += Math.min(16, Math.max(0, Math.abs(fwdSpd) - 4) * (this.carCam > 2 ? 0.42 : 0.3));
+      if (this.carCam > 2) {
+        // kaput / tampon kamerası: kasaya bağlı (yalpa ve burun dalışı hissedilir), bakış serbest
+        const ch = v.mesh.userData.chassis, d = v.def;
+        v.mesh.updateMatrixWorld();
+        const lp = this.carCam === 3 ? tmp.set(0, d.hei * 0.72 + 0.22, d.len * 0.3) : tmp.set(0, 0.62, d.len * 0.5 + 0.05);
+        ch.localToWorld(lp);
+        cam.position.copy(lp);
+        const rel = angleWrap(this.camYaw - v.heading);
+        const yaw = v.heading + rel, pitch = this.camPitch - 0.04;
+        _look.set(lp.x + Math.sin(yaw) * Math.cos(pitch) * 10, lp.y - Math.sin(pitch) * 10 + (v.pitch || 0) * 2, lp.z + Math.cos(yaw) * Math.cos(pitch) * 10);
+        cam.lookAt(_look);
+        cam.rotation.z += (v.lean || 0) + (v.roll || 0) * 0.6;
+        this.camInit = false; this.camDistNow = 0.5;
+      } else {
+        const yaw = this.camYaw, pitch = this.camPitch;
+        const big = v.def.len > 6;
+        const base = [v.def.len * 1.3 + 3, v.def.len * 2 + 6, v.def.len * 0.9 + 2][this.carCam] * (big ? 1.2 : 1);
+        const dist = base + Math.min(2.6, sp * 0.06); // hızlandıkça biraz geri çekil
+        // hedef: aracın biraz önü (hız yönünde) -> virajda yol görünür
+        const la = Math.min(4, sp * 0.12);
+        const target = tmp.set(v.pos.x + Math.sin(travel) * la, v.pos.y + v.def.hei + 0.4, v.pos.z + Math.cos(travel) * la);
+        const back = tmp2.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+        // çarpışma bomu: merkez + iki yan + üst ışın; kamera duvarın içine girmez
+        let free = dist;
+        const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+        for (const [ox, oy] of VCAM_RAYS) {
+          const hit = g.physics.raycast(target.x + rx * ox, target.y + oy, target.z + rz * ox, back.x, back.y, back.z, dist + 0.3);
+          if (hit) free = Math.min(free, Math.max(0.6, hit.t - 0.35));
+        }
+        if (this.boom === undefined || !this.camInit) this.boom = free;
+        this.boom = free < this.boom ? damp(this.boom, free, 28, dt) : damp(this.boom, free, 2.5, dt);
+        this.boom = Math.min(this.boom, free + 0.1);
+        const d = this.boom;
+        this.camDistNow = d;
+        const px = target.x + back.x * d, py = target.y + back.y * d, pz = target.z + back.z * d;
+        // yumuşak takip: hızda biraz gecikme (hız hissi), duvar yakınında doğrudan
+        const k = 1 - Math.exp(-(free < dist - 0.2 ? 30 : 14) * dt);
+        if (!this.camInit) { this.camPos.set(px, py, pz); this.camInit = true; }
+        this.camPos.x += (px - this.camPos.x) * k; this.camPos.y += (py - this.camPos.y) * k; this.camPos.z += (pz - this.camPos.z) * k;
+        cam.position.copy(this.camPos);
+        cam.position.y = Math.max(cam.position.y, (v.pos.y || 0) + 0.3, 0.3);
+        cam.lookAt(target.x, target.y, target.z);
+      }
       this.camTgt = null;
     } else {
       // yaya kamerası: omuz üstü. [savaş nişan] nişan tek bir yumuşatılmış ağırlıkla (adsK) geçer: mesafe, omuz,

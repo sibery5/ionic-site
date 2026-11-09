@@ -391,8 +391,9 @@ export function driveVehicleAI(mgr, v, dt) {
   if (stopDist < 1e8) acc = Math.min(acc, idm(Math.max(0, sp), Math.max(0.1, desired), stopDist, Math.max(0, sp), A, T * 0.6));
   if (desired <= 0.05) acc = Math.min(acc, -Math.max(0, sp) * 2 - 0.5);
   let thr;
-  if (acc >= 0) thr = clamp(acc / Math.max(2, v.def.accel * 0.8), 0, 1);
-  else thr = clamp(acc / 24, -1, 0);
+  // [B1] pedal eşlemesi araç fiziğinin gerçek ivme/fren kapasitesine göre (vehicles.js: ~accel*0.5, brakeDecel ~10.5)
+  if (acc >= 0) thr = clamp(acc / Math.max(2, v.def.accel * 0.55), 0, 1);
+  else thr = clamp(acc / (v.brakeDecel || 10.5), -1, 0);
   // yumuşak pedal (ani sarsıntı yok), acil frende hızlı
   const rate = acc < -6 ? 8 : 2.5;
   ctl.throttle = reverse ? -1 : ctl.throttle + clamp(thr - ctl.throttle, -rate * dt, rate * dt);
