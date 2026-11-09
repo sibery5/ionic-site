@@ -866,23 +866,85 @@ export class CharacterModel {
       addJ(P, J.spine, 0.35 * W.cower, 0, 0); addJ(P, J.chest, 0.25 * W.cower, 0, 0);
       fistW[0] = fistW[1] = W.cower * 0.6;
     }
+    // ---- [deniz] yüzme katmanı ----
+    // Kök = su yüzü (player/npc kökü su seviyesine koyar). Boşta: dik gövde, baş ve boyun suyun üstünde, kollar yanlarda
+    // sculling (yatay süpürme + el açısı), bacaklar çırpma (eggbeater, karşılıklı), hafif kalkıp inme.
+    // Harekette: baş yukarıda serbest stil (crawl) — gövde ~66° öne yatık, karşılıklı kol çekişi (yüksek dirsekli
+    // yakalama → itme → su üstünden yandan geri getirme), kulaçla gövde yuvarlanması, altı vuruşlu ayak çırpma.
+    // this.swimInfo = {phase (0..1, sol kol; sağ +0.5), mv} — sıçratma efektleri için (swim.js).
     if (W.swim > 0.01) {
       Q.fill(0);
-      const mv = clamp(this.spd / 1.2, 0, 1);
-      const c = t * 3.2 + this.seed;
-      const sc2 = Math.sin(c);
-      setJ(Q, J.hips, 1.3 * mv + 0.18 * (1 - mv), 0, 0);
-      setJ(Q, J.spine, -0.15 * mv, 0, 0); setJ(Q, J.chest, -0.25 * mv, 0, 0); setJ(Q, J.head, -0.6 * mv, 0, 0);
-      const ax = -2.6 + 0.6 * sc2, az = 0.3 + 0.9 * Math.max(0, sc2), el = -0.3 - 1.0 * Math.max(0, -sc2);
-      for (const [sh2, e] of [[J.shL, J.elL], [J.shR, J.elR]]) { setJ(Q, sh2, ax * mv + (-0.4 + 0.3 * sc2) * (1 - mv), 0, az * mv + 0.9 * (1 - mv)); setJ(Q, e, el * mv - 0.6 * (1 - mv), 0, 0); }
-      for (const [h, k, an, s] of [[J.hipL, J.knL, J.anL, 1], [J.hipR, J.knR, J.anR, -1]]) {
-        const kk = Math.max(0, Math.sin(c + Math.PI / 2));
-        setJ(Q, h, -0.6 * kk * mv + (-0.4 + 0.4 * Math.sin(c * 1.3 + s)) * (1 - mv), 0, 0.4 * kk * mv);
-        setJ(Q, k, 1.4 * kk * mv + (0.7 + 0.3 * Math.sin(c * 1.3 + s)) * (1 - mv), 0, 0); setJ(Q, an, 0.6, 0, 0);
+      const mv = clamp(this.spd / 1.4, 0, 1);
+      const si = this.swimInfo || (this.swimInfo = { phase: 0, mv: 0 });
+      si.phase = fract(si.phase + dt * (0.42 + 0.1 * this.spd) * mv + dt * 0.0);
+      si.mv = mv;
+      const tw = t * 5.4 + this.seed; // su çiğneme ritmi
+      const st2 = Math.sin(tw), ct2 = Math.cos(tw);
+      // gövde
+      const roll = 0.32 * Math.sin(2 * Math.PI * si.phase) * mv;
+      setJ(Q, J.hips, 0.1 * (1 - mv) + 1.12 * mv, 0, roll * 0.8);
+      setJ(Q, J.spine, -0.06 * (1 - mv) - 0.12 * mv, 0, roll * 0.25);
+      setJ(Q, J.chest, -0.04 * (1 - mv) - 0.16 * mv, 0, roll * 0.2);
+      // kollar
+      for (let i = 0; i < 2; i++) {
+        const sh2 = i ? J.shR : J.shL, el = i ? J.elR : J.elL, wr = i ? J.wrR : J.wrL;
+        // boşta sculling: kollar yana açık, ön kollar yatay süpürür (iki kol simetrik)
+        const ix = -0.55, iy = 0.5 * st2, iz = 0.95, ie = -0.85, iw = 0.45 * ct2;
+        // kulaç
+        const ph = fract(si.phase + i * 0.5);
+        let cx, cz, ce;
+        if (ph < 0.55) { const k = ph / 0.55, e = k * k * (3 - 2 * k); cx = -2.85 + 3.2 * e; ce = -0.15 - 1.0 * Math.sin(Math.PI * k); cz = 0.12 + 0.12 * Math.sin(Math.PI * k); }
+        else { const k = (ph - 0.55) / 0.45, e = k * k * (3 - 2 * k); cx = 0.35 - 3.2 * e; cz = 0.18 + 1.05 * Math.sin(Math.PI * k); ce = -0.2 - 1.45 * Math.sin(Math.PI * k); }
+        setJ(Q, sh2, ix * (1 - mv) + cx * mv, iy * (1 - mv), iz * (1 - mv) + cz * mv);
+        setJ(Q, el, ie * (1 - mv) + ce * mv, 0, 0);
+        setJ(Q, wr, 0.1 * mv, 0, iw * (1 - mv));
+      }
+      // bacaklar
+      for (const [h, k, an, sd] of [[J.hipL, J.knL, J.anL, 0], [J.hipR, J.knR, J.anR, Math.PI]]) {
+        const eg = Math.sin(tw * 0.6 + sd), eg2 = Math.sin(tw * 0.6 + sd + Math.PI / 2);
+        const fk = Math.sin(2 * Math.PI * si.phase * 3 + sd); // altı vuruşlu çırpma (kol döngüsü başına bacak başına 3)
+        setJ(Q, h, (-0.7 + 0.3 * eg) * (1 - mv) + (0.05 + 0.26 * fk) * mv, 0, 0.32 * (1 - mv) + 0.04 * mv);
+        setJ(Q, k, (1.25 + 0.35 * eg2) * (1 - mv) + (0.22 + 0.22 * Math.max(0, -fk)) * mv, 0, 0);
+        setJ(Q, an, 0.3 * (1 - mv) + 0.75 * mv, 0, 0);
       }
       mixP(P, Q, W.swim);
       lock -= W.swim;
-      hipsY += (-0.55 * (1 - mv) + (0.12 - RIG.hips + 0.95) * mv - 0.95 + RIG.hips) * W.swim;
+      // kalça yüksekliği (kök su yüzünde): dikken boyun su hizasında, kulaçta sırt yüzeyin hemen altında
+      const sy = (-0.38 + 0.035 * Math.sin(tw * 2)) * (1 - mv) + -0.12 * mv;
+      hipsY = hipsY * (1 - W.swim) + sy * W.swim;
+    }
+    // ---- [deniz] sudan çıkış: merdiven tırmanma / kenara asılıp çıkma (model.seaClimb = {kind, u, k, c}) ----
+    const SC = this.seaClimb;
+    if (SC) {
+      Q.fill(0);
+      if (SC.kind === 'ladder') {
+        // karşılıklı: bir kol yukarı uzanırken karşı bacak basamağa kalkar
+        const c = (SC.c || 0) * Math.PI;
+        for (let i = 0; i < 2; i++) {
+          const s3 = Math.sin(c + i * Math.PI), up = 0.5 + 0.5 * s3;
+          setJ(Q, i ? J.shR : J.shL, -2.0 - 0.55 * up, 0, 0.18);
+          setJ(Q, i ? J.elR : J.elL, -0.5 - 0.9 * (1 - up), 0, 0);
+          setJ(Q, i ? J.wrR : J.wrL, -0.2, 0, 0);
+          const lu = 0.5 + 0.5 * Math.sin(c + (i ? 0 : Math.PI));
+          setJ(Q, i ? J.hipR : J.hipL, -0.25 - 0.85 * lu, 0, 0.06);
+          setJ(Q, i ? J.knR : J.knL, 0.35 + 1.05 * lu, 0, 0);
+          setJ(Q, i ? J.anR : J.anL, 0.1, 0, 0);
+        }
+        setJ(Q, J.hips, 0.08, 0, 0); setJ(Q, J.spine, 0.05, 0, 0); setJ(Q, J.chest, -0.05, 0, 0);
+        if (SC.k === 2) { const k = clamp(SC.u * 6 - 5, 0, 1); for (let j = 0; j < Q.length; j++) Q[j] *= 1 - k; }
+      } else {
+        // asıl (kollar yukarıda) → çekin (dirsek bükülür) → it (kollar aşağı, gövde öne) → diz at → kalk
+        const u = SC.u;
+        const pull = smR(0, 0.35, u), push = smR(0.3, 0.6, u), knee = smR(0.55, 0.8, u) * (1 - smR(0.85, 1, u));
+        const ax = -2.7 + 1.4 * pull + 1.6 * push, ae = -0.2 - 1.6 * Math.sin(Math.PI * Math.min(1, u / 0.6));
+        for (const [sh2, el] of [[J.shL, J.elL], [J.shR, J.elR]]) { setJ(Q, sh2, ax * (1 - smR(0.85, 1, u)), 0, 0.25); setJ(Q, el, ae * (1 - smR(0.7, 1, u)), 0, 0); }
+        setJ(Q, J.hips, 0.55 * push * (1 - smR(0.85, 1, u)), 0, 0); setJ(Q, J.spine, 0.2 * push * (1 - smR(0.85, 1, u)), 0, 0);
+        setJ(Q, J.hipR, -1.5 * knee, 0, 0.1); setJ(Q, J.knR, 2.0 * knee, 0, 0);
+        setJ(Q, J.hipL, -0.2 * push * (1 - smR(0.85, 1, u)), 0, 0); setJ(Q, J.knL, 0.3 * push * (1 - smR(0.85, 1, u)), 0, 0);
+      }
+      P.set(Q);
+      lock = 0; ikW = 0;
+      hipsY = RIG.hips - (SC.kind === 'ledge' ? 0.55 * (1 - smR(0.6, 1, SC.u)) : 0);
     }
 
     // ---- 5b) çift pozları (sevgili): el ele, sarılma, öpüşme. st.couple = {kind:'hand'|'hug'|'kiss', side:±1}

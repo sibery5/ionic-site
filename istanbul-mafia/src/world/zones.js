@@ -147,7 +147,7 @@ export function buildMarina(city) {
   city.addZoneBuilding(209, -577, 226, -563, 7.0, 5, '#f4f2ec', 3, 0);
   city.addSign('marina', 208.8, 5.6, -570, -Math.PI / 2, 9, 0.9);
   // dekor yatlar (bazı yerler dolu), diğerleri yat satın alma/doğma noktası
-  for (const b of MR.berths) if (b.decor) { P.yacht.addTRS(b.x, WATER_Y - 0.3, b.z, b.heading, 1, 1, 1); cols.addLocal(b.x, b.z, b.heading, 0, 0, 4.4, 14, WATER_Y - 1.5, WATER_Y + 3.6, 'yacht'); }
+  // [deniz] dekor yatlar kaldırıldı: marinadaki bağlı yatlar artık binilebilir araçlar (ships_moored.js spawnMooredFleet)
   P.flagpole.addTRS(205, 0, -578, 0); cols.addCircle(205, -578, 0.12, 0, 9, 'pole');
 }
 

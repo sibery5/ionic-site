@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { Actor } from './actor.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
-import { isLand, WATER_Y } from '../world/map.js';
+import { isLand, inBridge, WATER_Y } from '../world/map.js';
+import { swimVertical, swimEffects, enterWater, tryClimbOut } from './swim.js'; // [deniz]
 
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
@@ -241,27 +242,26 @@ export class Player extends Actor {
       if (this.tryVault(mx, mz, input.hit('Space'))) input.pressed.delete('Space');
     }
 
-    // yüzme ve kıyıya çıkma
+    // [deniz] yüzme: suya giriş (düşerek), su çizgisi (dalgayı izler), kulaç efektleri, kıyıya çıkış (merdiven / alçak kenar)
     const water = g.physics.inWater(this.pos.x, this.pos.z);
     if (this.swimming) {
-      const ax = this.pos.x + (this.vx / (this.speed || 1)) * 0.9, az = this.pos.z + (this.vz / (this.speed || 1)) * 0.9;
-      if (this.speed > 0.5 && isLand(ax, az)) {
-        this.pos.x += (this.vx / this.speed) * 1.6; this.pos.z += (this.vz / this.speed) * 1.6;
-        if (isLand(this.pos.x, this.pos.z)) { this.pos.y = 0; this.swimming = false; this.vy = 0; }
-        else { this.pos.x = prevX; this.pos.z = prevZ; }
+      // kara kütlesine yüzerek girilmez (kenar boyunca kayar); köprü altı serbest
+      if (isLand(this.pos.x, this.pos.z) && !inBridge(this.pos.x, this.pos.z)) {
+        if (!isLand(this.pos.x, prevZ)) this.pos.z = prevZ; else if (!isLand(prevX, this.pos.z)) this.pos.x = prevX; else { this.pos.x = prevX; this.pos.z = prevZ; }
       }
+      if (ml > 0.1) tryClimbOut(this, g, mx, mz, ml);
     }
-    if (water && !this.swimming && this.pos.y < 0.5 && !this.vault) {
-      this.swimming = true; this.vy = 0; this.rollT = 0;
-      g.audio.splash(this.pos.x, this.pos.z); g.particles.splash({ x: this.pos.x, y: WATER_Y, z: this.pos.z });
-      this.crouch = false;
+    if (water && !this.swimming && !this.vault && !this.scriptCtl && this.pos.y < WATER_Y + 0.25) {
+      this.swimming = true; this.rollT = 0; this.crouch = false;
+      enterWater(this, g);
     }
     if (this.swimming) {
-      this.pos.y = damp(this.pos.y, WATER_Y + 0.1, 6, dt);
+      swimVertical(this, dt, g);
+      swimEffects(this, dt, g);
       if (!g.physics.inWater(this.pos.x, this.pos.z) && this.pos.y > -0.5) this.swimming = false;
       this.aiming = false;
       if (this.weapon !== 'fists') this.model.setWeapon(null);
-    } else if (this.model.weaponId !== this.weapon) this.model.setWeapon(this.weapon);
+    } else if (this.model.weaponId !== this.weapon && !this.scriptCtl) this.model.setWeapon(this.weapon);
 
     // yerçekimi, zıplama (çakal süresi + tuş tamponu), iniş
     if (!this.swimming && !this.vault) {
@@ -456,7 +456,7 @@ export class Player extends Actor {
       const adsDist = W.scope ? 0.55 : W.oneHand ? 1.95 : 1.6;
       const wantDist = hipDist + (adsDist - hipDist) * Ae;
       const wantSide = this.dead ? 0 : 0.42 + (0.6 - 0.42) * Ae;
-      const wantH = (this.crouch ? 1.2 : 1.58) + 0.04 * Ae + (this.swimming ? 0.25 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0) - (this.kdT > 0 ? 0.9 : 0);
+      const wantH = (this.crouch ? 1.2 : 1.58) + 0.04 * Ae + (this.swimming ? -0.95 : 0) - (this.rollT > 0 ? 0.4 * Math.sin(Math.PI * this.rollT) : 0) - (this.kdT > 0 ? 0.9 : 0);
       if (!this.camInit || this.cDist === undefined) { this.cDist = wantDist; this.cSide = wantSide; this.cH = wantH; this.cSh = this.shoulder; this.cCol = 99; this.camTgt = null; }
       // nişanda mesafe/omuz doğrudan eğriden (ikinci bir sönüm katmanı yok: çift yumuşatma = salınım)
       this.cDist = A > 0.001 ? wantDist : damp(this.cDist, wantDist, 7, dt);

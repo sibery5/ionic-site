@@ -7,7 +7,7 @@ import { outfit, equipKit } from '../game/body.js';
 import { Actor } from './actor.js';
 import { randomLook } from './character.js';
 import { RNG, angleDiff, clamp, dampAngle, rng } from '../core/util.js';
-import { districtAt, isLand } from '../world/map.js';
+import { districtAt, isLand, WATER_Y } from '../world/map.js';
 import { GANGS, rankOf } from '../game/economy.js';
 import { WEAPONS } from '../game/weapons.js';
 import { audio } from '../core/audio.js';
@@ -948,7 +948,7 @@ export class NPC extends Actor {
     if (!this.inInterior && !isLand(this.pos.x, this.pos.z)) {
       // suya düşen NPC boğulur
       this.swimming = true;
-      this.pos.y = -1.2;
+      this.pos.y = WATER_Y; // [deniz] kök su yüzünde (yüzme pozu baş suyun üstünde)
       this.drownT = (this.drownT || 0) + dt;
       if (this.drownT > 6) this.takeDamage(999, null, 'drown');
     } else this.swimming = false;
