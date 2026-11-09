@@ -20,6 +20,7 @@ import { NPCManager } from './entities/npc.js';
 import { VehicleManager } from './entities/vehicles.js';
 import { TrafficLights } from './world/traffic.js';
 import { ShipTraffic } from './world/ships.js';
+import { spawnMooredFleet, buildMooredShips } from './world/ships_moored.js'; // [deniz]
 import { BoatManager, nearestWaterSpot } from './entities/boats.js';
 import { spawnWorldVehicles } from './entities/military_vehicles.js';
 import { AircraftManager } from './entities/aircraft.js';
@@ -210,6 +211,7 @@ class Game {
     this.boats = new BoatManager(this);
     this.aircraft = new AircraftManager(this);
     this.ships = new ShipTraffic(this);
+    this.harborShip = buildMooredShips(this); // [deniz] rıhtımda bağlı, yürünebilir konteyner gemisi
     this.npcs = new NPCManager(this);
     this.pickups = new Pickups(this);
     this.wanted = new Wanted(this);
@@ -511,6 +513,7 @@ class Game {
     // askerî üs: park hâlinde tank, cip ve kamyonlar
     // [araçlar] askerî üs (tank, zırhlı, kamyon, taarruz helikopteri), havalimanı jeti, marina tekneleri
     spawnWorldVehicles(this);
+    this.mooredBoats = spawnMooredFleet(this); // [deniz] marina ve liman iskelesinde bağlı, binilebilir yat/tekneler
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
     this.applyPixelRatio();

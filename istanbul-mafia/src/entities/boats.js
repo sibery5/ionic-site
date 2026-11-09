@@ -8,12 +8,15 @@ import { bridgeHeightAt } from '../world/bridge_profile.js';
 import { clamp } from '../core/util.js';
 import { audio } from '../core/audio.js';
 import { makeCanvas } from '../core/textures.js';
+import { buildYacht, buildFishingBoat } from '../world/ships_yachts.js';
 
 // Mağaza kaydı (fiyat, istatistik, kurucu)
 export const BOAT_TYPES = {
   surat: { name: 'Sürat Teknesi', price: 120000, maxSpeed: 32, accel: 9, len: 6.6, wid: 2.3, hei: 1.6, hp: 900, turn: 1.3, colors: ['#e8e8e8', '#c81010', '#111111', '#1d3d8e'], style: 'speedboat', draft: 0.25 },
   balikci: { name: 'Balıkçı Teknesi', price: 25000, maxSpeed: 11, accel: 3, len: 8, wid: 2.8, hei: 3.2, hp: 1200, turn: 0.8, colors: ['#2a6ab0', '#e8e8e8', '#2d7a4a'], style: 'fishing', draft: 0.5 },
-  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 18, accel: 3.5, len: 16, wid: 4.6, hei: 4.4, hp: 3000, turn: 0.55, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.7 },
+  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 17, accel: 2.8, len: 16, wid: 4.6, hei: 5.9, hp: 3000, turn: 0.5, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.95 },
+  // [deniz] 28 m mega yat: ağır, yavaş ivmelenir, geç döner (büyük atalet), geniş dönüş dairesi
+  megayat: { name: 'Mega Yat', price: 9500000, maxSpeed: 13, accel: 1.3, len: 28, wid: 6.6, hei: 10.6, hp: 6000, turn: 0.28, colors: ['#f4f4f4', '#1a2430', '#7d8a96'], style: 'megayacht', draft: 1.5 },
 };
 
 // ---------------- Köpük izi (örneklemeli, toplamalı) ----------------
@@ -185,8 +188,26 @@ function boatParts(type) {
   return P;
 }
 
+// [deniz] ayrıntılı yat / balıkçı modelleri (ships_yachts.js): LOD'lu, PBR (jelkot, tik, renkli cam, paslanmaz)
+function hexOf(c) { return typeof c === 'string' ? parseInt(c.replace('#', ''), 16) : c; }
+function buildDetailedBoat(type, color) {
+  const d = BOAT_TYPES[type];
+  const c = hexOf(color || d.colors[0]);
+  const Y = d.style === 'fishing' ? buildFishingBoat(c) : buildYacht(d.style === 'megayacht' ? 'megayat' : 'yat', c, c > 0xd00000 ? 0x1a2a3a : 0x8a9098);
+  const root = new THREE.Group(); root.rotation.order = 'YXZ';
+  const chassis = new THREE.Group(); root.add(chassis);
+  chassis.add(Y.group);
+  const drv = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.25).translate(0, 0.3, 0), darkMat);
+  colorize(drv.geometry, 0x333333);
+  const D = Y.parts.driver; drv.position.set(D[0], D[1], D[2]); drv.visible = false; chassis.add(drv);
+  const pool = new THREE.Object3D(); pool.visible = false;
+  Object.assign(root.userData, { bodyMesh: Y.body, glassMesh: Y.glass, chassis, wheels: [], wheelR: 1, lights: Y.lightsMat.userData, lightsMat: Y.lightsMat, driverDummy: drv, driverTorso: drv, pool, siren: false, lod: Y.lod });
+  return root;
+}
+
 export function buildBoatModel(type, color) {
   const d = BOAT_TYPES[type];
+  if (d.style !== 'speedboat') return buildDetailedBoat(type, color);
   const P = boatParts(type);
   const root = new THREE.Group(); root.rotation.order = 'YXZ';
   const chassis = new THREE.Group(); root.add(chassis);
@@ -220,16 +241,29 @@ export class Boat extends Vehicle {
     const g = this.game, d = this.def, ud = this.mesh.userData;
     this.updateFire(dt);
     const c = this.controls;
+    // [deniz] marinada bağlı tekneye binildi: halat çözülür; bazen marina bekçisi polisi arar
+    if (this.moored && this.driver) {
+      this.moored = false;
+      if (this.driver.isPlayer && !this.owned && Math.random() < 0.35 && g.wanted) { g.wanted.crime('carjack', this.pos); if (g.ui) g.ui.notify('Marina bekçisi seni gördü!', 'warn'); }
+    }
     const live = !this.destroyed && this.driver;
+    // [deniz] bağlı tekne: palamar halatları yaylı bağ gibi yerinde tutar (itilirse geri gelir)
+    if (this.moored && this.berth && !this.destroyed) {
+      const B = this.berth, k = Math.min(1, dt * 0.8);
+      this.vx += (B.x - this.pos.x) * k - this.vx * k; this.vz += (B.z - this.pos.z) * k - this.vz * k;
+      this.heading += Math.atan2(Math.sin(B.h - this.heading), Math.cos(B.h - this.heading)) * k;
+    }
     const thr = live ? c.throttle : 0, st = live ? c.steer : 0;
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     let fs = this.vx * fx + this.vz * fz, ls = this.vx * -fz + this.vz * fx;
     const fs0 = fs;
     fs += d.accel * thr * (thr < 0 ? 0.45 : 1) * dt;
     fs -= fs * Math.abs(fs) * (d.accel / (d.maxSpeed * d.maxSpeed)) * dt + fs * 0.12 * dt;
-    ls *= Math.exp(-2.6 * dt);
+    // [deniz] kütle: büyük tekne yanlamasına daha çok kayar, dümene geç cevap verir (dönüş ataleti)
+    const heavy = clamp(10 / d.len, 0.3, 1);
+    ls *= Math.exp(-2.6 * (0.5 + 0.5 * heavy) * dt);
     const yawT = st * d.turn * clamp(Math.abs(fs) / 8, 0.18, 1) * (fs < -0.3 ? -1 : 1);
-    this.yawRate += (yawT - this.yawRate) * Math.min(1, dt * 3);
+    this.yawRate += (yawT - this.yawRate) * Math.min(1, dt * 3 * heavy);
     this.heading += this.yawRate * dt;
     this.vx = fx * fs - fz * ls; this.vz = fz * fs + fx * ls;
     this.fs = fs; this.ls = ls;
@@ -303,6 +337,7 @@ export class Boat extends Vehicle {
   }
   // kara/iskele/köprü engeli. Köprü tabliyesi teknenin üstünde yeterince yüksekse (15 Temmuz ~20 m) altından geçilir.
   blocked(x, z) {
+    for (const h of SEA_HULLS) { const dx = x - h.cx, dz = z - h.cz; if (Math.abs(dx * h.c - dz * h.s) < h.hx && Math.abs(dx * h.s + dz * h.c) < h.hz) return true; }
     if (!isLand(x, z)) return false;
     if (!inBridge(x, z)) return true;
     const by = bridgeHeightAt(x, z);
@@ -312,6 +347,44 @@ export class Boat extends Vehicle {
 // Su yüzeyi yüksekliği (dünya konumu + zaman): birkaç yönlü dalga; tüm tekneler tutarlı sallanır
 export function waveH(x, z, t) {
   return Math.sin(x * 0.11 + t * 1.3) * 0.12 + Math.sin(z * 0.17 - t * 1.7 + 1.3) * 0.08 + Math.sin((x + z) * 0.31 + t * 2.3) * 0.04;
+}
+
+// [deniz] Limanda bağlı büyük gemilerin gövdeleri (tekne çarpışması): {cx, cz, hx (yarı en), hz (yarı boy), c, s}
+export const SEA_HULLS = [];
+export function addSeaHull(cx, cz, w, L, heading) { SEA_HULLS.push({ cx, cz, hx: w / 2, hz: L / 2, c: Math.cos(heading), s: Math.sin(heading) }); }
+
+// [deniz] tekne-tekne gövde çarpışması: her tekne boyu boyunca daire zinciri; kütleye göre itme + hız aktarımı
+function collideBoats(L, g) {
+  const n = L.length;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a = L[i], b = L[j];
+    const R = (a.def.len + b.def.len) / 2;
+    if (Math.abs(a.pos.x - b.pos.x) > R || Math.abs(a.pos.z - b.pos.z) > R) continue;
+    if (!a.driver && !b.driver && Math.abs(a.vx) + Math.abs(a.vz) + Math.abs(b.vx) + Math.abs(b.vz) < 0.2) continue;
+    const na = Math.max(1, Math.round(a.def.len / a.def.wid)), nb = Math.max(1, Math.round(b.def.len / b.def.wid));
+    const ra = a.def.wid * 0.5, rb = b.def.wid * 0.5;
+    const ma = a.def.len * a.def.wid * (a.moored ? 4 : 1), mb = b.def.len * b.def.wid * (b.moored ? 4 : 1);
+    let best = 0, nx = 0, nz = 0;
+    for (let p = 0; p < na; p++) {
+      const ta = na === 1 ? 0 : (p / (na - 1) - 0.5) * (a.def.len - a.def.wid);
+      const ax = a.pos.x + Math.sin(a.heading) * ta, az = a.pos.z + Math.cos(a.heading) * ta;
+      for (let q = 0; q < nb; q++) {
+        const tb = nb === 1 ? 0 : (q / (nb - 1) - 0.5) * (b.def.len - b.def.wid);
+        const dx = b.pos.x + Math.sin(b.heading) * tb - ax, dz = b.pos.z + Math.cos(b.heading) * tb - az;
+        const d = Math.hypot(dx, dz), pen = ra + rb - d;
+        if (pen > best) { best = pen; nx = d > 1e-4 ? dx / d : 1; nz = d > 1e-4 ? dz / d : 0; }
+      }
+    }
+    if (best <= 0) continue;
+    const wa = mb / (ma + mb), wb = 1 - wa;
+    a.pos.x -= nx * best * wa; a.pos.z -= nz * best * wa; b.pos.x += nx * best * wb; b.pos.z += nz * best * wb;
+    const rv = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
+    if (rv < 0) {
+      const J = -rv * 1.3;
+      a.vx -= nx * J * wa; a.vz -= nz * J * wa; b.vx += nx * J * wb; b.vz += nz * J * wb;
+      if (-rv > 3) { a.damage(rv * rv * 1.5 * wa, null); b.damage(rv * rv * 1.5 * wb, null); audio.crash((a.pos.x + b.pos.x) / 2, (a.pos.z + b.pos.z) / 2, Math.min(1.2, -rv / 10)); }
+    }
+  }
 }
 
 // ---------------- Yönetici ----------------
@@ -344,13 +417,22 @@ export class BoatManager {
     a.tone({ freq: 165 / k, dur: 1.6, type: 'sawtooth', gain: 0.14, x, z, range: 600 });
   }
   update(dt) {
-    const L = this.game.vehicles.list;
+    const L = this.game.vehicles.list, B = this._b || (this._b = []);
+    B.length = 0;
+    const cam = this.game.camera ? this.game.camera.position : this.game.player.pos;
+    this._tick = (this._tick || 0) + 1;
     for (let i = L.length - 1; i >= 0; i--) {
       const v = L[i];
       if (v.kind !== 'boat') continue;
-      v.update(dt);
-      if (v.destroyed && v.sinking > 14) this.game.vehicles.remove(v);
+      // [deniz] uzaktaki bağlı tekneler seyrek güncellenir (yalnız dalga yalpası)
+      if (v.moored && !v.driver && !v.destroyed && Math.abs(v.pos.x - cam.x) + Math.abs(v.pos.z - cam.z) > 320) {
+        v._acc = (v._acc || 0) + dt;
+        if ((this._tick + v.id) % 8 === 0) { v.update(v._acc); v._acc = 0; }
+      } else v.update(dt);
+      if (v.destroyed && v.sinking > 14) { this.game.vehicles.remove(v); continue; }
+      B.push(v);
     }
+    collideBoats(B, this.game);
     this.wakes.update(dt);
   }
 }
