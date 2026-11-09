@@ -979,8 +979,11 @@ export class NPC extends Actor {
         const c = g.npcs.nearestHostile(this, 45);
         if (c && g.physics.lineOfSight(this.pos.x, this.pos.y + 1.6, this.pos.z, c.pos.x, c.pos.y + 1.3, c.pos.z)) { this.engage(c, 0.6); this.say(['Polis! Silahı bırak!', 'Ateşi kes!'], 0.7); }
       }
-      if (this.faction === 'police' && lvl >= 2 && this.state === 'arrest') this.engage(player, 0.5);
-      if (this.faction === 'police' && this.state === 'attack' && this.target === player && lvl === 1 && !player.aiming) { this.state = 'arrest'; }
+      // [kanun] 1-2★'da sıkıştırılıp duran araçtaki (nişan almayan) oyuncu: polis kapıya yürür, "Araçtan in!" (wanted.js
+      // araçtan gözaltı); 2★'da 'arrest' -> 'attack' yükseltmesi bunu bozup ekibi aracın arkasında siperde tutuyordu
+      const pv = player.vehicle, carStop = !!pv && pv.kind === 'car' && pv.speed < 1.5 && lvl <= 2 && !player.aiming;
+      if (this.faction === 'police' && lvl >= 2 && this.state === 'arrest' && !carStop) this.engage(player, 0.5);
+      if (this.faction === 'police' && this.state === 'attack' && this.target === player && (lvl === 1 || (carStop && this.kind === 'police')) && !player.aiming) { this.state = 'arrest'; }
       if ((this.faction === 'gang' || this.faction === 'military') && !this.ally && this.state !== 'attack' && pd < (this.faction === 'military' ? 45 : 28) && this.hostileTo(player)) {
         if (g.physics.lineOfSight(this.pos.x, this.pos.y + 1.6, this.pos.z, player.pos.x, player.pos.y + 1.6, player.pos.z)) {
           this.engage(player);
@@ -1060,6 +1063,18 @@ export class NPC extends Actor {
     const cp = this.chasePt(t, los);
     if (this.alertT > 0) { this.alertT -= dt; this.heading = dampAngle(this.heading, want, 6, dt); if (d > 30) { this.navTo(cp.x, cp.z, 3.5, dt, true); out.speed = this.speed; } return out; }
     if (this.state === 'arrest') {
+      const pv = t.isPlayer && t.vehicle && t.vehicle.kind === 'car' && t.vehicle.speed < 1.5 ? t.vehicle : null;
+      if (pv && d < 16) {
+        // [kanun] duran araçtaki şüpheli: sürücü kapısının yanına yürü (aracın içine değil), yoldaki duran
+        // araçların (kendi ekip aracı, sıkıştıran araçlar) etrafından dolaş
+        const door = this.carDoorPt(pv);
+        const dd = Math.hypot(door.x - this.pos.x, door.z - this.pos.z);
+        if (dd > 0.5) { const w = this.carDetour(door.x, door.z, pv); this.navTo(w.x, w.z, dd > 6 ? 4.8 : 2.4, dt, true); out.speed = this.speed; }
+        else this.heading = dampAngle(this.heading, want, 10, dt);
+        if (d < 14) this.say(BARKS.arrest, dt * 3);
+        this.aiming = this.wdef.type !== 'melee';
+        return out;
+      }
       if (d > 1.3 || !los) { this.navTo(cp.x, cp.z, d > 6 ? 4.8 : 2.4, dt, true); out.speed = this.speed; }
       else this.heading = dampAngle(this.heading, want, 10, dt);
       if (d < 14) this.say(BARKS.arrest, dt * 3);
@@ -1193,6 +1208,48 @@ export class NPC extends Actor {
   }
 
   // [kanun] takip noktası: kolluk görmediği oyuncunun gerçek yerini bilmez (telsizdeki son konum / arama noktası)
+  // [kanun] duran aracın kapı yanı (polisin bulunduğu taraf; aracın içi değil)
+  carDoorPt(v) {
+    const fx = Math.sin(v.heading), fz = Math.cos(v.heading), rx = fz, rz = -fx;
+    const lx = (this.pos.x - v.pos.x) * rx + (this.pos.z - v.pos.z) * rz;
+    const side = lx >= 0 ? 1 : -1, off = v.def.wid / 2 + 0.75, along = v.def.len * 0.08;
+    const o = this._doorPt || (this._doorPt = { x: 0, z: 0 });
+    o.x = v.pos.x + rx * side * off + fx * along; o.z = v.pos.z + rz * side * off + fz * along;
+    return o;
+  }
+  // [kanun] hedefe giden doğru yolda duran bir araç varsa (navgrid araçları bilmez) en kısa köşesinden dolaş
+  carDetour(tx, tz, skip) {
+    const g = this.game, px = this.pos.x, pz = this.pos.z, nav = g.physics.nav;
+    let best = null, bestT = 1e9;
+    for (const v of g.vehicles.list) {
+      if (v === skip || v.kind !== 'car' || v.speed > 1 || v.pos.y > 1.5) continue;
+      if (Math.abs(v.pos.x - px) > 14 || Math.abs(v.pos.z - pz) > 14) continue;
+      const fx = Math.sin(v.heading), fz = Math.cos(v.heading), rx = fz, rz = -fx;
+      // aktör yarıçapı 0.35: sınırdaki (araca yaslanmış) aktör kutunun dışında sayılır
+      const hx = v.def.wid / 2 + 0.25, hz = v.def.len / 2 + 0.25;
+      const ax = (px - v.pos.x) * rx + (pz - v.pos.z) * rz, az = (px - v.pos.x) * fx + (pz - v.pos.z) * fz;
+      const bx = (tx - v.pos.x) * rx + (tz - v.pos.z) * rz, bz = (tx - v.pos.x) * fx + (tz - v.pos.z) * fz;
+      const cuts = (x0, z0, x1, z1) => { for (let k = 1; k <= 12; k++) { const u = k / 12, x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * u; if (Math.abs(x) < hx && Math.abs(z) < hz) return u; } return -1; };
+      const hitT = cuts(ax, az, bx, bz);
+      if (hitT < 0 || hitT >= bestT) continue;
+      // köşe adayları (biraz dışarıda): kutuyu kesmeden varılabilen, toplam yolu en kısa olan
+      const cx = v.def.wid / 2 + 0.8, cz = v.def.len / 2 + 0.8;
+      let bc = null, bl = 1e9;
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const qx = sx * cx, qz = sz * cz;
+        if (Math.hypot(qx - ax, qz - az) < 0.6 || cuts(ax, az, qx, qz) >= 0) continue; // varılan köşe: sıradakine
+        // köşe bina / duvar içindeyse (araç duvara yanaşık park etmiş) öbür uçtan dolaş
+        const wx = v.pos.x + qx * rx + qz * fx, wz = v.pos.z + qx * rz + qz * fz;
+        if (nav && (nav.at(wx, wz) >= N_BLOCK || nav.at(px + (wx - px) * 0.7, pz + (wz - pz) * 0.7) >= N_BLOCK)) continue;
+        const len = Math.hypot(qx - ax, qz - az) + Math.hypot(bx - qx, bz - qz);
+        if (len < bl) { bl = len; bc = [qx, qz]; }
+      }
+      if (!bc) continue;
+      bestT = hitT;
+      best = { x: v.pos.x + bc[0] * rx + bc[1] * fx, z: v.pos.z + bc[0] * rz + bc[1] * fz };
+    }
+    return best || { x: tx, z: tz };
+  }
   chasePt(t, los) {
     if (!los && t.isPlayer && this.faction === 'police') return this.game.wanted.searchPoint(this);
     return !los && this.lastSeen ? this.lastSeen : t.pos;
