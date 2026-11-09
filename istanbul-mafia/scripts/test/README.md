@@ -35,3 +35,8 @@ silah başına atış, yakın/uzak/iç mekân, patlama, ayak sesleri, kapı, amb
 NaN / 0 dBFS kırpma / 200 ses sonrası düğüm sızıntısı ve oyun içi konumlu siren denetimi:
 
     SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/a2 $PWD/scripts/test/audio2-steps.js
+
+Şehir hayatı (B3): semt başına bakkal/market, AVM (katlar, yemek katı, ilerleyen kasa sırası, yürüyen merdiven, asansör,
+çizim çağrısı), kafe terasları (yol/kaldırım dışı, çiftler), kanepeye oturma / yatağa uzanma; SHOTS=1 ile ekran görüntüleri:
+
+    SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/city $PWD/scripts/test/city-steps.js

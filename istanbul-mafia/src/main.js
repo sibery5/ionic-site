@@ -42,6 +42,8 @@ import { mapBase } from './ui/bigmap.js'; // [hikâye] harita tabanı boşta haz
 import { formatMoney, clamp } from './core/util.js';
 import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışık seti
 import { Seating } from './world/seating.js'; // [dünya] bank oturma
+import { placeCityShops } from './world/city_shops.js'; // [şehir] bakkal/market/kafe/AVM yerleşimi
+import { CityLife, buildCafeTerraces } from './game/citylife.js'; // [şehir]
 
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
@@ -177,6 +179,7 @@ class Game {
 
     await step(0.02, 'İstanbul haritası çiziliyor...');
     this.map = new CityMap(1453);
+    placeCityShops(this.map); // [şehir]
     this.physics = new Physics(this.map);
     this.uniforms = { uNight: { value: 0 } };
     await step(0.08, 'Sokaklar döşeniyor...');
@@ -191,6 +194,7 @@ class Game {
     }
     buildBridgesAndIsland(this.city.group, this.physics.city, this.uniforms);
     this.city.buildParks();
+    buildCafeTerraces(this.city); // [şehir] kafe dış masaları (parselin kendi önünde)
     this.seating = new Seating(this); // [dünya] sokak/sahil bankları (E: otur/kalk)
     // simge yapı kapıları
     for (const d of landmarkDoors) this.city.doors.push({ x: d.x, z: d.z, building: { id: 'lm-' + d.name, type: d.type, name: d.name, door: { x: d.x, z: d.z, nz: 1 } } });
@@ -211,6 +215,7 @@ class Game {
     this.wanted = new Wanted(this);
     this.law = new Law(this); // [kanun] ambulans, gasp, trafik cezası, ev sahibi
     this.interiors = new Interiors(this);
+    this.cityLife = new CityLife(this); // [şehir]
     this.missions = new Missions(this);
     this.life = new Life(this);
     this.social = new Social(this); // sevgili, ödül avı, kapkaç, görev defteri (J)
@@ -940,6 +945,8 @@ class Game {
         return { label: `Gir: ${placeName(door.building.type, door.building)}`, action: () => this.interiors.enter(door) };
       }
     }
+    const cl = this.cityLife && this.cityLife.prompt(); // [şehir] kafede garson
+    if (cl) return cl;
     const seat = this.seating && this.seating.prompt(); // [dünya] bankta otur / kalk
     if (seat) return seat;
     const cat = this.animals.nearestPet(p.pos.x, p.pos.z, 1.8);
@@ -1060,6 +1067,7 @@ class Game {
     // oyuncu
     p.update(dt, input);
     if (this.seating) this.seating.update(dt, input); // [dünya]
+    if (this.cityLife) this.cityLife.update(dt, input); // [şehir] iç mekân oturma/yatma, kafeler
     this.audio.listener.x = p.pos.x; this.audio.listener.z = p.pos.z;
     // dünya
     const inside = !!p.inInterior;

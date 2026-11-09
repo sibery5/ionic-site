@@ -7,7 +7,7 @@ import { Properties } from './properties.js';
 import { Market } from './market.js';
 import { formatMoney } from '../core/util.js';
 
-const ROBBABLE = ['food', 'clothes', 'cafe', 'club'];
+const ROBBABLE = ['food', 'clothes', 'cafe', 'club', 'bakkal', 'market', 'kafe']; // [şehir] +mahalle dükkânları
 
 export class Life {
   constructor(game) {

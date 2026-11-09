@@ -31,12 +31,18 @@ export const SPECIAL_INFO = {
   garage: { label: 'OTO TAMİR', bg: '#3a2a0d', fg: '#ffcc00' },
   mosque_small: { label: '', bg: '#000', fg: '#fff' },
   villa: { label: '', bg: '#000', fg: '#fff' },
+  // [şehir] mahalle dükkânları ve AVM (kurgusal adlar)
+  bakkal: { label: 'BAKKAL', bg: '#2a5a1d', fg: '#fff3b0' },
+  market: { label: 'MARKET', bg: '#c8401a', fg: '#ffffff' },
+  kafe: { label: 'KAFE', bg: '#3a2414', fg: '#f2d9a8' },
+  avm: { label: 'BOĞAZİÇİ PARK AVM', bg: '#0d1a2e', fg: '#7fd6ff' },
 };
 export const SPECIAL_COLORS = {
   safehouse: '#d8c8a8', konak: '#e8e0d0', gun: '#7a7a72', clothes: '#e8c8d8', food: '#e8e0a8', trade: '#5a564e', dealer: '#c8d8e8', bank: '#d8d8d0',
   hospital: '#f0f0f0', police: '#d8dde4', estate: '#e0c8a0', cafe: '#d8a888', club: '#3a2a4a', warehouse: '#8a8274', rival: '#e8e8e8', garage: '#9a9080', mosque_small: '#e8e4dc', villa: '#f2efe8',
+  bakkal: '#e8dcb0', market: '#e8e4dc', kafe: '#d8b898', avm: '#c8d0d8', // [şehir]
 };
-const SHOP_TYPES = new Set(['gun', 'clothes', 'food', 'trade', 'dealer', 'bank', 'cafe', 'club', 'estate', 'garage']);
+const SHOP_TYPES = new Set(['gun', 'clothes', 'food', 'trade', 'dealer', 'bank', 'cafe', 'club', 'estate', 'garage', 'bakkal', 'market', 'kafe', 'avm']); // [şehir] +bakkal/market/kafe/avm
 const STYLE_ID = { plaster: 0, brick: 1, official: 2, ottoman: 3, glass: 4, villa: 5 };
 
 export function signEntries() {
@@ -238,7 +244,7 @@ export function buildBuildings(city) {
     city.doors.push({ x: dd.x + nx * 0.8, z: dd.z + nz * 0.8, building: b });
     // ---- tabela ve tente ----
     let key = null, sw = 4.2, sh = 0.8;
-    if (special && SPECIAL_INFO[b.type] && SPECIAL_INFO[b.type].label) { key = 'sp:' + b.type; sw = Math.min(b.type === 'police' ? 7.5 : 5.5, L - 1); sh = b.type === 'police' ? 1.1 : 1.1; }
+    if (special && SPECIAL_INFO[b.type] && SPECIAL_INFO[b.type].label) { key = 'sp:' + b.type; sw = Math.min(b.type === 'police' ? 7.5 : b.type === 'avm' ? 12 : 5.5, L - 1); sh = b.type === 'police' ? 1.1 : 1.1; }
     else if (b.sign >= 0 && b.type === 'apartment') key = 'shop:' + SHOP_SIGNS[b.sign % SHOP_SIGNS.length];
     if (key && fcode < 2) {
       const off = b.type === 'apartment' && L > 9 ? 3.2 : 0;

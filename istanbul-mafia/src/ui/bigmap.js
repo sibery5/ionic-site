@@ -20,7 +20,7 @@ const COL = {
   road: '#4a453c', main: '#d7b45a', mainEdge: '#1a1612', bridge: '#e8c66a', pier: '#5a5244',
 };
 const LM_NAMES = { galata: 'Galata Kulesi', taksim: 'Taksim', bluemosque: 'Sultanahmet', ayasofya: 'Ayasofya', bazaar: 'Kapalıçarşı', suleymaniye: 'Süleymaniye', dolmabahce: 'Dolmabahçe', haydarpasa: 'Haydarpaşa', mihrimah: 'Mihrimah Sultan', stadium: 'Stadyum' };
-const LEGEND = [['konak', 'Konak'], ['safehouse', 'Güvenli ev'], ['gun', 'Silahçı'], ['clothes', 'Butik'], ['food', 'Bakkal'], ['trade', 'Karaborsa'], ['dealer', 'Oto galeri'], ['bank', 'Banka'], ['hospital', 'Hastane'], ['police', 'Emniyet'], ['cafe', 'Çay ocağı'], ['club', 'Gece kulübü'], ['garage', 'Tamirci'], ['property', 'Mülkün'], ['job', 'Yasal iş'], ['crimejob', 'Kirli iş']];
+const LEGEND = [['konak', 'Konak'], ['safehouse', 'Güvenli ev'], ['gun', 'Silahçı'], ['clothes', 'Butik'], ['food', 'Bakkal'], ['market', 'Market'], ['kafe', 'Kafe'], ['avm', 'AVM'], ['trade', 'Karaborsa'], ['dealer', 'Oto galeri'], ['bank', 'Banka'], ['hospital', 'Hastane'], ['police', 'Emniyet'], ['cafe', 'Çay ocağı'], ['club', 'Gece kulübü'], ['garage', 'Tamirci'], ['property', 'Mülkün'], ['job', 'Yasal iş'], ['crimejob', 'Kirli iş']];
 const hexCache = new Map();
 const hex = (c) => { let v = hexCache.get(c); if (!v) { v = '#' + new THREE.Color(c).getHexString(); hexCache.set(c, v); } return v; };
 const JOB_PATH = (id) => (['chop', 'robbery', 'protection', 'hit'].includes(id) ? 'crime' : 'legal');

@@ -1054,6 +1054,7 @@ export class CharacterModel {
     if (W.up > 0.5) { cr[0] = 0.05; cr[1] = this.weaponMesh ? 0.85 : 0.05; }
     this.applyHands(dt, cr);
     this.updateProps();
+    if (this.post) this.post(dt, st); // [şehir] ek jest katmanı (kafede yudum, yemek katında çatal) — kemiklere son söz
   }
 
   // boşta varyasyonları + NPC kişilik davranışları (telefon, sigara, kollar kavuşturma, saat bakma, etrafa bakma)

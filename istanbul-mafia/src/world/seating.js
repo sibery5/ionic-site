@@ -75,7 +75,7 @@ export class Seating {
     if (p.swimming || p.aiming) return null;
     const st = this.nearest(p.pos.x, p.pos.z, 1.4);
     if (!st || Math.abs(p.pos.y - st.y) > 0.8) return null;
-    return { label: st.kind === 'sahil' ? 'Banka otur (denize karşı)' : 'Banka otur', action: () => this.sit(st, p) };
+    return { label: st.kind === 'sahil' ? 'Banka otur (denize karşı)' : st.kind === 'kafe' ? 'Kafe sandalyesine otur' : 'Banka otur', action: () => this.sit(st, p) }; // [şehir] kafe
   }
   // her kare (oyuncu güncellemesinden sonra): oturan oyuncuyu bankta tut; hareket/zıplama ile kalk
   update(dt, input) {
