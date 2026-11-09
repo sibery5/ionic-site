@@ -1,4 +1,4 @@
-// Borsa İstanbul Mafya (BİM): kurgusal şirketler, rastgele yürüyüş fiyatları, haber şokları.
+// Borsa İstanbul Mafya (BGZ): kurgusal şirketler, rastgele yürüyüş fiyatları, haber şokları.
 import { STOCKS, ensureLifeState } from './economy.js';
 import { formatMoney } from '../core/util.js';
 
@@ -50,7 +50,7 @@ export class Market {
   price(sym) { return this.m.px[sym]; }
   change(sym) { const m = this.m; return (m.px[sym] - m.open[sym]) / m.open[sym]; }
   index() {
-    // BİM-30 endeksi: baz fiyata göre ortalama ×1000
+    // BGZ-30 endeksi: baz fiyata göre ortalama ×1000
     const m = this.m;
     return (STOCKS.reduce((a, st) => a + m.px[st.sym] / st.base, 0) / STOCKS.length) * 1000;
   }

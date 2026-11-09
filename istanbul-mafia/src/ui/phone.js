@@ -307,9 +307,9 @@ export const PhoneMethods = {
           $('.sl', c).appendChild(B('Hepsini sat', () => { if (M.sell(st.sym, have)) render(); }, 'red'));
           return;
         }
-        const c = header('BİM Borsa');
+        const c = header('Boğaz Borsası');
         const pf = M.portfolio();
-        c.innerHTML = `<div class="ph-card"><span>BİM-30 Endeksi</span><b>${M.index().toFixed(1)}</b><small>Portföy ${formatMoney(pf.value)} · K/Z <span class="${pf.pnl >= 0 ? 'up' : 'dn'}">${formatMoney(pf.pnl)}</span></small></div>`;
+        c.innerHTML = `<div class="ph-card"><span>BGZ-30 Endeksi</span><b>${M.index().toFixed(1)}</b><small>Portföy ${formatMoney(pf.value)} · K/Z <span class="${pf.pnl >= 0 ? 'up' : 'dn'}">${formatMoney(pf.pnl)}</span></small></div>`;
         for (const st of STOCKS) {
           const ch = M.change(st.sym), have = s.stocks.hold[st.sym] || 0;
           const r = el('button', 'ph-li stock');

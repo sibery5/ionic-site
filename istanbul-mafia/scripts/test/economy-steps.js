@@ -83,7 +83,8 @@ module.exports = async (p, out) => {
     const apps = () => document.querySelectorAll('.ph-app');
     if (!apps().length) { console.log('P açmadı: ' + JSON.stringify(diag)); g.ui.openPhone(); }
     const seen = [];
-    for (const i of [1, 2, 3, 4, 6, 5]) { apps()[i].click(); seen.push(document.querySelector('.ph-head b').textContent); if (i !== 5) document.querySelector('.ph-back').click(); }
+    const app = (id) => document.querySelector(`.ph-app[data-app="${id}"]`);
+    for (const id of ['bank', 'jobs', 'estate', 'garage', 'stock']) { app(id).click(); seen.push(document.querySelector('.ph-head b').textContent); if (id !== 'stock') document.querySelector('.ph-back').click(); }
     document.querySelector('.ph-li.stock').click();
     document.querySelectorAll('.ph-row.b .btn')[1].click(); // +10 lot
     const sym = document.querySelector('.ph-head b').textContent;
