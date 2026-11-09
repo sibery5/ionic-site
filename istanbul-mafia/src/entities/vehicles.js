@@ -2405,12 +2405,17 @@ export class VehicleManager {
       g.combat.rayVehicles = (o, d, m, ig) => { const r = orig(o, d, m, ig); if (r) r.vehicle._ray = { x: o.x + d.x * r.t, y: o.y + d.y * r.t, z: o.z + d.z * r.t, dx: d.x, dy: d.y, dz: d.z }; return r; };
     }
     this.parkTick(dt, px, pz, parkedCount);
-    const base = g.settings.quality === 'low' ? 14 : g.settings.quality === 'medium' ? 20 : 28;
-    const maxTraffic = Math.round(base * this.densityFactor());
+    // [B1 trafik] yoğunluk ayarı (trafficDensity: düşük 0.5, orta 1, yüksek 1.25, ultra 1.5) x uyarlamalı ölçek x saat.
+    // Orta: 30 seyir + 18 park (eski 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
+    const dens = g.density ? g.density('traffic') : 1;
+    const maxTraffic = Math.round(30 * dens * this.densityFactor());
+    const maxParked = Math.round(18 * Math.max(0.5, dens));
+    this.maxParked = maxParked;
     if (this.spawnT <= 0 && !p.inInterior) {
-      this.spawnT = 0.4;
+      this.spawnT = trafficCount < maxTraffic * 0.6 ? 0.25 : 0.4;
       if (trafficCount < maxTraffic) this.spawnTraffic(px, pz);
-      if (parkedCount < 10) this.spawnParked(px, pz);
+      // park yeri doğrulaması (bina/eşya/kavşak, city.parkSpotBad) sık reddeder: tur başına iki deneme
+      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7) this.spawnParked(px, pz);
     }
     const night = g.env ? g.env.nightFactor : 0;
     headPoolMat().opacity = Math.min(0.55, night * 0.6);
@@ -2433,6 +2438,9 @@ export class VehicleManager {
         if (d > 150 && v.ai.mode === 'traffic') { v.aiAcc = (v.aiAcc || 0) + dt; if (v.aiAcc >= 0.2) { this.driveAI(v, v.aiAcc); v.aiAcc = 0; } }
         else this.driveAI(v, dt);
       }
+      // [B1 performans] duran park aracı (sürücüsüz, hareketsiz, sağlam): fizik/süspansiyon atlanır; itilince/hasarda uyanır
+      if (v.parked && !v.driver && !v.ai && !v.destroyed && v.burnT <= 0 && v.hp >= v.def.hp * 0.6 && !v._pushed && v.vx * v.vx + v.vz * v.vz < 1e-4 && !(v.spin) && d > 25 && v._settled > 1) continue;
+      v._settled = v.parked && v.vx * v.vx + v.vz * v.vz < 1e-4 ? (v._settled || 0) + dt : 0;
       v.update(dt);
     }
     this.collideVehicles();
@@ -2453,7 +2461,7 @@ export class VehicleManager {
     const v = L[Math.floor(Math.random() * L.length)];
     const d = Math.hypot(v.pos.x - px, v.pos.z - pz);
     if (d < 30 || d > 150) return;
-    if (v.ai && v.ai.mode === 'traffic' && !v.ai.empty && parkedCount < 14 && Math.random() < 0.12) maybePark(this, v);
+    if (v.ai && v.ai.mode === 'traffic' && !v.ai.empty && parkedCount < (this.maxParked || 14) && Math.random() < 0.12) maybePark(this, v);
     else if (v.parked && v.parkedAI && d > 80 && v !== this.game.player.lastVehicle && this.clock - (v.bornAt ?? (v.bornAt = this.clock)) > 120 && Math.random() < 0.15) maybeUnpark(this, v);
   }
 
