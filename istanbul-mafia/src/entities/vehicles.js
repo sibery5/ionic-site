@@ -1284,7 +1284,7 @@ const PHYS = {
   hatch3: { grip: 12.5, cs: 11.5, steer: 0.66, gears: 5, rev: 1.15, soft: 1.05, snd: 'small' },
   estate: { grip: 12, cs: 10.5, steer: 0.62, gears: 5, rev: 0.95, soft: 1.2, snd: 'car' },
   taxi: { grip: 12.5, cs: 11, steer: 0.62, gears: 5, rev: 1, soft: 1.1, snd: 'car' },
-  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9, snd: 'car' },
+  police: { grip: 14, cs: 12, steer: 0.62, gears: 5, rev: 1.05, soft: 0.9, snd: 'v8' },
   sport: { grip: 17, cs: 13, steer: 0.55, gears: 6, rev: 1.3, soft: 0.6, rwd: true, snd: 'sport', turbo: true },
   coupe: { grip: 16, cs: 13, steer: 0.56, gears: 6, rev: 1.25, soft: 0.7, rwd: true, snd: 'sport', turbo: true },
   cabrio: { grip: 15, cs: 12.5, steer: 0.58, gears: 6, rev: 1.2, soft: 0.8, rwd: true, snd: 'sport' },
@@ -1877,12 +1877,22 @@ export class Vehicle {
       const a = g.audio || audio;
       if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
       if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
+      // [B1] vites küçültmede devir eşleme gazı (blip): devir anında yükselir
+      if (this.gear < g0 && fs > 3) this.rpm = Math.min(1.05, this.rpm + 0.22);
     }
     const lo = this.gear > 0 ? top(this.gear - 1) * 0.55 : 0, hi = top(this.gear);
     let rpmT = 0.18 + 0.82 * clamp((sp - lo) / (hi - lo), 0, 1);
     if (throttle > 0 && sp < 2) rpmT = Math.max(rpmT, 0.45 + 0.35 * throttle);
     if (this.shiftT > 0) rpmT *= 0.72;
-    if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65 && P.turbo) { const a = g.audio || audio; if (a.turbo) a.turbo(0.6); }
+    if (isPlayer && this._thrPrev > 0.6 && throttle <= 0 && this.rpm > 0.65) {
+      const a = g.audio || audio;
+      if (P.turbo && a.turbo) a.turbo(0.6); // turbo boşaltma "pışşt"
+      // [B1] egzoz patlamaları: spor/V8/motosiklet sınıfı gaz kesince
+      if ((P.snd === 'sport' || P.snd === 'v8' || P.snd === 'moto') && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(P.snd, Math.min(1, this.rpm));
+    }
+    // [B1] devir sınırlayıcı: vites sonunda tam gazda devir titrer (son vites hariç)
+    if (throttle > 0.8 && this.gear === nG - 1 && sp > max * 0.97) rpmT = Math.min(rpmT, 0.97);
+    else if (throttle > 0.8 && this.rpm > 0.96 && this.shiftT <= 0) rpmT = 0.9 + 0.08 * ((this._lim = !this._lim) ? 1 : 0);
     this._thrPrev = throttle;
     this.rpm += (rpmT - this.rpm) * Math.min(1, dt * (this.shiftT > 0 ? 18 : 8));
     // ===== [B1 sürüş hissi] boylamsal: vites/devir tork eğrisi, çekiş sınırı, kademeli fren, ağırlık aktarımı =====
@@ -2034,7 +2044,8 @@ export class Vehicle {
     if (isPlayer) {
       const r = this.rpm * P.rev;
       const o = this._snd || (this._snd = { kind: 'car', gear: 0, throttle: 0, speed: 0, surface: 'concrete', slip: 0 });
-      o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = throttle; o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
+      // [B1] vites geçişinde gaz kesik: yük düşer (motor sesi kısa süre boşa çıkar)
+      o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = this.shiftT > 0 ? 0 : Math.max(0, throttle); o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
       if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
     }
     ud.driverDummy.visible = !!(this.driver && !this.driver.isPlayer) || !!(this.ai && !this.ai.empty) || isPlayer;

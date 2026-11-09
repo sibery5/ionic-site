@@ -504,6 +504,20 @@ export class AudioEngine {
     this.nz(o.node, t, { dur: 0.38, freq: 3200, q: 3, type: 'bandpass', gain: 0.22 * k, sweep: 1400 });
     this.osc(o.node, t, { freq: 5200, freq2: 2600, dur: 0.3, type: 'sine', gain: 0.025 * k });
   }
+  // [B1] egzoz patlamaları: yüksek devirde gaz kesilince (spor/V8/motosiklet) birkaç düzensiz boğuk "pat"
+  exhaustPops(kind = 'sport', k = 1) {
+    if (!this.ctx) return;
+    const o = this.spatial(undefined, undefined, 0, 0.12); if (!o) return;
+    const t0 = this.ctx.currentTime, n = 2 + Math.floor(Math.random() * (kind === 'v8' ? 3 : 4));
+    const f = kind === 'v8' ? 420 : kind === 'moto' ? 900 : 650;
+    let t = t0 + 0.05 + Math.random() * 0.06;
+    for (let i = 0; i < n; i++) {
+      const g = (0.5 + Math.random() * 0.5) * k * (1 - i / (n + 1));
+      this.nz(o.node, t, { dur: 0.035 + Math.random() * 0.03, freq: f * (0.7 + Math.random() * 0.6), q: 0.9, type: 'lowpass', gain: 0.55 * g, attack: 0.001 });
+      this.osc(o.node, t, { freq: 70 + Math.random() * 40, freq2: 40, dur: 0.05, type: 'sine', gain: 0.25 * g, attack: 0.001 });
+      t += 0.045 + Math.random() * 0.11;
+    }
+  }
   // korna: araç türüne göre (player.js horn(x,z) çağırır; tür araçta hornKind ile seçilir)
   horn(x, z, kind) {
     const k = kind || this.hornKind || 'car';
