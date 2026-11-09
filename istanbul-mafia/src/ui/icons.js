@@ -163,12 +163,14 @@ export const PIN_FOR = {
   police: 'pin_police', safehouse: 'pin_house', konak: 'pin_reis', estate: 'pin_estate', cafe: 'pin_cafe', club: 'pin_club', garage: 'pin_garage',
   mosque_small: 'pin_mosque', warehouse: 'pin_warehouse', rival: 'pin_target', bazaar: 'pin_trade', mosque: 'pin_mosque',
   property: 'pin_property', job: 'pin_job', crimejob: 'pin_crime',
+  bakkal: 'pin_food', market: 'pin_food', kafe: 'pin_cafe', avm: 'pin_clothes', // [şehir]
 };
 export const PIN_COLOR = {
   gun: '#ff5544', clothes: '#ff8ad8', food: '#7cdd6a', trade: '#7cff8a', dealer: '#6ab8ff', bank: '#d4af37', hospital: '#ff4444', police: '#5a8aff',
   safehouse: '#ffffff', konak: '#d4af37', estate: '#e8b060', cafe: '#e8a070', club: '#ff3df0', garage: '#ffcc00', mosque_small: '#9ac8e8', mosque: '#9ac8e8',
   warehouse: '#aaaaaa', rival: '#ff3030', bazaar: '#e8c060',
   property: '#ffe9a8', job: '#5ad1ff', crimejob: '#ff5a5a',
+  bakkal: '#7cdd6a', market: '#ffb340', kafe: '#e8a070', avm: '#7fd6ff', // [şehir]
 };
 
 export function svgImg(name, color, size = 24) {
