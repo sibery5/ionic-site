@@ -5,6 +5,8 @@
 // dinleyicinin bakış yönüne göre stereo kaydırılır.
 
 // Silah profilleri: click (ilk çıt), body [frekans, süre, kazanç], thump [f1, f2, süre, kazanç], tail [frekans, süre, kazanç]
+import { installSfx } from './sfx/index.js';
+
 const GUN = {
   pistol: { click: 0.5, body: [1900, 0.1, 1.0], thump: [170, 48, 0.12, 0.75], tail: [950, 0.6, 0.32], range: 260 },
   revolver: { click: 0.65, body: [1350, 0.17, 1.35], thump: [130, 38, 0.2, 1.05], tail: [720, 0.95, 0.5], range: 330 },
@@ -22,9 +24,6 @@ const GUN = {
   dmr: { click: 0.85, body: [1400, 0.17, 1.4], thump: [115, 34, 0.24, 1.15], tail: [700, 1.3, 0.6], range: 480, crack: true, slap: 0.22 },
   gl: { click: 0.3, body: [420, 0.16, 1.1], thump: [70, 40, 0.18, 1.2], tail: [380, 0.5, 0.25], range: 260, boom: 0.3 },
 };
-// [savaş: telsiz/megafon sesi] Türkçe ünlülerin yaklaşık formantları (F1, F2)
-const VOWELS = { a: [780, 1250], e: [520, 1900], ı: [380, 1450], i: [300, 2300], o: [520, 880], ö: [460, 1650], u: [340, 820], ü: [300, 1750] };
-const HISS = 'sşzcçfhj', STOP = 'tkpgdbq';
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
 // trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
 const ENGINE_KINDS = {
@@ -353,73 +352,7 @@ export class AudioEngine {
     for (let i = 0; i < 4; i++) this.nz(o.node, t + i * 0.075, { dur: 0.06, freq: 260, q: 0.8, type: 'lowpass', gain: 0.75 * k, attack: 0.004, buf: this.brownBuf });
     this.nz(o.node, t, { dur: 0.32, freq: 1800, q: 0.6, type: 'bandpass', gain: 0.05 * k, attack: 0.05 });
   }
-  // Prosedürel konuşma: ünlü formantları + ünsüz gürültüleri; mega=true megafon/telsiz zinciri (bant geçiren + bozulma + yankı)
-  // Dönüş: süre (sn)
-  voice(text, x, z, { mega = true, pitch = 125, rate = 1, gain = 1 } = {}) {
-    if (!this.ctx || !text) return 0;
-    const o = this.spatial(x, z, mega ? 170 : 55, mega ? 0.45 : 0.1);
-    if (!o) return 0;
-    const c = this.ctx;
-    const t0 = c.currentTime + 0.04;
-    const bus = c.createGain(); bus.gain.value = 0.9 * gain;
-    if (mega) {
-      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 480;
-      const pk = c.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1750; pk.gain.value = 10; pk.Q.value = 1.1;
-      const ws = c.createWaveShaper();
-      if (!this._megaCurve) { const n = 512, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const xx = i / (n - 1) * 2 - 1; cv[i] = (1 + 7) * xx / (1 + 7 * Math.abs(xx)); } this._megaCurve = cv; }
-      ws.curve = this._megaCurve;
-      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3300;
-      const og = c.createGain(); og.gain.value = 0.5;
-      bus.connect(hp); hp.connect(pk); pk.connect(ws); ws.connect(lp); lp.connect(og); og.connect(o.node);
-      const dl = c.createDelay(0.6); dl.delayTime.value = 0.21; const fb = c.createGain(); fb.gain.value = 0.28;
-      og.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(o.node);
-      // açılış cızırtısı
-      this.osc(o.node, t0 - 0.03, { freq: 1900, dur: 0.06, gain: 0.05 });
-      this.nz(o.node, t0 - 0.03, { dur: 0.05, freq: 2500, q: 1, type: 'bandpass', gain: 0.12 });
-    } else bus.connect(o.node);
-    // kaynak: testere dişi + formant süzgeçleri
-    const src = c.createOscillator(); src.type = 'sawtooth';
-    const vg = c.createGain(); vg.gain.setValueAtTime(0, t0);
-    const f1 = c.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
-    const f2 = c.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 7;
-    const g2 = c.createGain(); g2.gain.value = 0.7;
-    src.connect(vg); vg.connect(f1); vg.connect(f2); f1.connect(bus); f2.connect(g2); g2.connect(bus);
-    const s = text.toLocaleLowerCase('tr');
-    const syl = 0.12 / rate;
-    let t = t0, n = 0;
-    const total = s.length;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      const V = VOWELS[ch];
-      if (V) {
-        const prog = i / total;
-        const ex = s.indexOf('!', i) >= 0 && s.indexOf('!', i) - i < 6 ? 1.18 : 1;
-        const p = pitch * (1.12 - 0.22 * prog) * ex * (1 + Math.sin(n * 2.3) * 0.04);
-        src.frequency.setTargetAtTime(p, t, 0.02);
-        f1.frequency.setTargetAtTime(V[0], t, 0.015); f2.frequency.setTargetAtTime(V[1], t, 0.015);
-        vg.gain.setTargetAtTime(0.55, t, 0.012);
-        vg.gain.setTargetAtTime(0.12, t + syl * 0.75, 0.02);
-        t += syl; n++;
-      } else if (HISS.includes(ch)) {
-        this.nz(bus, t, { dur: 0.07 / rate, freq: ch === 'ş' || ch === 'ç' ? 3200 : 5200, q: 1.5, type: 'bandpass', gain: 0.35, attack: 0.01 });
-        t += 0.05 / rate;
-      } else if (STOP.includes(ch)) {
-        vg.gain.setTargetAtTime(0.0, t, 0.006);
-        this.nz(bus, t + 0.025 / rate, { dur: 0.025, freq: ch === 'k' || ch === 'g' ? 1800 : 3600, q: 1, type: 'bandpass', gain: 0.4, attack: 0.002 });
-        t += 0.04 / rate;
-      } else if (ch === ' ') { vg.gain.setTargetAtTime(0.02, t, 0.02); t += 0.05 / rate; }
-      else if (ch === '!' || ch === ',' || ch === '.' || ch === '?') { vg.gain.setTargetAtTime(0.0, t, 0.02); t += 0.18 / rate; }
-      else { // akıcı ünsüzler (l, r, m, n, y, v): sesli devam
-        vg.gain.setTargetAtTime(0.3, t, 0.015);
-        if (ch === 'r') { f1.frequency.setTargetAtTime(450, t, 0.01); }
-        t += 0.035 / rate;
-      }
-    }
-    vg.gain.setTargetAtTime(0, t, 0.03);
-    src.start(t0); src.stop(t + 0.3);
-    return t - t0;
-  }
-  megaphone(text, x, z, opts = {}) { return this.voice(text, x, z, Object.assign({ mega: true }, opts)); }
+  // konuşma / megafon / helikopter anonsu: sfx/announce.js (voice, megaphone, heliAnnounce)
   bulletFlesh(x, z) {
     const o = this.spatial(x, z, 50, 0.05);
     if (!o) return;
@@ -793,27 +726,7 @@ export class AudioEngine {
     if (outside) this.ambienceEvents(dt);
   }
 
-  setSiren(level) {
-    if (!this.ctx) return;
-    if (level > 0 && !this.sirenNode) {
-      const o = this.ctx.createOscillator(); o.type = 'sawtooth';
-      const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.7;
-      const lg = this.ctx.createGain(); lg.gain.value = 250;
-      lfo.connect(lg); lg.connect(o.frequency); o.frequency.value = 850;
-      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1000; f.Q.value = 0.8;
-      const g = this.ctx.createGain(); g.gain.value = 0;
-      o.connect(f); f.connect(g); g.connect(this.sfx);
-      o.start(); lfo.start();
-      this.sirenNode = { o, lfo, g };
-    }
-    if (this.sirenNode) {
-      tgt(this.sirenNode.g.gain, Math.min(0.07, level * 0.07), this.ctx.currentTime, 0.3);
-      if (level <= 0) {
-        const n = this.sirenNode; this.sirenNode = null;
-        setTimeout(() => { try { n.o.stop(); n.lfo.stop(); } catch (e) { /* zaten durdu */ } }, 1500);
-      }
-    }
-  }
+  // siren: sfx/siren.js (setSiren + araç başına konumlu siren, Doppler)
 
   // Hicaz makamında prosedürel müzik (menü ve gece için)
   startMusic(mode = 'menu') {
@@ -1027,4 +940,5 @@ Object.assign(AudioEngine.prototype, {
   },
 });
 
+installSfx(AudioEngine); // [ses B2] sfx/ modülleri
 export const audio = new AudioEngine();
