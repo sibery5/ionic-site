@@ -590,6 +590,7 @@ export class CharacterModel {
       return;
     }
     if (this.downK) this.downK = 0;
+    if (st.ride) { this.poseRide(dt, st.ride); return; } // bisiklet sürüşü (two_wheelers.js)
     // ---- ağırlıklar ----
     // kök hareketi: bu karede kök gerçekten ne kadar ilerledi? (duvara yürürken yerinde koşma / ay yürüyüşü olmasın)
     const rp = this.root.position;
@@ -1124,6 +1125,47 @@ export class CharacterModel {
       mixJ(P, Q, W.watch, ARM_L);
       this.lookPitch = dmp(this.lookPitch, 0.3 * W.watch, 4, dt); this.lookYaw = dmp(this.lookYaw, 0.35 * W.watch, 4, dt);
     }
+  }
+
+  // Bisiklet sürücüsü: kalça selede, ayaklar pedal krankını izler (bacak IK), eller gidonda (kol IK), gövde öne eğik.
+  // R = { seat:[x,y,z], pedals:[[x,y,z],[x,y,z]] (kök uzayı), grips:[Vector3,Vector3] (dünya), crank, lean, steer, speed }
+  poseRide(dt, R) {
+    const P = this.P, sc = this.rig.height, t = this.time;
+    P.fill(0);
+    const sp = clamp((R.speed || 0) / 7, 0, 1), br = Math.sin(t * 1.6 + this.seed);
+    // gövde: hıza göre öne eğilir, pedal çevrimiyle hafif yanal salınım; baş yolu görür
+    const sway = Math.sin(R.crank || 0) * 0.035 * (0.4 + sp);
+    setJ(P, J.hips, 0.42 + 0.12 * sp, 0, sway);
+    setJ(P, J.spine, 0.18 + 0.06 * sp + 0.01 * br, (R.steer || 0) * 0.15, -sway * 0.6);
+    setJ(P, J.chest, 0.1 + 0.05 * sp, (R.steer || 0) * 0.12, -sway * 0.4);
+    setJ(P, J.neck, -0.32 - 0.1 * sp, -(R.steer || 0) * 0.2, 0); setJ(P, J.head, -0.3 - 0.08 * sp + this.lookPitch * 0.3, this.lookYaw * 0.4 - (R.steer || 0) * 0.2, 0);
+    setJ(P, J.shL, -0.9, 0, 0.18); setJ(P, J.shR, -0.9, 0, 0.18); setJ(P, J.elL, -0.5, 0, 0); setJ(P, J.elR, -0.5, 0, 0);
+    setJ(P, J.wrL, 0.25, 0, 0); setJ(P, J.wrR, 0.25, 0, 0);
+    P[HP] = (R.seat[0] || 0) / sc; P[HP + 2] = (R.seat[2] + 0.02) / sc;
+    this.pel.x = 0; this.pel.y = 0; this.pel.z = 0;
+    this.apply(P, 0, (R.seat[1] + 0.05) / sc, 0);
+    this.hips.updateMatrix();
+    // bacaklar: bilek pedalın üstünde ve biraz arkasında; altta parmak ucu aşağı (bacak tam gerilmesin)
+    for (let i = 0; i < 2; i++) {
+      const pd = R.pedals[i], low = clamp((R.seat[1] - 0.55 - pd[1]) / 0.34 + 0.5, 0, 1);
+      const ay = pd[1] + 0.075 + 0.035 * low, az = pd[2] - 0.075 - 0.02 * low;
+      this.legIK(i, pd[0] / sc, ay / sc, az / sc, 0.15 + 0.35 * low, (i === 0 ? 1 : -1) * 0.05, 1);
+      P[(i ? J.toeR : J.toeL) * 3] = 0;
+    }
+    this.legs[0].toe.rotation.set(0, 0, 0); this.legs[1].toe.rotation.set(0, 0, 0);
+    // kollar: gidon tutamaklarına (dirsekler aşağı-dışa)
+    this.root.updateMatrixWorld(true);
+    for (let i = 0; i < 2; i++) {
+      const A = this.arms[i], gp = R.grips[i];
+      if (!gp) continue;
+      const S = A.sh.getWorldPosition(WV.shL);
+      const e = this.root.matrixWorld.elements, sd = (i === 0 ? 1 : -1) * 0.35; // kökün dünya X ekseni (sürücünün solu)
+      WV.pole.copy(S).addScaledVector(UPV, -0.6); WV.pole.x += e[0] * sd; WV.pole.y += e[1] * sd; WV.pole.z += e[2] * sd; WV.pole.x -= e[8] * 0.3; WV.pole.z -= e[10] * 0.3;
+      WV.wT.copy(gp).addScaledVector(UPV, 0.035 * this.body.scale.x);
+      this.solveArm(A, WV.wT, WV.pole, null, 1);
+    }
+    const cr = this._cr || (this._cr = [0, 0]); cr[0] = 0.9; cr[1] = 0.9;
+    this.applyHands(dt, cr);
   }
 
   // telefon / sigara aksesuarları
