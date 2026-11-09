@@ -2359,3 +2359,18 @@ function pickTrafficType(game) {
   for (const [p, t] of T) if (r < p) return t;
   return 'kartal';
 }
+
+// [B1 performans] Açılış ısınması: her araç türünden bir model (şablon önbelleği dolar) + yanmış/çatlak cam
+// malzemeleri. main.js yükleme ekranında sahneye ekler, gölgelendiricileri derler ve kaldırır. Böylece sürüş
+// sırasında ilk kez görünen araç türü şablon kurma ve gölgelendirici derleme takılması yaratmaz.
+export function vehicleWarmGroup(extraMats = []) {
+  const grp = new THREE.Group();
+  let i = 0;
+  const put = (o) => { o.position.set((i % 8) * 6 - 21, 0, -12 - Math.floor(i / 8) * 7); i++; grp.add(o); };
+  for (const type of Object.keys(CARS)) {
+    try { put(buildCarModel(type)); } catch (e) { /* araç dışı tür (hava/deniz) kendi modülünde */ }
+  }
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  for (const m of [burntMat, crackedGlassMat(), ...extraMats]) put(new THREE.Mesh(box, m));
+  return grp;
+}

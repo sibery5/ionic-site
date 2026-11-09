@@ -35,3 +35,16 @@ silah başına atış, yakın/uzak/iç mekân, patlama, ayak sesleri, kapı, amb
 NaN / 0 dBFS kırpma / 200 ses sonrası düğüm sızıntısı ve oyun içi konumlu siren denetimi:
 
     SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/a2 $PWD/scripts/test/audio2-steps.js
+
+Bellek sondası (B1): 90 sn karışık oynanış (sürüş, 3★ çatışma, patlama), her dilimde renderer.info, ses düğümü
+sayacı, JS yığını ve Chromium süreç RSS'i (renderer/gpu/browser). `MEM_ONLY=drive|fight|boom`, `MEM_SEC`,
+`MEM_RENDER` (kaç adımda bir kare), `MEM_MUTE=1` (ses tamamen kapalı), `EXTRA_ARGS` (Chromium bayrakları):
+
+    SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/mem $PWD/scripts/test/mem-steps.js
+
+Bulgu (1.4 B1): headless SwiftShader'da kare çizilirken renderer RSS'i saniyede yüzlerce MB artabilir ve
+cgroup OOM ile ölür; ancak oyunun denetlediği her şey düz kalır (JS yığını, geometri/doku sayısı, program
+sayısı, ses düğümleri; ses tamamen kapalıyken de aynı büyüme). Büyüme browser süreciyle birlikte artıp azalır,
+OOM ayırması renderer'ın Compositor iş parçacığından gelir: headless kare/IPC birikimi. Uzun testlerde
+`sim()` ile mantığı ilerletin, kare çizimini seyrek tutun. Sürüş CPU kare süresi: `driveperf-steps.js`,
+sürüş hissi ölçümleri: `drivefeel-steps.js`.

@@ -2,7 +2,7 @@
 // Örnek: renderer.info.memory (geometri/doku), program sayısı, ses düğümü sayacı (oluşturulan / toplanan),
 // JS yığını ve Node tarafından `ps` ile Chromium süreç ağacının RSS'i (renderer + gpu + ses hizmeti).
 //   SETTINGS='{"quality":"low"}' NOSHOT=1 SHOTS=0 node scripts/test/play.js file://$PWD/app/index.html .testout/mem $PWD/scripts/test/mem-steps.js
-// Ortam: MEM_ONLY (drive|fight|boom yalnız o dilim), MEM_SEC (varsayılan 90), MEM_RENDER (kaç sim adımında bir kare çizilir, varsayılan 6), MEM_RT (sonda gerçek zamanlı döngü sn'si)
+// Ortam: MEM_MUTE=1 (sessiz), MEM_ONLY (drive|fight|boom yalnız o dilim), MEM_SEC (varsayılan 90), MEM_RENDER (kaç sim adımında bir kare çizilir, varsayılan 6), MEM_RT (sonda gerçek zamanlı döngü sn'si)
 const { execSync } = require('child_process');
 const H = require('./harness.js');
 
@@ -21,10 +21,13 @@ function procTree() {
 module.exports = async (p) => {
   p.setDefaultTimeout(1800000);
   await H.start(p); await H.install(p);
+  await p.evaluate((m) => { window.__MUTE = m; }, !!process.env.MEM_MUTE);
   const SEC = +(process.env.MEM_SEC || 90), EVERY = +(process.env.MEM_RENDER || 6), RT = +(process.env.MEM_RT || 0);
   await p.evaluate(() => {
     const g = game;
     g.loop = () => {}; // sonda kareleri kendisi çizer
+    // MEM_MUTE=1: ses motoru tamamen susturulur (WebAudio'yu şüpheliler listesinden ayırmak için)
+    if (window.__MUTE) { const a = g.audio, P = Object.getPrototypeOf(a); for (const k of Object.getOwnPropertyNames(P)) if (k !== 'constructor' && typeof P[k] === 'function') a[k] = () => 0; if (a.ctx) a.ctx.suspend(); }
     g.player.god = true;
     // ses düğümü sayacı: oluşturulan / JS sarmalayıcısı toplanan
     const A = window.__aud = { made: 0, freed: 0, bufBytes: 0, byKind: {} };

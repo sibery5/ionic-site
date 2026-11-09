@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const [url, outPrefix, script] = process.argv.slice(2);
-  const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+  const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', ...(process.env.EXTRA_ARGS ? process.env.EXTRA_ARGS.split(' ') : [])] });
   const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
   // SETTINGS='{"quality":"low"}' ile ayar zorlanabilir (yazılımsal GPU için)
   if (process.env.SETTINGS) await p.addInitScript((js) => { try { localStorage.setItem('istanbul-mafia-settings', js); } catch (e) { /* yok */ } }, process.env.SETTINGS);
