@@ -1419,7 +1419,18 @@ export class Vehicle {
     else if (ray) this.bulletHit(ray);
     else if (amount > 25 && Math.random() < 0.25) this.crackRandom();
     if (this.hp < this.def.hp * 0.3 && Math.random() < 0.1) this.crackRandom();
-    if (this.hp <= 0 && this.burnT <= 0) { this.burnT = 4.5; this.lastAttacker = attacker; }
+    if (this.burnT > 0) return;
+    if (this.kind !== 'car') { if (this.hp <= 0) { this.burnT = 4.5; this.lastAttacker = attacker; } return; }
+    // [B1 hasar dengesi] hp 0'da motor ölür ve yoğun duman çıkar ama hemen yanmaz. Alev ancak ağır hasarda
+    // (hp <= -%30) ya da hurdaya dönmüş araca büyük tek darbede (patlama/roket) başlar; fitil uzun (~11 sn),
+    // oyuncu inebilir. Çok büyük darbe (hp <= -%100) kısa fitille patlar.
+    const H = this.def.hp;
+    if (this.hp <= -H * 0.3 || (this.hp <= 0 && amount >= 150)) {
+      this.burnT = this.hp <= -H ? 1.2 + Math.random() * 0.8 : 10 + Math.random() * 2.5;
+      this.burnT0 = this.burnT;
+      this.lastAttacker = attacker;
+      if (this.driver && this.driver.isPlayer && this.burnT > 3 && this.game.ui) this.game.ui.notify('Araç alev aldı! Hemen in (F)!', 'warn');
+    } else if (this.hp <= 0 && !this._deadNote && this.driver && this.driver.isPlayer && this.game.ui) { this._deadNote = true; this.game.ui.notify('Motor durdu — araç ağır hasarlı.', 'warn'); }
   }
   // eski API
   breakGlass() { this.crackRandom(3); }
@@ -1680,12 +1691,18 @@ export class Vehicle {
     const g = this.game, f = this.fwd, L = this.def.len;
     if (this.burnT > 0 && !this.destroyed) {
       this.burnT -= dt;
-      g.particles.fire({ x: this.pos.x + f.x * L * 0.35, y: this.pos.y + this.def.hei * 0.6, z: this.pos.z + f.z * L * 0.35 }, 1.2);
+      // alev motor bölmesinden başlar, fitil kısaldıkça büyür; kara duman eşlik eder
+      const k = this.burnT0 ? clamp(1 - this.burnT / this.burnT0, 0, 1) : 1;
+      if (Math.random() < 0.45 + k * 0.55) g.particles.fire({ x: this.pos.x + f.x * L * 0.35, y: this.pos.y + this.def.hei * 0.6, z: this.pos.z + f.z * L * 0.35 }, 0.45 + k * 0.9);
+      if (Math.random() < 0.35) g.particles.smoke({ x: this.pos.x + f.x * L * 0.3, y: this.pos.y + this.def.hei * 0.9, z: this.pos.z + f.z * L * 0.3 }, 1.1 + k * 0.6);
       if (this.burnT <= 0) this.explode();
-    } else if (!this.destroyed && this.hp < this.def.hp * 0.45 && Math.random() < (this.hp < this.def.hp * 0.25 ? 0.5 : 0.2)) {
-      const p = { x: this.pos.x + f.x * L * 0.4, y: this.pos.y + this.def.hei * 0.7, z: this.pos.z + f.z * L * 0.4 };
-      if (this.hp < this.def.hp * 0.25) g.particles.fire(p, 0.35);
-      g.particles.smoke(p, this.hp < this.def.hp * 0.25 ? 1.2 : 0.7);
+    } else if (!this.destroyed && this.hp < this.def.hp * 0.6) {
+      // duman kademeleri: %60 açık gri buhar, %35 koyu duman, 0'da (motor ölü) yoğun kara duman — alev yok
+      const H = this.def.hp, dead = this.hp <= 0, heavy = this.hp < H * 0.35;
+      if (Math.random() < (dead ? 0.6 : heavy ? 0.35 : 0.12)) {
+        const p = { x: this.pos.x + f.x * L * 0.4, y: this.pos.y + this.def.hei * 0.7, z: this.pos.z + f.z * L * 0.4 };
+        g.particles.smoke(p, dead ? 1.3 : heavy ? 0.9 : 0.5);
+      }
     }
     if (!this.destroyed) return;
     this.wreckT -= dt;
@@ -1847,7 +1864,9 @@ export class Vehicle {
 
     const c = this.controls;
     const canDrive = !this.destroyed && this.sinking <= 0 && (this.driver || this.ai);
-    const throttle = canDrive ? c.throttle : 0;
+    // [B1] motor ölü (hp <= 0, yalnız kara aracı): gaz yok, fren/direksiyon çalışır
+    const engineDead = this.kind === 'car' && this.hp <= 0;
+    const throttle = canDrive ? (engineDead ? Math.min(0, c.throttle) : c.throttle) : 0;
     const steer = canDrive ? c.steer : 0;
     const hb = canDrive ? c.handbrake : !this.destroyed && !this.driver;
     const isPlayer = !!(this.driver && this.driver.isPlayer);
@@ -2046,7 +2065,7 @@ export class Vehicle {
       const o = this._snd || (this._snd = { kind: 'car', gear: 0, throttle: 0, speed: 0, surface: 'concrete', slip: 0 });
       // [B1] vites geçişinde gaz kesik: yük düşer (motor sesi kısa süre boşa çıkar)
       o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = this.shiftT > 0 ? 0 : Math.max(0, throttle); o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
-      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
+      if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0 && !engineDead, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
     }
     ud.driverDummy.visible = !!(this.driver && !this.driver.isPlayer) || !!(this.ai && !this.ai.empty) || isPlayer;
     this._ray = null;

@@ -140,7 +140,7 @@ function resolveStatic(v, phys, isPlayer, fx, fz) {
     if (imp > worst) worst = imp;
     if (imp > 5 && !v._hitFx) {
       v._hitFx = true;
-      v.damage(imp * imp * 0.9 * (v.P && v.P.steer === 0 ? 0.1 : 1), null);
+      v.damage(Math.max(0, imp - 1) ** 2 * 0.6 * (v.P && v.P.steer === 0 ? 0.1 : 1), null); // [B1] çarpışma hasarı yumuşatıldı
       v.impact(C.px, C.pz, C.nx, C.nz, imp);
       audio.crash(C.px, C.pz, Math.min(1.5, imp / 15));
       const g = v.game;
