@@ -641,6 +641,7 @@ export class UI {
   btn(label, onClick, cls = '') {
     const b = el('button', 'btn ' + cls, label);
     b.addEventListener('click', (e) => { e.stopPropagation(); audio.click(); onClick(b); });
+    b.addEventListener('pointerenter', () => audio.hover && audio.hover()); // [ses B2] yumuşak üzerine gelme sesi
     return b;
   }
   // büyük menü öğesi (ana menü / duraklatma): numara + başlık + alt satır; desc bilgi kartında gösterilir
