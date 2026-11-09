@@ -15,6 +15,17 @@ import { N_FREE, N_LOW, N_BLOCK } from '../world/navgrid.js';
 import { actorVsVehicle } from './vehicle_physics.js';
 
 const lookRng = new RNG(777);
+// [B1 performans] Sokak NPC'si görünüm havuzu: her yeni rastgele görünüm yeni gövde geometrisi (3 LOD) ve 512² yüz
+// dokusu kurar (70-145 ms takılma, sınırsız doku belleği). Semt/çete başına sınırlı sayıda görünüm üretilir, sonra
+// havuzdan yeniden kullanılır (karakter önbellekleri isabet eder). Toplam ~55 görünüm x 3 LOD < geometri LRU (180).
+const LOOK_POOL = new Map();
+function pooledLook(kind, gang, district) {
+  const key = kind + '|' + (gang || district || '-'), max = kind === 'gang' ? 3 : 5;
+  let L = LOOK_POOL.get(key);
+  if (!L) LOOK_POOL.set(key, (L = []));
+  if (L.length < max) { const look = randomLook(lookRng, kind, gang || null, district); L.push(look); return { ...look }; }
+  return { ...L[Math.floor(Math.random() * L.length)] };
+}
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
 const probe = new THREE.Vector3();
@@ -1388,7 +1399,7 @@ export class NPCManager {
   }
 
   add(kind, x, z, look, opts) {
-    if (!look && kind === 'civilian') { const d = districtAt(x, z); look = randomLook(lookRng, 'civilian', null, d && d.id); } // [karakter] semte uygun giyim
+    if (!look && kind === 'civilian') { const d = districtAt(x, z); look = pooledLook('civilian', null, d && d.id); } // [karakter] semte uygun giyim ([B1] havuzlu)
     const n = new NPC(this.game, kind, look, opts);
     n.pos.set(x, opts && opts.y || 0, z);
     n.heading = opts && opts.heading !== undefined ? opts.heading : Math.random() * Math.PI * 2;
@@ -1476,7 +1487,7 @@ export class NPCManager {
     if (gangHere && Math.random() < 0.12 && !g.state.territories[d.gang]) {
       const n = 2 + Math.floor(Math.random() * 3);
       for (let i = 0; i < n; i++) {
-        const look = randomLook(lookRng, 'gang', d.gang); // [karakter] çeteye özgü tarz (renk, ceket, bandana)
+        const look = pooledLook('gang', d.gang); // [karakter] çeteye özgü tarz (renk, ceket, bandana) ([B1] havuzlu)
         const m = this.add('gang', s.x + Math.random() * 3 - 1.5, s.z + Math.random() * 3 - 1.5, look, { gang: d.gang, state: 'guard', home: new THREE.Vector3(s.x + i * 1.2, 0, s.z) });
         m.faceYaw = Math.random() * 6.28;
       }

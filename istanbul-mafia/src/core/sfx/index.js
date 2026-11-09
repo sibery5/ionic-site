@@ -35,6 +35,7 @@ export function installSfx(AudioEngine) {
       ];
       this._prewarm.unshift(...uiPrewarm(this));
       this._prewarm.push(...weaponPrewarm(this), ...WD.worldPrewarm(this));
+      if (this.glassPrewarm) this._prewarm.push(...this.glassPrewarm()); // [B1] cam/et bankaları
       this._prewarmStep();
       // bekçi: oyun güncellemesi durunca (menü/duraklatma) sirenleri sustur
       setInterval(() => { if (this.ctx && this.ctx.currentTime - this.lastUpdate > 0.5) stopAllSirens(this); }, 500);
