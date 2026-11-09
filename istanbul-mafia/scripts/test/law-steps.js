@@ -246,8 +246,8 @@ module.exports = async (p, out) => {
       const green = run('green');
       g.law.traffic.cool = 0;
       const red = run('red');
-      const toast = document.querySelector('.law-phone-toast');
-      const toastText = toast ? toast.textContent : (g.law.traffic.lastToast || '');
+      const toast = document.querySelector('.law-phone-toast') || document.querySelector('.ph-toast');
+      const pm = g.phone && g.phone.list[0]; const toastText = toast ? toast.textContent : pm ? pm.title + ' ' + pm.body : (g.law.traffic.lastToast || '');
       // yaya devriye: suç görünce koşar, "Teslim ol!", yaklaşır, kelepçe
       L.clear();
       const R = L.road(200, -100, 100); const at = R.at(40, 8.5); L.place(at.x, at.z);
