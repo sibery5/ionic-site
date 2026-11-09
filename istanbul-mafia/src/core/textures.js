@@ -69,13 +69,13 @@ export function carpetTexture(seed = 1) {
     // kenar süsleri
     g.fillStyle = pal[3];
     for (let y = 40; y < 350; y += 16) { g.fillRect(16, y, 6, 6); g.fillRect(234, y, 6, 6); }
-    // dokuma gürültüsü
-    const id = g.getImageData(0, 0, 256, 384);
-    for (let i = 0; i < id.data.length; i += 4) {
-      const n = (r.next() - 0.5) * 30;
-      id.data[i] += n; id.data[i + 1] += n; id.data[i + 2] += n;
+    // dokuma gürültüsü — [şehir] getImageData yerine ince benekler: piksel geri okuma (GPU tuvali) yazılımsal
+    // GPU'da sekmeyi çökertiyordu (apartman dairesine girişte bellek taşması; kanun testi 9b bu yüzden düşüyordu)
+    for (let i = 0; i < 2600; i++) {
+      const v = r.next();
+      g.fillStyle = v < 0.5 ? `rgba(0,0,0,${0.06 + v * 0.12})` : `rgba(255,255,255,${(v - 0.5) * 0.14})`;
+      g.fillRect(Math.floor(r.next() * 256), Math.floor(r.next() * 384), 1 + Math.floor(r.next() * 2), 1);
     }
-    g.putImageData(id, 0, 0);
     return toTex(c, { wrap: false });
   });
 }

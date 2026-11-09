@@ -16,11 +16,13 @@ export class HomeOwner {
     if (ctx !== this.ctx) {
       this.ctx = ctx; this.t = 0; this.stage = 0; this.owner = null;
       if (ctx && ctx.type === 'apartment' && !(g.missions && g.missions.active && g.missions.active.building === ctx.building)) {
-        let best = null, bd = 1e9;
+        // [şehir] ev sahibi = hanenin ilk sakini (iç mekân kurucusu önce onu yerleştirir); eşi/ev arkadaşı ikinci sırada.
+        // Eskiden "en yakın sakin" seçiliyordu: iki sakinli evde biri uyarıp saldırırken diğeri kaçıyordu.
+        let best = null;
         for (const n of g.npcs.list) {
           if (n.dead || n.kind !== 'resident' || n.mission || n.inInterior !== ctx) continue;
-          const d = Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z);
-          if (d < bd) { bd = d; best = n; }
+          if (n.homeOwner) { best = n; break; }
+          if (!best) best = n;
         }
         this.owner = best;
       }

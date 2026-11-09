@@ -257,6 +257,8 @@ export class NPC extends Actor {
       return;
     }
     if (this.kind === 'resident' || this.kind === 'civilian' || this.kind === 'shopkeeper') {
+      // [şehir] kendi yumruğunun/silahının sesinden kaçmaz; kavgayı kendisi başlattıysa (ev sahibi) sürdürür
+      if (source === this || (this.state === 'attack' && this.target === source)) return;
       if (this.brave && this.weapons.pistol && source.isPlayer && d < 20 && Math.random() < 0.5) { this.engage(source); this.setWeapon('pistol'); return; }
       if (this.state !== 'flee' && this.state !== 'cower') {
         this.reactT = 0.15 + Math.random() * 0.5;
