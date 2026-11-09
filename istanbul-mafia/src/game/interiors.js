@@ -7,6 +7,10 @@ import { randomLook } from '../entities/character.js';
 import { buildWeaponModel, WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { buildCarModel } from '../entities/vehicles.js';
 import { GANGS } from './economy.js';
+import { buildBakkal, buildMarket, buildKafe, decorateGunShop } from './shop_interiors.js'; // [şehir]
+import { buildMall } from './mall.js'; // [şehir]
+import { buildApartment, safehouseSeats } from './home_interior.js'; // [şehir]
+import { Kit } from './interior_kit.js'; // [şehir]
 
 const NAMES = {
   apartment: 'Apartman Dairesi', safehouse: 'Güvenli Ev', konak: 'Reis Konağı', gun: 'Silahçı', clothes: 'Butik', food: 'Bakkal', trade: 'Karaborsa',
@@ -14,6 +18,7 @@ const NAMES = {
   warehouse: 'Liman Deposu', rival: 'Köşk', garage: 'Oto Tamirci', mosque: 'Cami', mosque_small: 'Mahalle Camii', bazaar: 'Kapalıçarşı', tower: 'Galata Kulesi',
   palace: 'Dolmabahçe Sarayı', station: 'Haydarpaşa Garı',
   armory: 'Cephanelik', // [hikâye] askeri kışla
+  bakkal: 'Bakkal', market: 'Market', kafe: 'Kafe', avm: 'AVM', // [şehir]
 };
 export function placeName(type, b) { return (b && b.name) || NAMES[type] || 'Bina'; }
 
@@ -78,6 +83,8 @@ export class Interiors {
     g.scene.add(p.model.root);
     this.current = null;
     g.missions.onExit(ctx);
+    if (ctx.onExit) ctx.onExit(); // [şehir] AVM: silah sesi kancasını geri al
+    if (ctx.mall) ctx.mall.crowd.clear(); // [şehir]
     ctx.scene.traverse((o) => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); });
   }
 
@@ -262,32 +269,11 @@ function wallTiles(I, ctx, w, h, z) {
 }
 
 const BUILDERS = {
-  apartment(ctx) {
-    const r = ctx.rng;
-    const w = r.float(9, 13), d = r.float(8, 11);
-    this.room(ctx, w, d, 3.0, new THREE.MeshStandardMaterial({ map: woodTexture(r.pick(['#8a5a3a', '#6b4226', '#a07050'])) }), new THREE.MeshStandardMaterial({ map: wallpaperTexture(r.pick(['#e8dcc0', '#d8e0d0', '#e0d0d8', '#f0e8d8']), r.pick(['#c9b48a', '#a8b8a0', '#c0a8b0'])) }));
-    this.carpet(ctx, 3.2, 2.2, -w / 4, 0, r.int(0, 2));
-    this.sofa(ctx, -w / 4, -1.3, 0, r.pick(['#5a2a2a', '#2a3a5a', '#4a4a3a', '#6a5a4a']));
-    this.table(ctx, -w / 4, 0.2, 1.1, 0.6, 0.45);
-    // TV
-    this.box(ctx, 1.6, 0.5, 0.45, -w / 4, 0, 1.9, new THREE.MeshStandardMaterial({ map: woodTexture('#3a2412') }));
-    const tv = this.box(ctx, 1.2, 0.7, 0.06, -w / 4, 0.55, 1.95, new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x2a4a6a, emissiveIntensity: 0.6 }), false);
-    tv.rotation.y = Math.PI;
-    // yemek masası
-    this.table(ctx, w / 4, -d / 4, 1.6, 0.9);
-    for (const [sx, sz] of [[-0.5, -0.65], [0.5, -0.65], [-0.5, 0.65], [0.5, 0.65]]) this.box(ctx, 0.42, 0.45, 0.42, w / 4 + sx, 0, -d / 4 + sz, new THREE.MeshStandardMaterial({ map: woodTexture('#6a3a1a') }), false);
-    kitchen(this, ctx, w / 4, -d / 2 + 0.35, 2.2);
-    this.shelf(ctx, -w / 2 + 0.3, -d / 4, 1.6, Math.PI / 2, ['#8a1a1a', '#1d3d6e', '#2d5a2d', '#c9b48a', '#5a2d5a']);
-    bed(this, ctx, w / 2 - 1.2, d / 4, -Math.PI / 2);
-    this.nazar(ctx, 0, 2.0, -d / 2 + 0.01);
-    this.light(ctx, -w / 4, 2.7, 0, 0xffe8c0, 6);
-    this.light(ctx, w / 4, 2.7, -d / 4, 0xffe8c0, 5);
-    const nres = r.int(0, 2);
-    for (let i = 0; i < nres; i++) this.npc(ctx, 'resident', r.float(-w / 3, w / 3), r.float(-d / 4, d / 5), r.float(0, 6.28));
-    this.lootSpot(ctx, -w / 2 + 0.8, -d / 4 + 1.2);
-    if (r.chance(0.5)) this.lootSpot(ctx, w / 2 - 1.2, d / 4 - 1.6, 'Komodini karıştır');
-    if (r.chance(0.15)) this.lootSpot(ctx, w / 4, -d / 2 + 1.0, 'Gizli kasayı aç');
-  },
+  apartment(ctx) { return buildApartment(this, ctx); }, // [şehir] yeni daire düzeni (home_interior.js)
+  bakkal(ctx) { return buildBakkal(this, ctx); }, // [şehir]
+  market(ctx) { return buildMarket(this, ctx); }, // [şehir]
+  kafe(ctx) { return buildKafe(this, ctx); }, // [şehir]
+  avm(ctx) { return buildMall(this, ctx); }, // [şehir]
 
   safehouse(ctx) {
     const g = this.game;
@@ -304,6 +290,7 @@ const BUILDERS = {
     this.light(ctx, -2, 2.9, 0, 0xffd8a0, 7);
     this.light(ctx, 4, 2.9, -2, 0xffd8a0, 5);
     this.nazar(ctx, 0, 2.2, -4.99);
+    { const K = new Kit(this, ctx); safehouseSeats(K); } // [şehir] kanepeye otur, yatağa uzan
     ctx.interact.push({ x: 4.6, z: -1.4, r: 1.6, label: 'Uyu ve Oyunu Kaydet', action: () => g.sleepAndSave() });
     ctx.interact.push({ x: 4.5, z: 2.6, r: 1.4, label: 'Gardırop (kıyafet değiştir)', action: () => g.ui.openShop('wardrobe') });
     ctx.interact.push({ x: -5.0, z: -2, r: 1.5, label: 'Silah dolabı (cephane doldur ₺)', action: () => g.ui.openShop('stash') });
@@ -422,6 +409,7 @@ const BUILDERS = {
     ctx.interact.push({ x: -0.6, z: -D / 2 + 1.3, r: 1.8, label: 'Pano: tüfekler ve makineliler', action: () => g.ui.shop_gun('long') });
     ctx.interact.push({ x: -W / 2 + 1.2, z: -1.2, r: 1.8, label: 'Yakın dövüş ve ağır silahlar', action: () => g.ui.shop_gun('side') });
     ctx.interact.push({ x: 4.6, z: 3.2, r: 1.4, label: 'Cephane ve çelik yelek', action: () => g.ui.shop_gun('ammo') });
+    decorateGunShop(this, ctx); // [şehir] lambri, spot raylar, cephane kutuları, afişler
     ctx.interact.push({ x: rx0 + 1.8, z: 1.7, r: 1.4, label: 'Atış poligonu: deneme atışı', action: () => { const p = g.player; p.pos.set(rx0 + 1.8, 0, 1.7); p.heading = Math.PI; p.camYaw = Math.PI; g.ui.notify('Poligon: hedeflere ateş et. Mermi bedava değil, sayıyor!', 'info'); } });
     return { x: 0, z: D / 2 - 1.6 };
   },
@@ -457,19 +445,7 @@ const BUILDERS = {
     ctx.interact.push({ x: 4.6, z: -2.2, r: 1.3, label: 'Kabin: gardırobunu dene', action: () => g.ui.openShop('wardrobe') });
   },
 
-  food(ctx) {
-    const g = this.game;
-    this.room(ctx, 9, 8, 3.0, new THREE.MeshStandardMaterial({ map: tileTexture('#d8d0c0', '#c0b8a8') }), new THREE.MeshStandardMaterial({ color: 0xe8e4d8 }));
-    const cols = ['#c81010', '#f2c200', '#1060c8', '#2d8a3d', '#e86a10', '#ffffff', '#5a2d5a'];
-    this.shelf(ctx, -2.5, -3.6, 3.5, 0, cols);
-    this.shelf(ctx, 2.2, -3.6, 3.5, 0, cols);
-    this.shelf(ctx, -4.2, 0.5, 3, Math.PI / 2, cols);
-    this.box(ctx, 1.5, 2, 0.7, 3.6, 0, 1.5, new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0x334455, emissiveIntensity: 0.3 }));
-    this.counter(ctx, 1.5, -1, 2.6);
-    this.light(ctx, 0, 2.7, 0, 0xffffff, 8);
-    this.npc(ctx, 'shopkeeper', 1.5, -1.8, 0, { name: 'Bakkal Hüsnü' });
-    ctx.interact.push({ x: 1.5, z: -0.2, r: 1.6, label: 'Yiyecek satın al', action: () => g.ui.openShop('food') });
-  },
+  food(ctx) { return buildBakkal(this, ctx); }, // [şehir] eski tek raflı bakkal yerine gerçekçi bakkal (shop_interiors.js)
 
   cafe(ctx) {
     const g = this.game;

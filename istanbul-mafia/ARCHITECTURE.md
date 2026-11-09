@@ -33,6 +33,11 @@ Masaüstü: `npx electron .` · Windows kurulum: `npm run dist:win`.
   yeni ('added') görevleri oyuncunun geçtiği yerin önündeyse atlar.
 - Telefon: `ui/phone.js` (`game.phone.notify(başlık, metin, {from, kind, silent})` → Mesajlar + kayan bildirim; `game.phone.open(app)`).
   Büyük harita / mini harita tabanı: `ui/bigmap.js` (`mapBase(game)` önbellekli 2048 tuval).
+- Şehir hayatı (B3): `world/city_shops.js` (harita sonrası bakkal/market/kafe/AVM yerleşimi, kafe cephesi geri çekilir → teras
+  parselin içinde), `game/citylife.js` (alışveriş menüsü, kafe terasları + oturan gruplar, iç mekân oturma/yatma `ctx.furnSeats`,
+  silah sesi → `ctx.onNoise`), `game/interior_kit.js` (birleşik statik geometri + örneklenmiş ürünler), `game/shop_interiors.js`
+  (bakkal, market, kafe, silahçı süsü), `game/home_interior.js` (daire), `game/mall.js` (3 katlı AVM), `game/crowd.js` (hafif
+  kalabalık ajanları). Çok katlı iç mekân kamera sınırı: `ctx.camMaxY(y)`. Model ek jest kancası: `CharacterModel.post(dt, st)`.
 - `main.js` Game sınıfı: tüm sistemleri bağlar; `game.updateGame(dt,t)` her kare.
 
 ## Game nesnesi API (sık kullanılanlar)
