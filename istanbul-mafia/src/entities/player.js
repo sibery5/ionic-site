@@ -471,7 +471,7 @@ export class Player extends Actor {
       this.camInit = true;
       cam.position.copy(this.camPos);
       cam.position.y = Math.max(cam.position.y, (this.inInterior ? 0.3 : this.swimming ? WATER_Y + 0.4 : 0.3));
-      if (this.inInterior) cam.position.y = Math.min(cam.position.y, 3.2);
+      if (this.inInterior) cam.position.y = Math.min(cam.position.y, this.inInterior.camMaxY ? this.inInterior.camMaxY(this.pos.y) : 3.2); // [şehir] çok katlı iç mekân (AVM)
       // bakış yönü: tam eğim (yukarı bakış sınırı POS_UP'tan bağımsız)
       const cp = Math.cos(lookPitch);
       _look.set(cam.position.x + fx * cp * 10, cam.position.y - Math.sin(lookPitch) * 10, cam.position.z + fz * cp * 10);
