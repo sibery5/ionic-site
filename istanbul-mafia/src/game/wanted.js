@@ -18,11 +18,13 @@ import { audio } from '../core/audio.js';
 // [savaş] megafon anonsları (yıldıza göre)
 const ANNOUNCE = {
   1: ['Dur! Polis!', 'Olduğun yerde kal!'],
-  2: ['Teslim ol! Türk Polisinden kaçamazsın!', 'Silahını bırak!', 'Aracı durdur!'],
-  3: ['Teslim ol! Türk Polisinden kaçamazsın!', 'Bütün ekipler, şüpheli silahlı!', 'Yere yat!'],
+  2: ['Teslim ol! Türk Polisinden kaçamazsın!', 'Silahını bırak!', 'Aracı durdur!', 'Araçtan in! Eller yukarı!'],
+  3: ['Teslim ol! Türk Polisinden kaçamazsın!', 'Bütün ekipler, şüpheli silahlı!', 'Yere yat!', 'Dur! Yaklaşma!', 'Bu son uyarım, ateş açarım!'],
   4: ['Özel Harekat! Kıpırdama!', 'Silahını bırak! Yere yat!', 'Teslim ol, etrafın sarıldı!'],
   5: ['Jandarma! Teslim ol!', 'Helikopter seni görüyor! Kaçamazsın!', 'Silahını bırak! Yere yat!'],
 };
+// [ses B2] helikopter hoparlöründen anonslar
+const HELI_ANNOUNCE = ['Hava biriminden uyarı! Olduğun yerde kal!', 'Helikopter seni görüyor! Kaçamazsın!', 'Ellerini başının üstüne koy! Yere yat!', 'Araçtan in! Eller yukarı!'];
 const pickA = (a) => a[Math.floor(Math.random() * a.length)];
 const HELI_GUN = { dmg: 26, range: 160, sound: 'lmg', flash: 1.1, shell: false, type: 'gun' };
 const _down = new THREE.Vector3(0, -1, 0), _tmpv = new THREE.Vector3();
@@ -821,9 +823,10 @@ export class Wanted {
         const d = Math.hypot(v.pos.x - p.pos.x, v.pos.z - p.pos.z);
         if (d < bd) { bd = d; src = v; }
       }
-      const text = pickA(ANNOUNCE[Math.min(5, L)]);
-      if (this.heli && !this.heli.dying && Math.random() < 0.5) src = this.heli;
-      if (src) { g.ui.bark(src, text); audio.megaphone(text, src.pos.x, src.pos.z, { pitch: 108 }); }
+      let text = pickA(ANNOUNCE[Math.min(5, L)]);
+      if (this.heli && !this.heli.dying && Math.random() < 0.5) { src = this.heli; text = pickA(HELI_ANNOUNCE); }
+      // [ses B2] helikopter hoparlörü ayrı zincir (pervane maskelemesi + PA cızırtısı)
+      if (src) { g.ui.bark(src, text); if (src === this.heli && audio.heliAnnounce) audio.heliAnnounce(text, src.pos.x, src.pos.z); else audio.megaphone(text, src.pos.x, src.pos.z, { pitch: 108 }); }
     }
     // 2★+: ekip araçlarından ateş (yolcu camdan)
     if (L >= 2 && this.seenT < 1.5) {

@@ -252,7 +252,8 @@ export function wearVest(a, style) {
   const G = gearMat();
   const grp = new THREE.Group(); grp.userData.style = style;
   const L = a.model.look || {};
-  const w = (L.build || 1) * (1 + 0.22 * (L.fat || 0)), dz = 1 + 0.35 * (L.fat || 0);
+  const fit = M.torsoFit ? M.torsoFit() : null; // [karakter] yeni gövde hacmine göre yelek ölçüsü
+  const w = fit ? fit.w : (L.build || 1) * (1 + 0.22 * (L.fat || 0)), dz = fit ? fit.dz : 1 + 0.35 * (L.fat || 0);
   const v = new THREE.Mesh(vestGeo(style), G.cloth); v.castShadow = true; v.scale.set(w, 1, dz);
   grp.add(v);
   const pm = patchMat(style);
@@ -274,6 +275,7 @@ export function wearHelmet(a, style) {
   grp.add(h);
   if (style === 'swat') { const vz = new THREE.Mesh(VISOR_G, G.visor); vz.scale.set(1, 0.95, 1.12); vz.position.set(0, -0.005, 0.004); grp.add(vz); }
   grp.position.set(0, 0.1, 0.006);
+  if (M.helmetFit) { const hf = M.helmetFit(); grp.position.y = hf.y; grp.scale.setScalar(hf.s); } // [karakter] kafa + saç hacmine oturur
   M.head.add(grp);
   M._helmet = grp;
 }

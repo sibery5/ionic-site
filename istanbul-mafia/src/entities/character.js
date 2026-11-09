@@ -8,15 +8,16 @@
 //   vuruş tepkisi, yönlü ölüm düşüşü ve yere yerleşme (kemik bazlı kısıt gevşetme).
 import * as THREE from 'three';
 import { buildWeaponModel, WEAPONS } from '../game/weapons.js';
-import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey } from './charParts.js';
+import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM, gearFit } from './charParts.js';
+export { BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM };
 import { charMaterial, charDepthMaterial } from './charTex.js';
 
 export const SKIN_TONES = ['#f1d0b5', '#e0b493', '#c99572', '#a8754f', '#7d5236', '#5a3a26'];
 export const HAIR_COLORS = ['#1a1410', '#3b2a1e', '#6b4a2e', '#a07040', '#d8b070', '#8a8a8a', '#5a1a10'];
 // karakter yaratıcısının eski listesi (geri uyum); tüm stiller HAIR_STYLES_ALL'da
 export const HAIR_STYLES = ['kisa', 'arkaya', 'kel', 'uzun', 'kivircik', 'at_kuyrugu'];
-export const HAIR_STYLES_ALL = ['kisa', 'arkaya', 'yan_ayrik', 'asker', 'kel', 'kivircik', 'uzun', 'dalgali', 'kare', 'at_kuyrugu', 'topuz'];
-export const HAIR_STYLE_NAMES = { kisa: 'Kısa', arkaya: 'Arkaya', yan_ayrik: 'Yandan ayrık', asker: 'Asker tıraşı', kel: 'Kel', kivircik: 'Kıvırcık', uzun: 'Uzun', dalgali: 'Dalgalı', kare: 'Kâküllü kare', at_kuyrugu: 'At kuyruğu', topuz: 'Topuz' };
+export const HAIR_STYLES_ALL = ['kisa', 'arkaya', 'yan_ayrik', 'fade', 'asker', 'kel', 'kivircik', 'uzun', 'dalgali', 'kare', 'at_kuyrugu', 'topuz'];
+export const HAIR_STYLE_NAMES = { kisa: 'Kısa', arkaya: 'Arkaya', yan_ayrik: 'Yandan ayrık', fade: 'Yanlar kısa', asker: 'Asker tıraşı', kel: 'Kel', kivircik: 'Kıvırcık', uzun: 'Uzun', dalgali: 'Dalgalı', kare: 'Kâküllü kare', at_kuyrugu: 'At kuyruğu', topuz: 'Topuz' };
 export const BEARDS = ['none', 'stubble', 'mustache', 'full'];
 export const BEARDS_ALL = ['none', 'stubble', 'mustache', 'keci', 'full'];
 export const BEARD_NAMES = { none: 'Yok', stubble: 'Kirli', mustache: 'Bıyık', keci: 'Keçi sakalı', full: 'Gür' };
@@ -71,13 +72,53 @@ const ARCHETYPES = [
   ['turist_yasli', 'x', (r, L) => Object.assign(L, { age: r.float(0.75, 1), skin: '#f1d0b5', top: 'polo', topColor: pick(r, COL.pastel), pants: 'shorts', pantsColor: '#c9b48a', shoes: 'sneaker', shoesColor: '#eeeeee', hat: 'panama', hatColor: '#e8dcc0', camera: true, hairColor: '#cccccc', hair: L.gender === 'f' ? 'kare' : 'kel', glasses: true, glassesStyle: 'readers' })],
   ['universiteli', 'f', (r, L) => Object.assign(L, { age: 0, top: pick(r, ['sweater', 'denim']), topColor: pick(r, COL.pastel.concat(COL.denim)), pants: pick(r, ['jeans', 'skirt']), pantsColor: pick(r, COL.denim), shoes: pick(r, ['sneaker', 'boots']), shoesColor: pick(r, ['#eeeeee', '#3a2412']), hair: pick(r, ['uzun', 'kare', 'kivircik', 'dalgali']), glasses: r.chance(0.5), glassesStyle: 'readers', bag: r.chance(0.5) ? 'bag1' : null, bagColor: pick(r, COL.earth) })],
   ['kapali_genc', 'f', (r, L) => Object.assign(L, { age: 0, top: pick(r, ['hoodie', 'denim', 'pardesu']), topColor: pick(r, COL.pastel.concat(COL.dark)), pants: 'jeans', pantsColor: pick(r, COL.denim), shoes: 'sneaker', shoesColor: '#eeeeee', hat: 'basortusu', hatColor: pick(r, COL.scarf), bag: r.chance(0.5) ? 'bag1' : null, bagColor: pick(r, COL.bright) })],
+  // 1.4: yazlık / modern / kapalı giyim çeşitliliği
+  ['yazlik_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: pick(r, ['tank', 'crop', 'tshirt', 'tank']), topColor: pick(r, COL.pastel.concat(COL.bright)), pants: pick(r, ['shorts', 'minishort', 'mini', 'jeans']), pantsColor: pick(r, COL.denim.concat(['#e8e8e8', '#c9b48a'])), shoes: pick(r, ['sandal', 'sneaker', 'flats']), shoesColor: pick(r, ['#c9a070', '#eeeeee', '#3a2412']), hair: pick(r, ['uzun', 'at_kuyrugu', 'dalgali', 'topuz']), glasses: r.chance(0.5), glassesStyle: 'glasses', bag: r.chance(0.5) ? 'handbag' : null, bagColor: pick(r, ['#c9a070', '#e8e0d0', '#8a1a1a']), earrings: r.chance(0.6) ? pick(r, ['hoop', 'stud']) : null })],
+  ['elbiseli', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.45), top: pick(r, ['dress', 'sundress', 'dress']), dressLen: pick(r, ['mini', 'knee', 'midi', 'long']), topColor: pick(r, COL.bright.concat(COL.pastel, ['#1a1a1a'])), accentColor: pick(r, ['#1a1a1a', '#d4af37', '#f0f0f0']), shoes: pick(r, ['heels', 'flats', 'sandal']), shoesColor: pick(r, ['#111111', '#c9a070', '#8a1a1a']), hair: pick(r, ['uzun', 'dalgali', 'topuz', 'kare']), makeup: true, bag: r.chance(0.7) ? 'handbag' : null, bagColor: pick(r, ['#111111', '#3a2412', '#c9a070']), earrings: r.chance(0.7) ? pick(r, ['hoop', 'stud']) : null })],
+  ['sporcu_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: pick(r, ['crop', 'tank', 'track']), topColor: pick(r, COL.bright.concat(COL.dark)), pants: 'leggings', pantsColor: pick(r, ['#111111', '#1a1a2a', '#3a3a4a', '#5a2d5a']), shoes: 'sneaker', shoesColor: pick(r, ['#eeeeee', '#c84a6a']), hair: pick(r, ['at_kuyrugu', 'topuz']), watch: 'digital', body: 'slim' })],
+  ['sik_genc_k', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.35), top: pick(r, ['blouse', 'blouse', 'sweater']), topColor: pick(r, COL.pastel.concat(['#f0f0f0', '#1a1a1a'])), pants: pick(r, ['midi', 'jeans', 'slacks', 'skirt']), pantsColor: pick(r, COL.dark.concat(COL.denim, ['#c9b48a'])), shoes: pick(r, ['flats', 'heels', 'boots']), shoesColor: pick(r, ['#111111', '#3a2412']), hair: pick(r, ['uzun', 'kare', 'dalgali']), makeup: true, bag: 'handbag', bagColor: pick(r, ['#111111', '#3a2412', '#8a6a4a']), earrings: 'stud', watch: r.chance(0.5) ? 'steelwatch' : null })],
+  ['tesettur', 'f', (r, L) => Object.assign(L, { age: r.float(0, 0.7), top: 'ferace', topColor: pick(r, ['#1a1a1a', '#2a2a3a', '#4a3a3a', '#3a4a4a', '#5a4a3a', '#2a3a2a']), pants: 'longskirt', pantsColor: '#1a1a1a', shoes: pick(r, ['loafer', 'flats']), shoesColor: '#111111', hat: 'basortusu', hatColor: pick(r, COL.scarf), bag: r.chance(0.4) ? 'handbag' : null, bagColor: '#1a1a1a' })],
+  ['yazlik_e', 'm', (r, L) => Object.assign(L, { age: r.float(0, 0.5), top: pick(r, ['tank', 'tshirt', 'polo']), topColor: pick(r, COL.pastel.concat(COL.bright)), pants: 'shorts', pantsColor: pick(r, ['#c9b48a', '#2a3550', '#6a6a5a']), shoes: pick(r, ['sandal', 'sneaker']), shoesColor: pick(r, ['#3a2412', '#eeeeee']), glasses: r.chance(0.5), glassesStyle: pick(r, ['glasses', 'aviator']), hat: r.chance(0.3) ? 'cap' : 'none', hatColor: pick(r, COL.bright) })],
+  ['bomberci', 'm', (r, L) => Object.assign(L, { age: r.float(0, 0.3), top: 'bomber', topColor: pick(r, ['#2a3a2a', '#1a1a1a', '#1d2440', '#5a4a3a']), accentColor: pick(r, ['#c86a1a', '#1a1a1a', '#8a1a1a']), pants: pick(r, ['jeans', 'cargo']), pantsColor: pick(r, COL.denim.concat(COL.dark)), shoes: pick(r, ['sneaker', 'boots', 'hightop']), shoesColor: pick(r, ['#eeeeee', '#1a1a1a']), hair: pick(r, ['fade', 'kisa', 'asker']), hat: r.chance(0.35) ? pick(r, ['bere', 'cap']) : 'none', hatColor: pick(r, COL.dark), beard: pick(r, ['stubble', 'none', 'keci']) })],
 ];
 export const ARCHETYPE_IDS = ARCHETYPES.map((a) => a[0]);
+// semte göre giyim: muhafazakâr semtlerde kapalı giyim, sahil/merkez semtlerde yazlık ve modern kıyafet ağırlıklı
+const DISTRICT_W = {
+  fatih: { tesettur: 3, basortulu: 3, hoca: 2.5, yasli_k: 2, yasli_e: 1.5, esnaf: 2, simitci: 2, yazlik_k: 0.25, elbiseli: 0.4, sporcu_k: 0.4, turist_e: 2, turist_k: 1.5 },
+  eyup: { tesettur: 3, basortulu: 3, hoca: 3, yasli_k: 2, yasli_e: 2, esnaf: 1.5, yazlik_k: 0.2, elbiseli: 0.3, sporcu_k: 0.3, yazlik_e: 0.4 },
+  uskudar: { tesettur: 2, basortulu: 2.5, hoca: 1.5, yasli_e: 1.5, balikci: 2, kapali_genc: 2, yazlik_k: 0.5, elbiseli: 0.7 },
+  beyoglu: { turist_e: 2.5, turist_k: 2.5, sanatci: 2.5, sik_kadin: 2, genc_sik: 2, sik_genc_k: 2, elbiseli: 1.5, bomberci: 1.5, garson: 1.5, tesettur: 0.4 },
+  besiktas: { ogrenci_e: 2, ogrenci_k: 2, universiteli: 2, sporcu_k: 2, yazlik_k: 1.6, yazlik_e: 1.5, bomberci: 2, is_adami: 1.5, is_kadini: 1.5, tesettur: 0.5 },
+  kadikoy: { yazlik_k: 2.2, yazlik_e: 2, elbiseli: 2, sanatci: 2, universiteli: 2, sporcu_k: 1.8, sik_genc_k: 2, bomberci: 1.5, balikci: 1.5, tesettur: 0.5 },
+};
+// vücut tipleri: çoğunluk orta, bir kısmı ince/iri/kaslı
+function pickBody(r, gender, age) {
+  const x = r.next();
+  if (gender === 'f') return x < 0.3 ? 'slim' : x < 0.82 ? 'average' : x < 0.95 ? 'heavy' : 'muscular';
+  if (age > 0.6) return x < 0.2 ? 'slim' : x < 0.65 ? 'average' : 'heavy';
+  return x < 0.2 ? 'slim' : x < 0.65 ? 'average' : x < 0.82 ? 'heavy' : 'muscular';
+}
+export function applyBodyType(L, type) {
+  const B = BODY_TYPES[type]; if (!B) return L;
+  L.body = type; L.build = B.build; L.fat = B.fat; L.muscle = B.muscle; L.shoulders = B.shoulders;
+  return L;
+}
+// teçhizat: savaş modülü actor.model.look.helmet / look.vest bayraklarını okur; setGear ile değişir
+export const GEAR_TYPES = ['swat', 'police', 'army', 'jandarma'];
+// çete giyim tarzları: renk, ceket, bandana, aksesuar (economy.GANGS anahtarları)
+const GANG_STYLE = {
+  yilanlar: (r, L) => Object.assign(L, { top: pick(r, ['track', 'bomber', 'hoodie']), topColor: pick(r, ['#2d8a3d', '#1a1a1a', '#1f5a28']), accentColor: '#2d8a3d', pants: pick(r, ['track', 'jeans']), pantsColor: '#141414', shoes: 'sneaker', shoesColor: pick(r, ['#eeeeee', '#1a1a1a']), bandana: r.chance(0.55) ? 'neck' : null, bandanaColor: '#2d8a3d', chain: r.chance(0.6), glasses: r.chance(0.5), glassesStyle: 'glasses', hair: pick(r, ['fade', 'asker', 'kisa']) }),
+  kartallar: (r, L) => Object.assign(L, { top: pick(r, ['leather', 'bomber', 'track']), topColor: pick(r, ['#111111', '#1a1a1a', '#e8e8e8']), accentColor: '#e8e8e8', shirtColor: '#f0f0f0', pants: 'jeans', pantsColor: '#141414', shoes: pick(r, ['sneaker', 'boots']), shoesColor: '#eeeeee', hat: r.chance(0.4) ? 'cap' : 'none', hatColor: '#e8e8e8', chain: r.chance(0.4), chainStyle: 'silverchain', hair: pick(r, ['fade', 'arkaya', 'kisa']) }),
+  carsi: (r, L) => Object.assign(L, { top: pick(r, ['suit', 'blazer', 'vest', 'leather']), topColor: pick(r, ['#3a2a1a', '#2a2420', '#4a3a2a']), shirtColor: pick(r, ['#c98a1a', '#e8dcc0', '#1a1a1a']), tieColor: '#c98a1a', pants: 'slacks', pantsColor: '#2a2420', shoes: 'polished', shoesColor: '#2a1a10', hat: r.chance(0.5) ? 'kasket' : 'none', hatColor: '#3a2a1a', chain: true, tespih: r.chance(0.7), tespihColor: '#c98a1a', beard: pick(r, ['mustache', 'full', 'mustache']), watch: 'goldwatch', ring: r.chance(0.5) ? 'ring' : null }),
+  bogaz: (r, L) => Object.assign(L, { top: pick(r, ['jacket', 'hoodie', 'bomber']), topStyle: null, topColor: pick(r, ['#1d6ec8', '#2a4a7a', '#1a2a4a']), accentColor: '#1d6ec8', pants: pick(r, ['jeans', 'cargo']), pantsColor: pick(r, ['#1e2a40', '#2a2a2a']), shoes: pick(r, ['sneaker', 'boots']), shoesColor: '#1a1a1a', hat: r.chance(0.45) ? pick(r, ['bere', 'bandana']) : 'none', hatColor: '#1a2a4a', bandanaColor: '#1d6ec8', glasses: r.chance(0.5), glassesStyle: 'aviator' }),
+  kurtlar: (r, L) => Object.assign(L, { top: pick(r, ['leather', 'bomber', 'leather']), topColor: pick(r, ['#1c1c1c', '#2a1a14']), accentColor: '#8a1a1a', shirtColor: '#8a1a1a', pants: pick(r, ['jeans', 'cargo']), pantsColor: '#1a1a1a', shoes: 'boots', shoesColor: '#1a1a1a', hat: r.chance(0.4) ? 'bandana' : 'none', bandanaColor: '#8a1a1a', bandana: r.chance(0.3) ? 'neck' : null, beard: pick(r, ['full', 'keci', 'full']), body: 'muscular' }),
+};
+export const GANG_STYLES = Object.keys(GANG_STYLE);
 const MALE_HAIR = ['kisa', 'arkaya', 'kel', 'kivircik', 'yan_ayrik', 'kisa', 'asker'];
 const FEMALE_HAIR = ['uzun', 'at_kuyrugu', 'kivircik', 'kare', 'topuz', 'dalgali', 'uzun'];
 
-export function randomLook(r, kind = 'civilian', archetype) {
-  const gender = r.chance(kind === 'civilian' ? 0.45 : 0.08) ? 'f' : 'm';
+export function randomLook(r, kind = 'civilian', archetype, district) {
+  const gender = r.chance(kind === 'civilian' ? 0.45 : kind === 'police' ? 0.15 : kind === 'gang' ? 0.08 : 0.04) ? 'f' : 'm';
   let L = defaultLook(gender);
   L.skin = r.pick(SKIN_TONES.slice(0, 5));
   L.hairColor = r.pick(HAIR_COLORS.slice(0, 5).concat(['#1a1410', '#3b2a1e']));
@@ -94,12 +135,20 @@ export function randomLook(r, kind = 'civilian', archetype) {
   L.shoes = r.pick(['sneaker', 'polished', 'boots', 'sneaker']);
   L.shoesColor = r.pick(['#1a1a1a', '#3a2412', '#eeeeee']);
   L.glasses = r.chance(0.1);
+  applyBodyType(L, pickBody(r, gender, L.age));
+  if (gender === 'f' && r.chance(0.35)) L.earrings = r.chance(0.5) ? 'hoop' : 'stud';
   if (kind === 'civilian') {
-    // arketip: cinsiyete uygun olandan seç
+    // arketip: cinsiyete uygun olandan seç (semt varsa ağırlıklı)
     let a = archetype ? ARCHETYPES.find((x) => x[0] === archetype) : null;
-    if (!a) { const pool = ARCHETYPES.filter((x) => x[1] === 'x' || x[1] === gender); a = pool[Math.floor(r.next() * pool.length)]; }
+    if (!a) {
+      const pool = ARCHETYPES.filter((x) => x[1] === 'x' || x[1] === gender), dw = DISTRICT_W[district] || {};
+      let tot = 0; for (const x of pool) tot += dw[x[0]] !== undefined ? dw[x[0]] : 1;
+      let q = r.next() * tot; a = pool[pool.length - 1];
+      for (const x of pool) { q -= dw[x[0]] !== undefined ? dw[x[0]] : 1; if (q <= 0) { a = x; break; } }
+    }
     if (a[1] !== 'x' && a[1] !== gender) { L = Object.assign(L, defaultLook(a[1]), { skin: L.skin, eyeColor: L.eyeColor, height: L.height, build: L.build, hairColor: L.hairColor }); L.hair = a[1] === 'f' ? r.pick(FEMALE_HAIR) : r.pick(MALE_HAIR); L.beard = a[1] === 'f' ? 'none' : r.pick(BEARDS_ALL); }
     a[2](r, L);
+    if (L.body && BODY_TYPES[L.body] && (a[0] === 'sporcu_k')) applyBodyType(L, L.body);
     if (!L.pantsColor) L.pantsColor = L.topColor;
     L.archetype = a[0];
     if (L.gender === 'f') L.beard = 'none';
@@ -108,6 +157,23 @@ export function randomLook(r, kind = 'civilian', archetype) {
     Object.assign(L, { top: 'police', topStyle: v < 0.45 ? 'police' : v < 0.85 ? 'police_shirt' : 'police_vest', topColor: '#1d2f5a', shirtColor: '#a8c0e0', pants: 'slacks', pantsColor: '#1a2440', shoes: 'boots', shoesColor: '#111111', hat: r.chance(0.8) ? 'police' : 'none', hatColor: r.chance(0.15) ? '#e8e8e8' : '#1a2440', glasses: r.chance(0.25), glassesStyle: 'aviator', age: r.float(0, 0.45), fat: r.chance(0.2) ? 0.4 : 0, beard: gender === 'f' ? 'none' : r.pick(['none', 'stubble', 'mustache']) });
     if (L.topStyle === 'police_shirt' || L.topStyle === 'police_vest') L.topColor = '#a8c0e0';
     if (gender === 'f') L.hair = r.pick(['topuz', 'at_kuyrugu']);
+  } else if (kind === 'swat' || kind === 'soldier' || kind === 'army' || kind === 'jandarma') {
+    // üniforma (kamuflaj/taktik kıyafet, eldiven). Kask ve yelek savaş modülünün ayrı ağları (game/body.js, düşürülebilir kask);
+    // karakter ağı içi teçhizat yalnız look.helmet / look.vest açıkça verilince (setGear) çizilir.
+    const t = kind === 'soldier' ? 'army' : kind;
+    Object.assign(L, { top: t, topStyle: null, pants: t === 'swat' ? 'tactical' : 'camo', camo: t, pantsColor: t === 'swat' ? '#16181a' : '#3f4c2a', shoes: 'boots', shoesColor: t === 'swat' ? '#0e0e0e' : '#2a2018',
+      helmet: null, vest: null, gloves: t === 'swat' || r.chance(0.4) ? (t === 'swat' ? '#121212' : '#2e3420') : null,
+      hat: 'none', glasses: t === 'swat' && r.chance(0.3), glassesStyle: 'glasses', chain: false, tespih: false, bag: null, earrings: null,
+      hair: gender === 'f' ? 'topuz' : r.pick(['asker', 'asker', 'fade']), beard: gender === 'f' ? 'none' : t === 'jandarma' ? r.pick(['mustache', 'stubble']) : r.pick(['none', 'stubble']), age: r.float(0, 0.3) });
+    applyBodyType(L, r.chance(0.5) ? 'muscular' : 'average');
+  } else if (kind === 'gang' && GANG_STYLE[archetype]) {
+    // çeteye özgü tarz (archetype = çete anahtarı)
+    Object.assign(L, { beard: r.pick(['stubble', 'full', 'mustache', 'keci']), hair: r.pick(['asker', 'kisa', 'arkaya', 'kel', 'fade']), age: r.float(0, 0.35), hat: 'none' });
+    applyBodyType(L, r.chance(0.5) ? 'muscular' : r.chance(0.5) ? 'heavy' : 'average');
+    GANG_STYLE[archetype](r, L);
+    if (L.body && BODY_TYPES[L.body]) applyBodyType(L, L.body);
+    L.gang = archetype;
+    if (gender === 'f') { L.beard = 'none'; L.hair = r.pick(['at_kuyrugu', 'uzun', 'topuz']); }
   } else if (kind === 'gang') {
     // çete stilleri (topColor çağıran tarafından çete rengine çevrilir)
     const st = r.pick(['leather', 'track', 'suit', 'hoodie', 'shirt', 'denim']);
@@ -135,7 +201,7 @@ function geoFor(L, lod) {
 // bağlama pozu ters matrisleri: vücut ölçüsü başına paylaşılır
 const invCache = new Map();
 function bindInverses(R) {
-  const k = [R.shX, R.hipX, R.hk].join('|');
+  const k = [R.shX, R.hipX, R.hk, BONES.length].join('|');
   if (invCache.has(k)) return invCache.get(k);
   const out = BONES.map((n) => new THREE.Matrix4().makeTranslation(-R.pos[n][0], -R.pos[n][1], -R.pos[n][2]));
   invCache.set(k, out);
@@ -168,7 +234,7 @@ const ARM_R = [J.shR, J.elR, J.wrR], ARM_L = [J.shL, J.elL, J.wrL], ARMS = [J.sh
 //  v, kadans(çevrim/s), duruş oranı, ayak kaldırma, topuk savurma, kalça düşüşü, sekme, öne eğilme, kol, dirsek,
 //  kalça dönüşü, göğüs ters dönüşü, kalça yuvarlanma, yanal salınım, adım genişliği, topuk basma, parmak itiş
 const GAIT = [
-  [0, 0.8, 0.66, 0, 0, 0, 0, 0.02, 0, -0.12, 0, 0, 0, 0, 1, 0, 0],
+  [0, 0.8, 0.66, 0, 0, 0, 0, 0.02, 0, -0.2, 0, 0, 0, 0, 1.15, 0, 0],
   [1.4, 0.93, 0.62, 0.085, 0, 0.012, 0.018, 0.04, 0.3, -0.3, 0.09, 0.1, 0.045, 0.02, 0.95, 0.3, 0.42],
   [2.6, 1.18, 0.46, 0.15, 0.05, 0.03, 0.028, 0.075, 0.42, -0.85, 0.1, 0.13, 0.04, 0.012, 0.75, 0.14, 0.5],
   [3.6, 1.38, 0.33, 0.22, 0.1, 0.042, 0.032, 0.11, 0.5, -1.3, 0.1, 0.15, 0.035, 0.008, 0.6, 0.06, 0.65],
@@ -196,6 +262,7 @@ const IK = { S: v3(), E: v3(), W: v3(), d: v3(), b: v3(), u: v3(), e: v3(), f: v
 const LG = { S: v3(), T: v3(), d: v3(), pole: v3(), bv: v3(), u: v3(), K: v3(), w: v3(), X: v3(), Y: v3(), Z: v3(), m: new THREE.Matrix4(), qT: q4(), qL: q4(), qK: q4(), qF: q4(), qi: q4(), e: new THREE.Euler() };
 const WV = { aim: v3(), fwd: v3(), right: v3(), dir: v3(), R: v3(), U: v3(), eye: v3(), shR: v3(), shL: v3(), G: v3(), F: v3(), t: v3(), x: v3(), y: v3(), z: v3(), wT: v3(), pole: v3(), mag: v3(), belt: v3(), qR: q4(), qL: q4() };
 const DTMP = v3();
+const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 // [savaş kancası] paylaşılan yara geometrisi/malzemesi (tembel), yüzüstü yatış yönü
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
@@ -266,7 +333,7 @@ export class CharacterModel {
       const S = s > 0 ? 'L' : 'R';
       const wr = B('wr' + S);
       const socket = new THREE.Object3D(); socket.position.set(-s * 0.004, -0.072, 0.004); wr.add(socket);
-      this.arms.push({ sh: B('sh' + S), el: B('el' + S), wr, socket, s, fi: B('fi' + S), fd: B('fd' + S), th: B('th' + S) });
+      this.arms.push({ sh: B('sh' + S), el: B('el' + S), fa: B('fa' + S), wr, socket, s, fi: B('fi' + S), fd: B('fd' + S), th: B('th' + S) });
       this.legs.push({ hip: B('hip' + S), kn: B('kn' + S), an: B('an' + S), toe: B('toe' + S), s });
     }
     this.joints = JB.map((n) => B(n));
@@ -341,6 +408,24 @@ export class CharacterModel {
   }
 
   setLook(look) { this.look = { ...look }; this.build(); }
+  // [savaş/karakter] görünür teçhizat: type 'swat'|'police'|'army'|'jandarma'; o = {helmet, vest} (false = çıkar)
+  setGear(type, o = {}) {
+    const L = this.look, h = o.helmet === undefined ? type : o.helmet ? (typeof o.helmet === 'string' ? o.helmet : type) : null, v = o.vest === undefined ? type : o.vest ? (typeof o.vest === 'string' ? o.vest : type) : null;
+    if ((L.helmet || null) === h && (L.vest || null) === v) return;
+    L.helmet = h; L.vest = v; this.build();
+  }
+  // [savaş/karakter] body.js yelek ağı ölçeği: ön/arka plaka kalın katmanı gövde + kıyafet yüzeyini örter (plaka dış yüzü ±0.143)
+  torsoFit() {
+    const G = gearFit(this.look);
+    return { w: clamp(G.rx / 0.18, 0.85, 1.3), dz: Math.max(1, (G.rf + 0.012) / 0.143, (G.rb + 0.012) / 0.143) };
+  }
+  // kask ağı (yarıçap 0.138, y ölçeği 0.88): kafa + saç üstüne oturur, başı içine alır
+  helmetFit() {
+    const G = gearFit(this.look), s = Math.max(1, (G.headRx + 0.03) / 0.138, (G.headRz + 0.03) / (0.138 * 1.12));
+    return { s, y: G.headTop + 0.012 - 0.138 * 0.88 * s };
+  }
+  get hasHelmet() { return !!this.look.helmet; }
+  get hasVest() { return !!this.look.vest; }
 
   setWeapon(id) {
     if (this.weaponId === id) return;
@@ -505,6 +590,7 @@ export class CharacterModel {
       return;
     }
     if (this.downK) this.downK = 0;
+    if (st.ride) { this.poseRide(dt, st.ride); return; } // bisiklet sürüşü (two_wheelers.js)
     // ---- ağırlıklar ----
     // kök hareketi: bu karede kök gerçekten ne kadar ilerledi? (duvara yürürken yerinde koşma / ay yürüyüşü olmasın)
     const rp = this.root.position;
@@ -532,7 +618,7 @@ export class CharacterModel {
     const cow = !!st.cower;
     W.crouch = dmp(W.crouch, st.crouch && !cow ? 1 : 0, 9, dt);
     W.aim = dmp(W.aim, st.aim ? 1 : 0, 14, dt);
-    W.air = dmp(W.air, st.air ? 1 : 0, st.air ? 8 : 20, dt);
+    W.air = dmp(W.air, st.air ? 1 : 0, st.air ? 8 : 34, dt);
     W.swim = dmp(W.swim, st.swim ? 1 : 0, 5, dt);
     W.sit = dmp(W.sit, st.sit ? 1 : 0, 6, dt);
     W.up = dmp(W.up, st.hands_up && !cow ? 1 : 0, 8, dt);
@@ -542,7 +628,7 @@ export class CharacterModel {
     W.reload = dmp(W.reload, st.reload > 0 ? 1 : 0, 10, dt);
     W.hold = dmp(W.hold, twoH ? 1 : 0, 10, dt);
     if (st.air) { this.airVy = Math.min(this.airVy, st.vy || 0); }
-    if (this.wasAir && !st.air) { this.landK = clamp(-this.airVy / 11, 0.15, 1); this.landT = 0; this.airVy = 0; }
+    if (this.wasAir && !st.air) { W.air = Math.min(W.air, 0.2); this.landK = clamp(-this.airVy / 11, 0.15, 1); this.landT = 0; this.airVy = 0; }
     this.wasAir = !!st.air;
     this.landT += dt;
     const age = this.rig.age;
@@ -578,8 +664,9 @@ export class CharacterModel {
     // yavaşça çekilir; kalkışta kalan fark salınım boyunca sönümlenir.
     let rdx = 0, rdz = 0;
     if (!tele) { const cr = Math.cos(ry - dy), sr = Math.sin(ry - dy); rdx = (rwx * cr - rwz * sr) / sc; rdz = (rwx * sr + rwz * cr) / sc; }
-    const lockOK = !tele && moving > 0.05 && W.air < 0.3 && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead;
-    const cdy = Math.cos(dy), sdy = Math.sin(dy), kp = 1 - Math.exp(-3 * dt);
+    // ayak yerdeyken her zaman kilitli (boşta da): kalkışta/çömelirken formül konumuna çekilip kaymasın
+    const lockOK = !tele && (W.air < 0.04 || (!st.air && W.air < 0.25)) && W.swim < 0.1 && W.sit < 0.1 && !(st.vault > 0) && !(st.roll > 0) && !st.dead && !st.ride;
+    const cdy = Math.cos(dy), sdy = Math.sin(dy);
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;
       const p = fract(cyc + i * 0.5);
@@ -592,29 +679,35 @@ export class CharacterModel {
       } else {
         const w = (p - beta) / (1 - beta), e = w * w * (3 - 2 * w);
         along = c0 + travel * (-0.5 + e) - kick * Math.sin(Math.PI * w) * (1.15 - w) * moving;
-        y = lift * Math.pow(Math.sin(Math.PI * w), 0.9) * moving;
+        // salınım: yürüyüş kaldırması ya da ayağın gitmesi gereken mesafe kadar (yavaşta sürünmesin, adım atsın)
+        const need = F[i].need || 0, nl = need > 0.012 ? Math.min(0.085, 0.03 + need * 0.35) : 0;
+        y = Math.max(lift * moving, nl) * Math.pow(Math.sin(Math.PI * w), 0.9);
         pitch = (toeOff * (1 - smR(0, 0.55, w)) - heel * smR(0.6, 1, w) + 0.28 * run * Math.sin(Math.PI * w)) * moving;
         toe = 0.08 * moving;
       }
       if (back) pitch *= 0.4;
       if (i === 0) sLs = along; else sRs = along;
       const baseX = s * this.hipX * width;
-      let fx = baseX + dX * along, fz = dZ * along;
+      // boşta: bir ayak hafif önde (formül konumunda -> kilitli ayak itilmez)
+      const idleZ = 0.05 * ((this.seed % 1) - 0.5) * (1 - moving) * s;
+      let fx = baseX + dX * along, fz = dZ * along + idleZ;
       fx = s > 0 ? Math.max(fx, 0.035) : Math.min(fx, -0.035);
       const Fk = F[i];
       if (lockOK && p < beta) {
-        if (!Fk.lock) { Fk.lock = true; Fk.lx = fx; Fk.lz = fz; }
+        if (!Fk.lock) { Fk.lock = true; Fk.lx = fx + rdx; Fk.lz = fz + rdz; } // çizilen konum = fx (aşağıdaki telafiyle)
         else {
           // vücut döndü/ilerledi: dünyada sabit nokta vücut uzayında ters yöne gider
           const lx = Fk.lx * cdy - Fk.lz * sdy - rdx, lz = Fk.lx * sdy + Fk.lz * cdy - rdz;
-          Fk.lx = lx + (fx - lx) * kp; Fk.lz = lz + (fz - lz) * kp;
+          Fk.lx = lx; Fk.lz = lz;
           const ex = Fk.lx - fx, ez = Fk.lz - fz, el = Math.hypot(ex, ez);
-          if (el > 0.2) { Fk.lx = fx + ex / el * 0.2; Fk.lz = fz + ez / el * 0.2; }
+          if (el > 0.34) { Fk.lx = fx + ex / el * 0.34; Fk.lz = fz + ez / el * 0.34; }
         }
-        fx = Fk.lx; fz = Fk.lz;
-        Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along;
+        // kök konumu animasyondan SONRA yazılıyor (player/npc sync): çizilen karede kök bir adım daha ilerlemiş olur.
+        // Son kök adımı kadar önden telafi et -> kilitli ayak dünyada sabit (kalkışta/çömelirken kayma birikmez)
+        fx = Fk.lx - rdx; fz = Fk.lz - rdz;
+        Fk.ox = fx - (baseX + dX * along); Fk.oz = fz - dZ * along - idleZ;
       } else {
-        if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; }
+        if (Fk.lock) { Fk.lock = false; Fk.sw = 1; Fk.byPhase = p >= beta; Fk.need = Math.hypot(Fk.ox || 0, Fk.oz || 0); }
         // kilit bırakılınca kalan fark sönümlenir (sıçrama yok): kalkışta salınım boyunca, duruşta zamanla
         if (Fk.sw > 0 && Fk.ox !== undefined) {
           let k2;
@@ -663,8 +756,9 @@ export class CharacterModel {
       const a = armA * nrm * s; // + geri, - ileri
       const ax = a < 0 ? a : a * 0.62;
       const fwd = Math.max(0, -a) / Math.max(0.01, armA);
-      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run, 0.12 * run * fwd, 0.07 + 0.025 * this.rig.bk + 0.04 * run * (1 - fwd) + 0.1 * wc);
-      setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd, 0, 0);
+      // kollar gövdeye yapışmaz: omuz/kas genişliği kadar dışarıda (kaslı/iri gövdede daha açık)
+      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.1 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
+      setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd - 0.45 * wc, 0, 0);
       setJ(P, i ? J.wrR : J.wrL, -0.08 - 0.1 * run, 0, 0.05);
     }
     // nefes, boşta ağırlık aktarma
@@ -675,30 +769,33 @@ export class CharacterModel {
     const shift = (Math.sin(t * 0.37 + this.seed) * 0.7 + Math.sin(t * 0.13 + this.seed * 3) * 0.3) * idle * (1 - wc);
     pel.x += 0.032 * shift; addJ(P, J.hips, 0, 0.04 * shift, 0.035 * shift); addJ(P, J.spine, 0, 0, -0.03 * shift); addJ(P, J.chest, 0, 0, -0.015 * shift);
     // idle ayak duruşu: hafif açık + bir ayak önde
-    if (idle > 0.01) { const st2 = (this.seed % 1) - 0.5; F[0].z += 0.05 * st2 * idle; F[1].z -= 0.05 * st2 * idle; }
     let lock = 1, hipsY = RIG.hips;
 
     // ---- boşta varyasyonları ve kişilik davranışları ----
     this.idleLayer(dt, st, idle, twoH);
 
     // ---- 2) havada ----
+    if (st.air) this.airT = (this.airT || 0) + dt; else this.airT = 0;
     if (W.air > 0.001) {
+      // evreler: itiş (bacaklar gerilir, kollar yukarı savrulur) -> yükseliş (dizler toplanır) -> düşüş (bacaklar yere uzanır, kollar denge)
       Q.set(P);
       const up = clamp((st.vy || 0) / 5, -1, 1);
-      const rise = clamp(up * 0.5 + 0.5, 0, 1);
-      setJ(Q, J.hipL, -0.95 * rise - 0.35 * (1 - rise), 0, 0.06); setJ(Q, J.knL, 1.35 * rise + 0.45 * (1 - rise), 0, 0); setJ(Q, J.anL, 0.2, 0, 0);
-      setJ(Q, J.hipR, 0.2 * rise - 0.25 * (1 - rise), 0, 0.06); setJ(Q, J.knR, 0.55 * rise + 0.35 * (1 - rise), 0, 0); setJ(Q, J.anR, 0.35, 0, 0);
-      setJ(Q, J.shL, -0.5 * rise, 0, 0.35 + 0.35 * (1 - rise)); setJ(Q, J.shR, 0.25 * rise, 0, 0.35 + 0.35 * (1 - rise));
-      setJ(Q, J.elL, -0.7, 0, 0); setJ(Q, J.elR, -0.5, 0, 0);
-      addJ(Q, J.spine, 0.1 * rise, 0, 0);
+      const rise = clamp(up * 0.5 + 0.5, 0, 1), push = 1 - smR(0.05, 0.2, this.airT), fall = smR(0.1, -0.6, up);
+      const tk = rise * (1 - push);
+      setJ(Q, J.hipL, -0.95 * tk - 0.35 * fall - 0.15 * push, 0, 0.06); setJ(Q, J.knL, 1.35 * tk + 0.3 * fall + 0.12 * push, 0, 0); setJ(Q, J.anL, 0.2 + 0.35 * push, 0, 0);
+      setJ(Q, J.hipR, 0.2 * tk - 0.2 * fall + 0.25 * push, 0, 0.06); setJ(Q, J.knR, 0.55 * tk + 0.25 * fall + 0.2 * push, 0, 0); setJ(Q, J.anR, 0.35 + 0.4 * push, 0, 0);
+      setJ(Q, J.shL, -0.5 * tk - 1.2 * push, 0, 0.3 + 0.55 * fall); setJ(Q, J.shR, 0.25 * tk - 0.9 * push, 0, 0.3 + 0.55 * fall);
+      setJ(Q, J.elL, -0.7 + 0.3 * fall, 0, 0); setJ(Q, J.elR, -0.5 + 0.2 * fall, 0, 0);
+      addJ(Q, J.spine, 0.1 * tk - 0.08 * push + 0.08 * fall, 0, 0); addJ(Q, J.chest, -0.06 * push, 0, 0);
       mixP(P, Q, W.air);
       lock -= W.air;
     }
     // iniş esnemesi: pelvis çöker, IK dizleri büker
     if (this.landT < 0.6) {
       const a = this.landK * Math.exp(-this.landT * 7) * Math.min(1, this.landT * 30);
-      pel.y -= 0.2 * a;
-      addJ(P, J.spine, 0.25 * a, 0, 0); addJ(P, J.shL, 0, 0, 0.25 * a); addJ(P, J.shR, 0, 0, 0.25 * a);
+      pel.y -= 0.22 * a; pel.z -= 0.04 * a;
+      addJ(P, J.hips, 0.15 * a, 0, 0); addJ(P, J.spine, 0.25 * a, 0, 0); addJ(P, J.chest, 0.08 * a, 0, 0);
+      addJ(P, J.shL, -0.35 * a, 0, 0.3 * a); addJ(P, J.shR, -0.35 * a, 0, 0.3 * a); addJ(P, J.elL, -0.4 * a, 0, 0); addJ(P, J.elR, -0.4 * a, 0, 0);
     }
 
     // ---- 3) silah tutuşu (nişan almıyorken) ----
@@ -1030,6 +1127,47 @@ export class CharacterModel {
     }
   }
 
+  // Bisiklet sürücüsü: kalça selede, ayaklar pedal krankını izler (bacak IK), eller gidonda (kol IK), gövde öne eğik.
+  // R = { seat:[x,y,z], pedals:[[x,y,z],[x,y,z]] (kök uzayı), grips:[Vector3,Vector3] (dünya), crank, lean, steer, speed }
+  poseRide(dt, R) {
+    const P = this.P, sc = this.rig.height, t = this.time;
+    P.fill(0);
+    const sp = clamp((R.speed || 0) / 7, 0, 1), br = Math.sin(t * 1.6 + this.seed);
+    // gövde: hıza göre öne eğilir, pedal çevrimiyle hafif yanal salınım; baş yolu görür
+    const sway = Math.sin(R.crank || 0) * 0.035 * (0.4 + sp);
+    setJ(P, J.hips, 0.42 + 0.12 * sp, 0, sway);
+    setJ(P, J.spine, 0.18 + 0.06 * sp + 0.01 * br, (R.steer || 0) * 0.15, -sway * 0.6);
+    setJ(P, J.chest, 0.1 + 0.05 * sp, (R.steer || 0) * 0.12, -sway * 0.4);
+    setJ(P, J.neck, -0.32 - 0.1 * sp, -(R.steer || 0) * 0.2, 0); setJ(P, J.head, -0.3 - 0.08 * sp + this.lookPitch * 0.3, this.lookYaw * 0.4 - (R.steer || 0) * 0.2, 0);
+    setJ(P, J.shL, -0.9, 0, 0.18); setJ(P, J.shR, -0.9, 0, 0.18); setJ(P, J.elL, -0.5, 0, 0); setJ(P, J.elR, -0.5, 0, 0);
+    setJ(P, J.wrL, 0.25, 0, 0); setJ(P, J.wrR, 0.25, 0, 0);
+    P[HP] = (R.seat[0] || 0) / sc; P[HP + 2] = (R.seat[2] + 0.02) / sc;
+    this.pel.x = 0; this.pel.y = 0; this.pel.z = 0;
+    this.apply(P, 0, (R.seat[1] + 0.05) / sc, 0);
+    this.hips.updateMatrix();
+    // bacaklar: bilek pedalın üstünde ve biraz arkasında; altta parmak ucu aşağı (bacak tam gerilmesin)
+    for (let i = 0; i < 2; i++) {
+      const pd = R.pedals[i], low = clamp((R.seat[1] - 0.55 - pd[1]) / 0.34 + 0.5, 0, 1);
+      const ay = pd[1] + 0.075 + 0.035 * low, az = pd[2] - 0.075 - 0.02 * low;
+      this.legIK(i, pd[0] / sc, ay / sc, az / sc, 0.15 + 0.35 * low, (i === 0 ? 1 : -1) * 0.05, 1);
+      P[(i ? J.toeR : J.toeL) * 3] = 0;
+    }
+    this.legs[0].toe.rotation.set(0, 0, 0); this.legs[1].toe.rotation.set(0, 0, 0);
+    // kollar: gidon tutamaklarına (dirsekler aşağı-dışa)
+    this.root.updateMatrixWorld(true);
+    for (let i = 0; i < 2; i++) {
+      const A = this.arms[i], gp = R.grips[i];
+      if (!gp) continue;
+      const S = A.sh.getWorldPosition(WV.shL);
+      const e = this.root.matrixWorld.elements, sd = (i === 0 ? 1 : -1) * 0.35; // kökün dünya X ekseni (sürücünün solu)
+      WV.pole.copy(S).addScaledVector(UPV, -0.6); WV.pole.x += e[0] * sd; WV.pole.y += e[1] * sd; WV.pole.z += e[2] * sd; WV.pole.x -= e[8] * 0.3; WV.pole.z -= e[10] * 0.3;
+      WV.wT.copy(gp).addScaledVector(UPV, 0.035 * this.body.scale.x);
+      this.solveArm(A, WV.wT, WV.pole, null, 1);
+    }
+    const cr = this._cr || (this._cr = [0, 0]); cr[0] = 0.9; cr[1] = 0.9;
+    this.applyHands(dt, cr);
+  }
+
   // telefon / sigara aksesuarları
   updateProps() {
     const W = this.w;
@@ -1070,6 +1208,12 @@ export class CharacterModel {
     for (let j = 0; j < NJ; j++) {
       const s = SIDE[j] || 1;
       J3[j].rotation.set(P[j * 3], P[j * 3 + 1] * s, P[j * 3 + 2] * s);
+    }
+    // ön kol burulması (pronasyon): dirsek ve bilek Y dönüşü ön kol kemiğine taşınır -> dirsek/bilek çökmez
+    for (let i = 0; i < 2; i++) {
+      const A = this.arms[i], e = i ? J.elR : J.elL, w = i ? J.wrR : J.wrL, s = i ? -1 : 1;
+      A.el.rotation.y = 0; A.wr.rotation.y = 0;
+      A.fa.rotation.set(0, (P[e * 3 + 1] + P[w * 3 + 1]) * s, 0);
     }
     let y = hipsY + P[HP + 1];
     if (lock > 0) {
@@ -1259,8 +1403,12 @@ export class CharacterModel {
     arm.el.quaternion.slerp(IK.q3, w);
     if (qWrist) {
       IK.q4.copy(IK.q1).multiply(arm.sh.quaternion).multiply(arm.el.quaternion).invert().multiply(qWrist);
-      arm.wr.quaternion.slerp(IK.q4, w);
-    }
+      // ön kol ekseni (Y) etrafındaki burulma ön kola, kalanı bileğe
+      const q = IK.q4, tw = TWQ.set(0, q.y, 0, q.w); if (tw.lengthSq() < 1e-8) tw.identity(); else tw.normalize();
+      arm.fa.quaternion.slerp(tw, w);
+      TWQ2.copy(arm.fa.quaternion).invert().multiply(q);
+      arm.wr.quaternion.slerp(TWQ2, w);
+    } else arm.fa.quaternion.slerp(TWQI, w);
     arm.wr.updateMatrixWorld(true);
   }
 

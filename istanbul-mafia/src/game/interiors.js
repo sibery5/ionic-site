@@ -48,6 +48,7 @@ export class Interiors {
     p.heading = Math.PI; p.camYaw = Math.PI; p.camPitch = 0.2;
     p.inInterior = ctx;
     p.camInit = false;
+    g.audio && g.audio.door && g.audio.door(undefined, undefined, true); // [ses B2] kapı açılır
     for (const n of g.npcs.list) n.inInterior = ctx;
     scene.add(p.model.root);
     g.ui.locationBanner(ctx.name);
@@ -73,6 +74,7 @@ export class Interiors {
     p.camYaw = p.heading;
     p.inInterior = null;
     p.camInit = false;
+    g.audio && g.audio.door && g.audio.door(undefined, undefined, false); // [ses B2] kapı arkadan kapanır
     g.scene.add(p.model.root);
     this.current = null;
     g.missions.onExit(ctx);

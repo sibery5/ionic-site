@@ -4,27 +4,8 @@
 // Konumlu sesler: mesafeye göre kısılır, alçak geçiren süzgeçle boğuklaşır, yankı payı artar ve
 // dinleyicinin bakış yönüne göre stereo kaydırılır.
 
-// Silah profilleri: click (ilk çıt), body [frekans, süre, kazanç], thump [f1, f2, süre, kazanç], tail [frekans, süre, kazanç]
-const GUN = {
-  pistol: { click: 0.5, body: [1900, 0.1, 1.0], thump: [170, 48, 0.12, 0.75], tail: [950, 0.6, 0.32], range: 260 },
-  revolver: { click: 0.65, body: [1350, 0.17, 1.35], thump: [130, 38, 0.2, 1.05], tail: [720, 0.95, 0.5], range: 330 },
-  smg: { click: 0.45, body: [2300, 0.075, 0.8], thump: [190, 60, 0.08, 0.5], tail: [1150, 0.45, 0.24], range: 230 },
-  shotgun: { click: 0.6, body: [950, 0.24, 1.5], thump: [110, 32, 0.28, 1.35], tail: [620, 1.1, 0.6], range: 330 },
-  rifle: { click: 0.75, body: [1650, 0.12, 1.2], thump: [145, 40, 0.16, 0.9], tail: [820, 0.9, 0.48], range: 390, crack: true },
-  sniper: { click: 0.85, body: [1250, 0.22, 1.6], thump: [100, 30, 0.3, 1.35], tail: [600, 1.6, 0.7], range: 520, crack: true },
-  rpg: { click: 0.3, body: [520, 0.5, 1.2], thump: [80, 30, 0.4, 1.0], tail: [420, 1.2, 0.5], range: 360, whoosh: true },
-  // [savaş: yeni silah sesleri] boom = ek alçak patlama, slap = bina yankısı (sn)
-  pistol2: { click: 0.55, body: [2100, 0.09, 0.95], thump: [180, 52, 0.11, 0.7], tail: [1000, 0.55, 0.3], range: 250, slap: 0.11 },
-  magnum: { click: 0.8, body: [1150, 0.2, 1.55], thump: [110, 30, 0.26, 1.3], tail: [640, 1.2, 0.62], range: 380, boom: 0.6, slap: 0.16 },
-  smg2: { click: 0.4, body: [2600, 0.06, 0.7], thump: [210, 70, 0.07, 0.42], tail: [1300, 0.4, 0.2], range: 200 },
-  sawed: { click: 0.7, body: [820, 0.28, 1.7], thump: [95, 28, 0.32, 1.5], tail: [560, 1.2, 0.66], range: 300, boom: 0.8, slap: 0.14 },
-  lmg: { click: 0.75, body: [1500, 0.13, 1.25], thump: [130, 38, 0.17, 1.0], tail: [780, 0.9, 0.5], range: 420, crack: true, slap: 0.2 },
-  dmr: { click: 0.85, body: [1400, 0.17, 1.4], thump: [115, 34, 0.24, 1.15], tail: [700, 1.3, 0.6], range: 480, crack: true, slap: 0.22 },
-  gl: { click: 0.3, body: [420, 0.16, 1.1], thump: [70, 40, 0.18, 1.2], tail: [380, 0.5, 0.25], range: 260, boom: 0.3 },
-};
-// [savaş: telsiz/megafon sesi] Türkçe ünlülerin yaklaşık formantları (F1, F2)
-const VOWELS = { a: [780, 1250], e: [520, 1900], ı: [380, 1450], i: [300, 2300], o: [520, 880], ö: [460, 1650], u: [340, 820], ü: [300, 1750] };
-const HISS = 'sşzcçfhj', STOP = 'tkpgdbq';
+import { installSfx } from './sfx/index.js';
+
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
 // trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
 const ENGINE_KINDS = {
@@ -215,116 +196,14 @@ export class AudioEngine {
   // mekanik çıt (şarjör, sürgü, horoz)
   clickAt(out, t, freq = 2500, gain = 0.2, dur = 0.025) {
     this.nz(out, t, { dur, freq, q: 3, type: 'bandpass', gain });
-    this.osc(out, t, { freq: freq * 0.6, freq2: freq * 0.4, dur: dur * 0.8, type: 'square', gain: gain * 0.25 });
+    // [ses B2] kare dalga yerine metal parça modları (dijital "bip" değil, çelik tıkırtısı)
+    this.osc(out, t, { freq: freq * 0.93, dur: dur * 1.6, type: 'sine', gain: gain * 0.3, attack: 0.0005 });
+    this.osc(out, t, { freq: freq * 1.71, dur: dur * 1.1, type: 'sine', gain: gain * 0.18, attack: 0.0005 });
   }
 
-  // ---------------- silahlar ----------------
-  gunshot(kind, x, z) {
-    const P = GUN[kind] || GUN.pistol;
-    const o = this.spatial(x, z, P.range, 0.55);
-    if (!o) return;
-    const c = this.ctx;
-    // uzak atışlar ses hızıyla gecikir
-    const t = c.currentTime + (o.d > 30 ? Math.min(1.2, o.d / 343) : 0);
-    const pit = 0.94 + Math.random() * 0.12;
-    const near = o.d < 40 ? 1 - o.d / 40 : 0;
-    // 1) ilk geçici çıt
-    this.nz(o.node, t, { dur: 0.014, freq: 4500, type: 'highpass', q: 0.7, gain: P.click * (0.4 + near), attack: 0.0005 });
-    // 2) gövde patlaması
-    this.nz(o.node, t, { dur: P.body[1], freq: P.body[0] * pit, q: 0.8, type: 'lowpass', gain: P.body[2], attack: 0.001, sweep: P.body[0] * 0.4 });
-    this.nz(o.node, t, { dur: P.body[1] * 0.6, freq: P.body[0] * 1.8 * pit, q: 1.2, type: 'bandpass', gain: P.body[2] * 0.5, attack: 0.001 });
-    // 3) alçak gümleme
-    this.osc(o.node, t, { freq: P.thump[0] * pit, freq2: P.thump[1], dur: P.thump[2], type: 'sine', gain: P.thump[3], attack: 0.002 });
-    this.osc(o.node, t, { freq: P.thump[0] * 0.7 * pit, freq2: P.thump[1] * 0.8, dur: P.thump[2] * 1.2, type: 'triangle', gain: P.thump[3] * 0.4 });
-    // 4) yankı kuyruğu (şehir duvarlarından dönen)
-    this.nz(o.node, t + 0.02, { dur: P.tail[1], freq: P.tail[0], q: 0.5, type: 'lowpass', gain: P.tail[2] * (0.5 + (1 - near) * 0.6), attack: 0.03, sweep: P.tail[0] * 0.35 });
-    if (P.crack && o.d > 25) this.nz(o.node, t, { dur: 0.008, freq: 3500, type: 'highpass', gain: 0.5, attack: 0.0005 });
-    if (P.whoosh) this.nz(o.node, t + 0.03, { dur: 0.9, freq: 700, q: 1.5, type: 'bandpass', gain: 0.6, attack: 0.05, sweep: 2200 });
-    // [savaş] iri kalibre ek gümleme + bina duvarından dönen tokat yankısı
-    if (P.boom) this.osc(o.node, t, { freq: 75 * pit, freq2: 26, dur: 0.45, type: 'sine', gain: P.boom * (0.6 + near * 0.6), attack: 0.003 });
-    if (P.slap && o.d < 120) this.nz(o.node, t + P.slap * (0.8 + Math.random() * 0.5), { dur: 0.09, freq: P.body[0] * 0.8, q: 0.9, type: 'bandpass', gain: P.body[2] * 0.28, attack: 0.002, sweep: P.body[0] * 0.4 });
-    if (kind === 'gl' && o.d < 25) this.clickAt(o.node, t + 0.25, 1300, 0.3, 0.05);
-    if (kind === 'sawed' && o.d < 18) this.clickAt(o.node, t + 0.12, 1600, 0.2, 0.03);
-    // mekanik devam: pompa / sürgü
-    if (o.d < 18) {
-      if (kind === 'shotgun') { this.clickAt(o.node, t + 0.36, 1500, 0.35, 0.04); this.nz(o.node, t + 0.38, { dur: 0.08, freq: 900, type: 'bandpass', q: 1.5, gain: 0.2 }); this.clickAt(o.node, t + 0.5, 1800, 0.4, 0.04); }
-      if (kind === 'sniper') { this.clickAt(o.node, t + 0.5, 2200, 0.3); this.nz(o.node, t + 0.55, { dur: 0.12, freq: 1600, type: 'bandpass', q: 2, gain: 0.15 }); this.clickAt(o.node, t + 0.72, 2600, 0.32); }
-    }
-  }
-  explosion(x, z, sc = 1) {
-    const o = this.spatial(x, z, 700, 0.8);
-    if (!o) return;
-    const t = this.ctx.currentTime + (o.d > 25 ? Math.min(1.6, o.d / 343) : 0);
-    const near = o.d < 60 ? 1 - o.d / 60 : 0;
-    const k = clamp(sc, 0.5, 2);
-    // alt bas gümlemesi
-    this.osc(o.node, t, { freq: 62, freq2: 22, dur: 2.2, type: 'sine', gain: 1.5 * k, attack: 0.004 });
-    this.osc(o.node, t, { freq: 40, freq2: 18, dur: 3.0, type: 'sine', gain: 0.9 * k, attack: 0.02 });
-    // patlama gövdesi
-    this.nz(o.node, t, { dur: 1.3, freq: 700, q: 0.6, type: 'lowpass', gain: 2.0 * k, attack: 0.004, sweep: 140 });
-    if (near > 0) this.nz(o.node, t, { dur: 0.09, freq: 2200, type: 'highpass', gain: 1.1 * near, attack: 0.0008 });
-    // gürleme kuyruğu
-    this.nz(o.node, t + 0.05, { dur: 3.6, freq: 260, q: 0.5, type: 'lowpass', gain: 1.1 * k, attack: 0.25, buf: this.brownBuf });
-    // düşen enkaz çıtırtıları
-    for (let i = 0; i < 26; i++) {
-      const dt = 0.15 + Math.pow(Math.random(), 1.4) * 2.4;
-      this.nz(o.node, t + dt, { dur: 0.01 + Math.random() * 0.03, freq: 2200 + Math.random() * 4000, q: 1.5, type: 'bandpass', gain: (0.35 + Math.random() * 0.3) * (1 - dt / 2.8), attack: 0.001 });
-    }
-  }
-  // Yakından geçen mermi: vızıltı (doppler) + süpersonik çatırtı. sx,sz = geçiş noktasının dinleyiciye göre yönü
-  whiz(k = 1, sx = 0, sz = 0, crack = false) {
-    if (!this.ctx) return;
-    const c = this.ctx, t = c.currentTime;
-    const g = c.createGain(); g.gain.value = 1;
-    let last = g;
-    if (c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = this.panOf(sx, sz); g.connect(p); last = p; }
-    last.connect(this.sfx);
-    this.nz(g, t, { dur: 0.2, freq: 3200, q: 4, type: 'bandpass', gain: 0.55 * k, attack: 0.03, sweep: 800 });
-    this.osc(g, t, { freq: 2600 + Math.random() * 600, freq2: 900, dur: 0.16, type: 'sine', gain: 0.05 * k, attack: 0.02 });
-    if (crack) this.nz(g, t, { dur: 0.012, freq: 2800, type: 'highpass', gain: 0.9 * k, attack: 0.0005 });
-  }
-  // kovan tıngırtısı (pirinç) veya plastik fişek tıkırtısı
-  shell(x, z, plastic = false, k = 1) {
-    const o = this.spatial(x, z, 25, 0.05);
-    if (!o) return;
-    const t = this.ctx.currentTime;
-    if (plastic) { this.nz(o.node, t, { dur: 0.05, freq: 900, q: 2, type: 'bandpass', gain: 0.25 * k }); return; }
-    const f = 3000 + Math.random() * 1800;
-    for (const [m, gm] of [[1, 1], [2.76, 0.6], [5.4, 0.35]]) this.osc(o.node, t, { freq: f * m, dur: 0.05 + Math.random() * 0.08, type: 'sine', gain: 0.05 * k * gm, attack: 0.0008 });
-    this.nz(o.node, t, { dur: 0.015, freq: 6000, type: 'highpass', gain: 0.08 * k });
-  }
-  impact(x, z, surf = 'concrete') {
-    const o = this.spatial(x, z, 60, 0.12);
-    if (!o) return;
-    const t = this.ctx.currentTime;
-    if (surf === 'dirt') { this.nz(o.node, t, { dur: 0.07, freq: 700, gain: 0.35 }); return; }
-    if (surf === 'wood') { this.nz(o.node, t, { dur: 0.07, freq: 700, q: 2, type: 'bandpass', gain: 0.45 }); return; }
-    this.nz(o.node, t, { dur: 0.05, freq: 3500, type: 'highpass', gain: 0.35 });
-    this.nz(o.node, t + 0.005, { dur: 0.06, freq: 1300, q: 1.5, type: 'bandpass', gain: 0.25 });
-  }
-  impactMetal(x, z) {
-    const o = this.spatial(x, z, 80, 0.2);
-    if (!o) return;
-    const t = this.ctx.currentTime, f = 1500 + Math.random() * 1800;
-    this.osc(o.node, t, { freq: f, dur: 0.25, type: 'sine', gain: 0.12 });
-    this.osc(o.node, t, { freq: f * 1.53, dur: 0.18, type: 'sine', gain: 0.07 });
-    this.nz(o.node, t, { dur: 0.03, freq: 5000, type: 'highpass', gain: 0.4 });
-  }
-  ricochet(x, z) {
-    const o = this.spatial(x, z, 90, 0.3);
-    if (!o) return;
-    const c = this.ctx, t = c.currentTime;
-    const os = c.createOscillator(); os.type = 'triangle';
-    const f0 = 2400 + Math.random() * 900;
-    os.frequency.setValueAtTime(f0, t); os.frequency.exponentialRampToValueAtTime(f0 * 0.45, t + 0.38);
-    const lfo = c.createOscillator(); lfo.frequency.value = 38; const lg = c.createGain(); lg.gain.value = 90;
-    lfo.connect(lg); lg.connect(os.frequency);
-    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-    os.connect(g); g.connect(o.node);
-    os.start(t); lfo.start(t); os.stop(t + 0.45); lfo.stop(t + 0.45);
-    // [savaş] taş/beton kıymığı çıtırtısı
-    this.nz(o.node, t, { dur: 0.03, freq: 4200, q: 1.2, type: 'bandpass', gain: 0.25, attack: 0.0006 });
-  }
+  // [ses B2] gunshot, explosion, impact, impactMetal, ricochet, shell, step, door, seagull, bark, setAmbience,
+  // ambienceEvents, voice/megaphone, setSiren, müzik ve arayüz sesleri: src/core/sfx/ ve src/core/music.js
+  // whiz (mermi vızıltısı/çatlaması) ve empty (boş tetik): sfx/weapons.js
 
   // ---------------- [savaş: yeni ses işlevleri] ----------------
   // oyuncu vurulunca: göğüse tok darbe + kısa inleme (k: şiddet)
@@ -353,73 +232,7 @@ export class AudioEngine {
     for (let i = 0; i < 4; i++) this.nz(o.node, t + i * 0.075, { dur: 0.06, freq: 260, q: 0.8, type: 'lowpass', gain: 0.75 * k, attack: 0.004, buf: this.brownBuf });
     this.nz(o.node, t, { dur: 0.32, freq: 1800, q: 0.6, type: 'bandpass', gain: 0.05 * k, attack: 0.05 });
   }
-  // Prosedürel konuşma: ünlü formantları + ünsüz gürültüleri; mega=true megafon/telsiz zinciri (bant geçiren + bozulma + yankı)
-  // Dönüş: süre (sn)
-  voice(text, x, z, { mega = true, pitch = 125, rate = 1, gain = 1 } = {}) {
-    if (!this.ctx || !text) return 0;
-    const o = this.spatial(x, z, mega ? 170 : 55, mega ? 0.45 : 0.1);
-    if (!o) return 0;
-    const c = this.ctx;
-    const t0 = c.currentTime + 0.04;
-    const bus = c.createGain(); bus.gain.value = 0.9 * gain;
-    if (mega) {
-      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 480;
-      const pk = c.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1750; pk.gain.value = 10; pk.Q.value = 1.1;
-      const ws = c.createWaveShaper();
-      if (!this._megaCurve) { const n = 512, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const xx = i / (n - 1) * 2 - 1; cv[i] = (1 + 7) * xx / (1 + 7 * Math.abs(xx)); } this._megaCurve = cv; }
-      ws.curve = this._megaCurve;
-      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3300;
-      const og = c.createGain(); og.gain.value = 0.5;
-      bus.connect(hp); hp.connect(pk); pk.connect(ws); ws.connect(lp); lp.connect(og); og.connect(o.node);
-      const dl = c.createDelay(0.6); dl.delayTime.value = 0.21; const fb = c.createGain(); fb.gain.value = 0.28;
-      og.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(o.node);
-      // açılış cızırtısı
-      this.osc(o.node, t0 - 0.03, { freq: 1900, dur: 0.06, gain: 0.05 });
-      this.nz(o.node, t0 - 0.03, { dur: 0.05, freq: 2500, q: 1, type: 'bandpass', gain: 0.12 });
-    } else bus.connect(o.node);
-    // kaynak: testere dişi + formant süzgeçleri
-    const src = c.createOscillator(); src.type = 'sawtooth';
-    const vg = c.createGain(); vg.gain.setValueAtTime(0, t0);
-    const f1 = c.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
-    const f2 = c.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 7;
-    const g2 = c.createGain(); g2.gain.value = 0.7;
-    src.connect(vg); vg.connect(f1); vg.connect(f2); f1.connect(bus); f2.connect(g2); g2.connect(bus);
-    const s = text.toLocaleLowerCase('tr');
-    const syl = 0.12 / rate;
-    let t = t0, n = 0;
-    const total = s.length;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      const V = VOWELS[ch];
-      if (V) {
-        const prog = i / total;
-        const ex = s.indexOf('!', i) >= 0 && s.indexOf('!', i) - i < 6 ? 1.18 : 1;
-        const p = pitch * (1.12 - 0.22 * prog) * ex * (1 + Math.sin(n * 2.3) * 0.04);
-        src.frequency.setTargetAtTime(p, t, 0.02);
-        f1.frequency.setTargetAtTime(V[0], t, 0.015); f2.frequency.setTargetAtTime(V[1], t, 0.015);
-        vg.gain.setTargetAtTime(0.55, t, 0.012);
-        vg.gain.setTargetAtTime(0.12, t + syl * 0.75, 0.02);
-        t += syl; n++;
-      } else if (HISS.includes(ch)) {
-        this.nz(bus, t, { dur: 0.07 / rate, freq: ch === 'ş' || ch === 'ç' ? 3200 : 5200, q: 1.5, type: 'bandpass', gain: 0.35, attack: 0.01 });
-        t += 0.05 / rate;
-      } else if (STOP.includes(ch)) {
-        vg.gain.setTargetAtTime(0.0, t, 0.006);
-        this.nz(bus, t + 0.025 / rate, { dur: 0.025, freq: ch === 'k' || ch === 'g' ? 1800 : 3600, q: 1, type: 'bandpass', gain: 0.4, attack: 0.002 });
-        t += 0.04 / rate;
-      } else if (ch === ' ') { vg.gain.setTargetAtTime(0.02, t, 0.02); t += 0.05 / rate; }
-      else if (ch === '!' || ch === ',' || ch === '.' || ch === '?') { vg.gain.setTargetAtTime(0.0, t, 0.02); t += 0.18 / rate; }
-      else { // akıcı ünsüzler (l, r, m, n, y, v): sesli devam
-        vg.gain.setTargetAtTime(0.3, t, 0.015);
-        if (ch === 'r') { f1.frequency.setTargetAtTime(450, t, 0.01); }
-        t += 0.035 / rate;
-      }
-    }
-    vg.gain.setTargetAtTime(0, t, 0.03);
-    src.start(t0); src.stop(t + 0.3);
-    return t - t0;
-  }
-  megaphone(text, x, z, opts = {}) { return this.voice(text, x, z, Object.assign({ mega: true }, opts)); }
+  // konuşma / megafon / helikopter anonsu: sfx/announce.js (voice, megaphone, heliAnnounce)
   bulletFlesh(x, z) {
     const o = this.spatial(x, z, 50, 0.05);
     if (!o) return;
@@ -474,7 +287,6 @@ export class AudioEngine {
     const n = 3 + Math.floor(k * 4);
     for (let i = 0; i < n; i++) this.nz(o.node, t + 0.05 + Math.random() * 0.45, { dur: 0.03, freq: 2500 + Math.random() * 3500, q: 2, type: 'bandpass', gain: 0.2 * k }); // parça/cam
   }
-  empty() { this.tone({ freq: 1800, dur: 0.03, type: 'square', gain: 0.15 }); }
   // şarjör değiştirme dizisi: kind = silah kimliği, time = toplam süre
   reload(kind, time = 1.5) {
     const o = this.spatial(undefined, undefined, 0, 0.1);
@@ -503,12 +315,7 @@ export class AudioEngine {
     this.nz(o.node, t + T * 0.81, { dur: 0.09, freq: 2500, q: 2, type: 'bandpass', gain: 0.14, sweep: 1200 });
     this.clickAt(o.node, t + T * 0.9, 1700, 0.32, 0.035);
   }
-  cash() { [1318, 1568, 2093].forEach((f, i) => this.tone({ freq: f, dur: 0.18, type: 'triangle', gain: 0.25, delay: i * 0.07 })); }
-  click() { this.tone({ freq: 700, dur: 0.05, type: 'triangle', gain: 0.18 }); }
-  hover() { this.tone({ freq: 1200, dur: 0.03, type: 'sine', gain: 0.06 }); }
-  error() { this.tone({ freq: 220, dur: 0.18, type: 'square', gain: 0.18 }); this.tone({ freq: 180, dur: 0.22, type: 'square', gain: 0.18, delay: 0.12 }); }
-  success() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ freq: f, dur: 0.35, type: 'triangle', gain: 0.25, delay: i * 0.12 })); }
-  fail() { [392, 349, 311, 261].forEach((f, i) => this.tone({ freq: f, dur: 0.4, type: 'sawtooth', gain: 0.12, delay: i * 0.16 })); }
+  // arayüz sesleri (click, hover, cash, error, success, fail): sfx/ui.js
   // Telefon zil sesi: marimba tınılı kısa motif (bir çağrıda her ~2,6 sn'de bir çalınır). kind: 'reis' | 'kalp' | 'normal'
   ringtone(kind = 'normal') {
     if (!this.ctx) return;
@@ -527,10 +334,6 @@ export class AudioEngine {
   meow(x, z) { this.tone({ freq: 700, freq2: 1100, dur: 0.15, type: 'sawtooth', gain: 0.08, x, z, range: 25 }); this.tone({ freq: 1100, freq2: 500, dur: 0.35, type: 'sawtooth', gain: 0.08, x, z, range: 25, delay: 0.15 }); }
   // acı inlemesi (yaralanan sokak hayvanı): köpekte tiz kaynama, kedide çığlık
   yelp(x, z, dog) { if (dog) { this.tone({ freq: 1400, freq2: 700, dur: 0.18, type: 'sawtooth', gain: 0.12, x, z, range: 50 }); this.tone({ freq: 1200, freq2: 600, dur: 0.22, type: 'sawtooth', gain: 0.1, x, z, range: 50, delay: 0.22 }); } else this.tone({ freq: 900, freq2: 1600, dur: 0.4, type: 'sawtooth', gain: 0.1, x, z, range: 35 }); }
-  bark(x, z) { this.noiseBurst({ dur: 0.12, freq: 700, type: 'bandpass', q: 3, gain: 0.5, x, z, range: 60 }); this.tone({ freq: 300, freq2: 180, dur: 0.12, type: 'sawtooth', gain: 0.15, x, z, range: 60 }); }
-  seagull(x, z, k = 1) {
-    for (let i = 0; i < 3; i++) this.tone({ freq: 1600 + Math.random() * 300, freq2: 900, dur: 0.22, type: 'sawtooth', gain: 0.05 * k, x, z, range: 150, delay: i * 0.26 });
-  }
   scream(x, z) { this.tone({ freq: 900, freq2: 1300, dur: 0.5, type: 'sawtooth', gain: 0.07, x, z, range: 60 }); }
   splash(x, z, k = 1) {
     const o = this.spatial(x, z, 60, 0.2);
@@ -538,19 +341,6 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     this.nz(o.node, t, { dur: 0.6 * Math.sqrt(k), freq: 1200, gain: 0.8 * k, sweep: 500 });
     this.nz(o.node, t + 0.05, { dur: 0.3, freq: 2500, q: 2, type: 'bandpass', gain: 0.2 * k });
-  }
-  // yüzeye göre ayak sesi
-  step(x, z, surface) {
-    const s = surface || (this.surfaceAt ? this.surfaceAt(x, z) : 'concrete');
-    const o = this.spatial(x, z, 22, 0.04);
-    if (!o) return;
-    const t = this.ctx.currentTime, r = 0.85 + Math.random() * 0.3;
-    if (s === 'grass') { this.nz(o.node, t, { dur: 0.1, freq: 2600 * r, q: 0.6, type: 'bandpass', gain: 0.07, attack: 0.01 }); return; }
-    if (s === 'wood') { this.osc(o.node, t, { freq: 150 * r, freq2: 90, dur: 0.07, gain: 0.12 }); this.nz(o.node, t, { dur: 0.05, freq: 700 * r, gain: 0.08 }); return; }
-    if (s === 'metal') { this.osc(o.node, t, { freq: 420 * r, dur: 0.1, type: 'triangle', gain: 0.05 }); this.nz(o.node, t, { dur: 0.05, freq: 1500 * r, q: 2, type: 'bandpass', gain: 0.1 }); return; }
-    if (s === 'water') { this.nz(o.node, t, { dur: 0.18, freq: 1100 * r, q: 1, type: 'bandpass', gain: 0.15, sweep: 500 }); return; }
-    this.nz(o.node, t, { dur: 0.05, freq: 1100 * r, gain: 0.1 });
-    this.nz(o.node, t, { dur: 0.02, freq: 4000 * r, type: 'highpass', gain: 0.04 });
   }
 
   // ---------------- sürekli döngüler ----------------
@@ -742,30 +532,6 @@ export class AudioEngine {
     this.loop('wind', { buf: this.brownBuf, type: 'lowpass', freq: 450, q: 1.5, lfoRate: 0.13, lfoDepth: 220 });
     this.loopGain('wind', clamp(k, 0, 1) * 0.16, 0.8);
   }
-  // Şehir ambiyansı: uzak trafik uğultusu + ara sıra korna, martı, köpek
-  setAmbience(k = 0) {
-    if (!this.ctx) return;
-    this.loop('traffic', { buf: this.brownBuf, type: 'lowpass', freq: 220, q: 0.5, lfoRate: 0.07, lfoDepth: 60 });
-    this.loop('hum', { type: 'bandpass', freq: 380, q: 0.8 });
-    this.ambK = clamp(k, 0, 1);
-    this.loopGain('traffic', this.ambK * 0.22, 1);
-    this.loopGain('hum', this.ambK * 0.012, 1);
-  }
-  ambienceEvents(dt) {
-    const k = this.ambK || 0;
-    if (k < 0.2) return;
-    const a = this.ambT;
-    a.horn -= dt; a.gull -= dt; a.dog -= dt;
-    const far = (r) => { const ang = Math.random() * Math.PI * 2; return [this.listener.x + Math.cos(ang) * r, this.listener.z + Math.sin(ang) * r]; };
-    if (a.horn <= 0) {
-      a.horn = 5 + Math.random() * 12;
-      const [x, z] = far(90 + Math.random() * 60);
-      const o = this.spatial(x, z, 260, 0.9);
-      if (o) { const t = this.ctx.currentTime, f = 330 + Math.random() * 120; this.osc(o.node, t, { freq: f, dur: 0.35 + Math.random() * 0.4, type: 'square', gain: 0.06 * k, attack: 0.02 }); this.osc(o.node, t, { freq: f * 1.19, dur: 0.35, type: 'square', gain: 0.04 * k, attack: 0.02 }); }
-    }
-    if (a.gull <= 0) { a.gull = 8 + Math.random() * 18; const [x, z] = far(40 + Math.random() * 50); this.seagull(x, z, 0.7 * k); }
-    if (a.dog <= 0) { a.dog = 20 + Math.random() * 40; const [x, z] = far(50); this.bark(x, z); }
-  }
 
   // Kare kancası (combat.update çağırır): dinleyici yönü, ortam, rüzgâr ve lastik sesi
   update(dt, game) {
@@ -793,101 +559,10 @@ export class AudioEngine {
     if (outside) this.ambienceEvents(dt);
   }
 
-  setSiren(level) {
-    if (!this.ctx) return;
-    if (level > 0 && !this.sirenNode) {
-      const o = this.ctx.createOscillator(); o.type = 'sawtooth';
-      const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.7;
-      const lg = this.ctx.createGain(); lg.gain.value = 250;
-      lfo.connect(lg); lg.connect(o.frequency); o.frequency.value = 850;
-      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1000; f.Q.value = 0.8;
-      const g = this.ctx.createGain(); g.gain.value = 0;
-      o.connect(f); f.connect(g); g.connect(this.sfx);
-      o.start(); lfo.start();
-      this.sirenNode = { o, lfo, g };
-    }
-    if (this.sirenNode) {
-      tgt(this.sirenNode.g.gain, Math.min(0.07, level * 0.07), this.ctx.currentTime, 0.3);
-      if (level <= 0) {
-        const n = this.sirenNode; this.sirenNode = null;
-        setTimeout(() => { try { n.o.stop(); n.lfo.stop(); } catch (e) { /* zaten durdu */ } }, 1500);
-      }
-    }
-  }
+  // siren: sfx/siren.js (setSiren + araç başına konumlu siren, Doppler)
 
-  // Hicaz makamında prosedürel müzik (menü ve gece için)
-  startMusic(mode = 'menu') {
-    if (!this.ctx) return;
-    if (this.musicMode === mode) return;
-    this.stopMusic();
-    this.musicMode = mode;
-    const root = mode === 'menu' ? 146.83 : 110; // D3 / A2
-    const hicaz = [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19];
-    const bpm = mode === 'menu' ? 92 : 80;
-    const beat = 60 / bpm;
-    let step = 0;
-    let note = 4;
-    const drone = this.ctx.createOscillator(); drone.type = 'sawtooth'; drone.frequency.value = root / 2;
-    const df = this.ctx.createBiquadFilter(); df.type = 'lowpass'; df.frequency.value = 300;
-    const dg = this.ctx.createGain(); dg.gain.value = 0.05;
-    drone.connect(df); df.connect(dg); dg.connect(this.music); drone.start();
-    this.drone = { drone, dg };
-    const pluck = (freq, t, dur, gain) => {
-      // ud/bağlama benzeri telli ses
-      const o = this.ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
-      const o2 = this.ctx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = freq * 2.003;
-      const f = this.ctx.createBiquadFilter(); f.type = 'lowpass';
-      f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(500, t + dur);
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(f); o2.connect(f); f.connect(g); g.connect(this.music);
-      const rg = this.ctx.createGain(); rg.gain.value = 0.5; g.connect(rg); rg.connect(this.reverb);
-      o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
-    };
-    const drum = (t, low) => {
-      // darbuka: düm / tek
-      const o = this.ctx.createOscillator(); o.type = 'sine';
-      o.frequency.setValueAtTime(low ? 110 : 420, t); o.frequency.exponentialRampToValueAtTime(low ? 55 : 300, t + 0.12);
-      const g = this.ctx.createGain(); g.gain.setValueAtTime(low ? 0.35 : 0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + (low ? 0.25 : 0.08));
-      o.connect(g); g.connect(this.music); o.start(t); o.stop(t + 0.3);
-      if (!low) {
-        const s = this.ctx.createBufferSource(); s.buffer = this.noiseBuf;
-        const hf = this.ctx.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 3000;
-        const sg = this.ctx.createGain(); sg.gain.setValueAtTime(0.08, t); sg.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-        s.connect(hf); hf.connect(sg); sg.connect(this.music); s.start(t, Math.random()); s.stop(t + 0.06);
-      }
-    };
-    // 9/8 Roman havası esintili ritim
-    const rhythm = [1, 0, 2, 0, 1, 2, 0, 2, 2];
-    let next = this.ctx.currentTime + 0.1;
-    const tick = () => {
-      if (!this.ctx) return;
-      while (next < this.ctx.currentTime + 0.3) {
-        const r = rhythm[step % rhythm.length];
-        if (r) drum(next, r === 1);
-        if (step % 2 === 0 || Math.random() < 0.3) {
-          note += Math.floor(Math.random() * 5) - 2;
-          if (note < 0) note = 1; if (note >= hicaz.length) note = hicaz.length - 2;
-          const freq = root * Math.pow(2, hicaz[note] / 12);
-          pluck(freq, next, beat * 1.5, 0.09);
-          if (Math.random() < 0.15) pluck(freq * 2, next + beat * 0.25, beat * 0.5, 0.05);
-        }
-        next += beat / 2;
-        step++;
-      }
-    };
-    this.musicTimer = setInterval(tick, 100);
-  }
-  stopMusic() {
-    if (this.musicTimer) clearInterval(this.musicTimer);
-    this.musicTimer = null; this.musicMode = null;
-    if (this.drone) {
-      const d = this.drone; this.drone = null;
-      d.dg.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
-      setTimeout(() => { try { d.drone.stop(); } catch (e) { /* zaten durdu */ } }, 1500);
-    }
-  }
+  // müzik: core/music.js (startMusic, stopMusic, duckMusic)
+
 }
 
 
@@ -1027,4 +702,5 @@ Object.assign(AudioEngine.prototype, {
   },
 });
 
+installSfx(AudioEngine); // [ses B2] sfx/ modülleri
 export const audio = new AudioEngine();
