@@ -468,6 +468,8 @@ module.exports = async (p, out) => {
       const v = g.vehicles.add('sedan', a.x, a.z, Math.atan2(R.fx, R.fz));
       v.ai = { mode: 'traffic', from: R.n, to: R.o, next: g.vehicles.chooseNext(R.o, R.n), cruise: 9, outer: false, laneCur: 2.5 };
       v.vx = R.fx * 8; v.vz = R.fz * 8;
+      // oyuncu yakında olmalı: önceki bölüm (ambulans) oyuncuyu 260 m'den uzakta bırakırsa araç ilk karede silinir
+      { const q = R.at(30, 9); L.place(q.x, q.z); }
       sim(0.5);
       // yanında, hareket halindeyken F: binilmez
       const side = () => { const f = v.fwd; pl.pos.set(v.pos.x + f.z * (v.def.wid / 2 + 1.0), 0, v.pos.z - f.x * (v.def.wid / 2 + 1.0)); };
