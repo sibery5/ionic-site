@@ -622,6 +622,15 @@ export class ShipTraffic {
       if (tc < 0) tc = 0; if (tc > H) tc = H;
       const cx = rx + wx * tc, cz = rz + wz * tc, dcpa = Math.hypot(cx, cz);
       const closing = rx * wx + rz * wz < -1e-3;
+      // Kural 6 (güvenli hız): şerit dışı gemi, çatışma rotasındaki gemiye kalan mesafede durabileceği hızı aşmaz.
+      // Yaklaşma niyet edilen hızla ve gerçek hızla ayrı sınanır: kıyı bandında dönen ataletli yat, dümeni kırmışken
+      // de öne kayar ve yavaş balıkçının üstüne biner.
+      if (!s.lane && dist < D * 2) {
+        const ax = Math.sin(o.heading) * o.speed - Math.sin(s.heading) * s.speed, az = Math.cos(o.heading) * o.speed - Math.cos(s.heading) * s.speed;
+        const a2 = ax * ax + az * az, ta = a2 > 1e-3 ? clamp(-(rx * ax + rz * az) / a2, 0, H) : 0;
+        const realHit = rx * ax + rz * az < -1e-3 && Math.hypot(rx + ax * ta, rz + az * ta) < Dh;
+        if ((closing && dcpa < D) || realHit) { const room = dist - (s.L + o.L) / 2 - 2; cap = Math.min(cap, Math.sqrt(2 * 1.1 * Math.max(0, room))); }
+      }
       if (dcpa >= D && dist >= D * 1.08) continue;
       if (!closing && dist >= D) continue;
       const urg = Math.max(clamp(1 - (tc - 8) / (H - 8), 0, 1), clamp(1 - (dist - Dh) / (Dh * 0.8), 0, 1)); // zaman + mesafe aciliyeti
@@ -637,6 +646,8 @@ export class ShipTraffic {
         else if (Math.abs(brg) < 0.3 && Math.abs(dh) > 2.6) give = true; // kafa kafaya: ikisi de sancağa
         else give = brg < 0; // sancağımdaki gemiye yol ver
       }
+      // duran (manevra yapamayan: kıyıya sıkışmış / bekleyen) gemi yol veremez: yol hakkı olan şerit dışı gemi etrafından dolaşır
+      if (!give && !s.lane && !o.lane && o.speed < 0.5 && s.speed > 0.5) give = true;
       if (give && s.stuckT > 25) give = false; // kilitlenme kırıcı: uzun süre bekleyen yol hakkını alır
       const astern = Math.abs(brg) > 1.57; // yol hakkı olan arkadan geliyor: yavaşlamak değil, yoldan çekilmek
       if (give && astern && !s.lane) { if (dist < D * 1.3) { const w = (D * 1.3 - dist) / D + 0.2; ex -= (rx / dist) * w; ez -= (rz / dist) * w; } continue; }
@@ -647,7 +658,12 @@ export class ShipTraffic {
         if (!s.lane && closing) turn = Math.max(turn, still ? 0.9 : 0.2 + 0.6 * urg);
         // alanın içindeyiz: uzaklaş (şerit gemisi hariç)
         if (!s.lane && dist < D) { const w = (D - dist) / D + 0.1; ex -= (rx / dist) * w; ez -= (rz / dist) * w; }
-      } else if (closing && dcpa < D && dist < D * 1.5) cap = Math.min(cap, desired * Math.max(0.3, clamp((dist - Dh) / (0.5 * Dh), 0, 1)));
+      } else if (closing && dcpa < D) {
+        if (dist < D * 1.5) cap = Math.min(cap, desired * Math.max(0.3, clamp((dist - Dh) / (0.5 * Dh), 0, 1)));
+        // Kural 17(a)(ii): yol veren (yavaş balıkçı / kıyıya sıkışmış) kaçamıyorsa şerit dışı yol hakkı olan da erken
+        // sancağa kırar ve yavaşlar; ataletli yat son anda duramaz
+        if (!s.lane && !o.lane && dist < D * 2.5) { turn = Math.max(turn, 0.5 * urg); cap = Math.min(cap, desired * clamp(1 - 0.6 * urg, 0.35, 1)); }
+      }
       if (closing && dcpa < Dh && dist < Dh + 6 && !(give && o.speed < 0.5 && !s.lane)) cap = 0; // Kural 17(b): son anda ikisi de durur; duran gemiye yol veren etrafından dolaşır
     }
     if (inLane) { cap = Math.max(cap, s.cruise); turn = 0; ex = 0; ez = 0; } else if (waitLane) cap = 0;

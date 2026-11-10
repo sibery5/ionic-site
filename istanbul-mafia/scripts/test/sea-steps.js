@@ -130,7 +130,8 @@ module.exports = async (p, out) => {
       let headMin = 9, vert = 9, n = 0;
       sim(3, () => {
         const h = hw(m.head), hp = hw(m.hips), nk = hw(m.neck);
-        headMin = Math.min(headMin, h.y - WY);
+        // yüzücü dalgayı izler (swim.js): baş, düz WY'ye değil o noktadaki dalgalı su yüzüne göre ölçülür
+        headMin = Math.min(headMin, h.y - (g.boats.surfaceY ? g.boats.surfaceY(h.x, h.z) : WY));
         const dx = nk.x - hp.x, dy = nk.y - hp.y, dz = nk.z - hp.z; vert = Math.min(vert, dy / Math.hypot(dx, dy, dz)); n++;
       });
       res.idle = { swimming: pl.swimming, headAboveWater: +headMin.toFixed(2), bodyUpright: +vert.toFixed(2), rootY: +(pl.pos.y - WY).toFixed(2) };
@@ -143,7 +144,7 @@ module.exports = async (p, out) => {
         const hp = hw(m.hips), a = hw(m.arms[0].wr), b = hw(m.arms[1].wr), fa = hw(m.legs[0].an), fb = hw(m.legs[1].an);
         L.push((a.x - hp.x) * f.x + (a.z - hp.z) * f.z); R.push((b.x - hp.x) * f.x + (b.z - hp.z) * f.z);
         FL.push(fa.y); FR.push(fb.y);
-        headMin = Math.min(headMin, hw(m.head).y - WY);
+        const hh = hw(m.head); headMin = Math.min(headMin, hh.y - (g.boats.surfaceY ? g.boats.surfaceY(hh.x, hh.z) : WY));
       });
       hold('KeyW', false);
       const corr = (A, B) => { const ma = A.reduce((s, x) => s + x, 0) / A.length, mb = B.reduce((s, x) => s + x, 0) / B.length; let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < A.length; i++) { sab += (A[i] - ma) * (B[i] - mb); saa += (A[i] - ma) ** 2; sbb += (B[i] - mb) ** 2; } return sab / Math.sqrt(saa * sbb + 1e-9); };

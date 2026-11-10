@@ -395,6 +395,8 @@ export class BoatManager {
   }
   get list() { return this.game.vehicles.list.filter((v) => v.kind === 'boat'); }
   get types() { return BOAT_TYPES; }
+  // o anki su yüzü yüksekliği (dalga dahil; teknelerin ve yüzücünün izlediği yüzey)
+  surfaceY(x, z) { const g = this.game; return WATER_Y + waveH(x, z, g.ships ? g.ships.t : 0); }
   add(type, x, z, heading = 0, color) {
     const v = new Boat(this.game, type, x, z, heading, color);
     this.game.vehicles.addVehicle(v);
