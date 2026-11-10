@@ -24,3 +24,5 @@ Bir şey "teknik olarak çalışıyor" diye bitmiş sayılmaz; oyuncu ona baktı
   dokunulan sisteme göre `collision-steps.js`, `bridge-steps.js`, `combat-steps.js`, `story-steps.js`.
 - Kota sınırlı: gereksiz deneme döngüsü yok, az ekran görüntüsü, işi aşama aşama commit'le.
 - Mimari ve modül sahipliği için: `ARCHITECTURE.md`.
+- **Her oturum ve her ekip işe başlamadan önce `BEYIN.md` dosyasını (çalışma sistemi: düşünme döngüsü, teşhis tabloları,
+  ekip ve kaizen kuralları) ve `docs/` altındaki güncel planı okur.**
