@@ -57,11 +57,20 @@ const DEFAULT_SETTINGS = {
 // pr: en yüksek piksel oranı · minScale: dinamik çözünürlüğün inebileceği alt sınır
 // shadowEvery: gölge haritası kaç karede bir yenilenir · bloomRes: ışıma çözünürlük çarpanı · ao: GTAO
 const TIERS = {
-  low: { pr: 0.85, minScale: 0.6, shadowEvery: 3, bloomRes: 0.5, ao: false },
-  medium: { pr: 1, minScale: 0.6, shadowEvery: 2, bloomRes: 0.5, ao: false },
-  high: { pr: 1.25, minScale: 0.65, shadowEvery: 1, bloomRes: 0.75, ao: true },
-  ultra: { pr: 2, minScale: 0.7, shadowEvery: 1, bloomRes: 1, ao: true },
+  // pr: cihaz piksel oranı üst sınırı, frac: yerel çözünürlüğün oranı. Windows ekran ölçeği %125–150 iken
+  // (devicePixelRatio 1.25–1.5) eski "pr: 1" sınırı görüntüyü yerel çözünürlüğün %67–80'ine düşürüyordu.
+  low: { pr: 1.5, frac: 0.85, minScale: 0.6, shadowEvery: 3, bloomRes: 0.5, ao: false },
+  medium: { pr: 1.5, frac: 1, minScale: 0.7, shadowEvery: 2, bloomRes: 0.5, ao: false },
+  high: { pr: 2, frac: 1, minScale: 0.75, shadowEvery: 1, bloomRes: 0.75, ao: true },
+  ultra: { pr: 2, frac: 1, minScale: 0.8, shadowEvery: 1, bloomRes: 1, ao: true },
 };
+const basePixelRatio = (tier) => Math.min(window.devicePixelRatio || 1, tier.pr) * (tier.frac || 1);
+
+// HDR taşma koruması (siyah ekran hatasının kök nedeni): yarı-float sahne tamponuna 65504'ten büyük bir değer yazılırsa
+// (yüzeye çok yakın far/lamba yansıması, üst üste binen parlak parçacık) piksel Inf/NaN olur; parlama bulanıklığı bunu
+// tüm ekrana yayar ve görüntü kararır. Bütün yerleşik malzemelerin çıktısı kaynağında [0, 64] aralığına kırpılır.
+// İkinci güvence: postfx.js içindeki temizleme geçişi (özel shader'lardan gelebilecek NaN için).
+THREE.ShaderChunk.fog_fragment += '\n\tif (any(isnan(gl_FragColor.rgb))) gl_FragColor.rgb = vec3(0.0);\n\tgl_FragColor.rgb = clamp(gl_FragColor.rgb, vec3(0.0), vec3(64.0));\n';
 const MENU_SCALE = 0.7; // ana menü arka plan uçuşu: düşük çözünürlük
 const MENU_FPS = 30; // ana menü arka planı FPS sınırı
 
@@ -88,7 +97,9 @@ class PerfGovernor {
     const target = 1000 / (s.fpsCap > 0 ? Math.min(60, s.fpsCap) : 60);
     const minS = Math.min(maxS, this.tier().minScale);
     const slow = this.interval > target * 1.12;
-    const fast = this.interval < target * 1.05 && this.work < target * 0.55;
+    // hızlı: ya hedefin belirgin üstünde (≥ ~75 FPS; VSync kapalı / 144 Hz ekranda iş süresi ≈ kare süresi olduğundan
+    // eski koşul hiç sağlanmıyor, çözünürlük dipte kalıyordu) ya da VSync altında işlemci payı düşük
+    const fast = this.interval < target * 0.8 || (this.interval < target * 1.05 && this.work < target * 0.55);
     this.slowT = slow ? this.slowT + dt : 0;
     this.fastT = fast ? this.fastT + dt : 0;
     this.cool -= dt;
@@ -141,7 +152,7 @@ class Game {
   // piksel oranı = cihaz (kademe sınırlı) × dinamik ölçek × (menüde) düşük ölçek
   applyPixelRatio() {
     if (!this.renderer) return;
-    const base = Math.min(window.devicePixelRatio || 1, this.tier().pr);
+    const base = basePixelRatio(this.tier());
     const k = this.mode === 'menu' ? MENU_SCALE : this.perf.scale;
     const pr = Math.max(0.35, Math.round(base * k * 100) / 100);
     if (Math.abs(this.renderer.getPixelRatio() - pr) < 0.005) return;
@@ -156,7 +167,7 @@ class Game {
     const q = this.settings.quality;
     const gpu = this.settings.gpu === 'low' ? 'low-power' : this.settings.gpu === 'default' ? 'default' : 'high-performance';
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low' && this.settings.antialias !== false, powerPreference: gpu, stencil: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.tier().pr));
+    this.renderer.setPixelRatio(basePixelRatio(this.tier()));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;

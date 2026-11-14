@@ -50,8 +50,8 @@ export function addPostFX(composer, renderer, scene, camera, { quality = 'medium
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
       void main(){ vec4 c = texture2D(tDiffuse, vUv);
-        if (any(isnan(c.rgb)) || any(isinf(c.rgb))) c.rgb = vec3(0.0);
-        gl_FragColor = vec4(min(c.rgb, vec3(60.0)), c.a); }`,
+        if (any(isnan(c.rgb))) c.rgb = vec3(0.0);                           // NaN → 0
+        gl_FragColor = vec4(clamp(c.rgb, vec3(0.0), vec3(60.0)), c.a); }`,  // ±Inf ve taşma → [0, 60]: parlak yüzey siyah değil parlak kalır
   });
   const bi = bloom ? composer.passes.indexOf(bloom) : 1;
   composer.insertPass(clean, Math.max(1, bi));
@@ -61,7 +61,7 @@ export function addPostFX(composer, renderer, scene, camera, { quality = 'medium
   composer.insertPass(grade, Math.max(1, composer.passes.length - 1));
   passes.push(grade);
   return {
-    passes, grade, ao, bloom,
+    passes, grade, ao, bloom, clean,
     update(env, dt) {
       const u = grade.uniforms;
       u.uTime.value += dt || 0.016;
