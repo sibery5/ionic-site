@@ -224,10 +224,13 @@ export function faceTexture(look) {
     blob(s * 0.063, 0.03, 0.02, 0.03, tint(-0.15, -0.15, -0.1), 0.3); // şakak
     blob(s * 0.045, -0.088, 0.025, 0.02, tint(-0.12, -0.12, -0.1), 0.22);
     blob(s * 0.02, -0.048, 0.008, 0.016, tint(-0.18, -0.2, -0.15), 0.35); // nazolabial
-    blob(s * 0.012, -0.018, 0.006, 0.02, tint(-0.3, -0.3, -0.25), 0.35); // burun yanı
+    blob(s * 0.012, -0.018, 0.006, 0.02, tint(-0.25, -0.25, -0.2), 0.14); // burun yanı
     blob(s * 0.0092, -0.0415, 0.0042, 0.0026, tint(-0.6, -0.62, -0.6), 0.6); // burun deliği
   }
   blob(0, -0.036, 0.013, 0.011, tint(0.2, -0.05, -0.05), 0.35);
+  // ışık/gölge modellemesi: T bölgesi açık, çene yanları ve göz kapağı kıvrımı koyu (düz, boyalı maske gibi durmasın)
+  blob(0, 0.04, 0.03, 0.025, tint(0.1, 0.08, 0.06), 0.3); blob(0, -0.005, 0.007, 0.03, tint(0.1, 0.08, 0.06), 0.3);
+  for (const s of [-1, 1]) { blob(s * 0.06, -0.075, 0.018, 0.035, tint(-0.18, -0.18, -0.12), 0.3); blob(s * 0.031, 0.022, 0.016, 0.005, tint(-0.35, -0.35, -0.28), 0.35); }
   blob(0, -0.1, 0.03, 0.02, tint(-0.1, -0.1, -0.08), 0.25);
   // göz kapağı çizgisi ve kıvrımı (kirpikler geometride)
   for (const s of [-1, 1]) {
@@ -257,8 +260,8 @@ export function faceTexture(look) {
   // dudaklar
   {
     const [mx, my] = P(0, -0.06), [sx, sy] = sc(0.012, -0.06);
-    const mw = (f ? 0.021 : 0.022) * sx, uh = (f ? 0.0058 : 0.0045) * sy, lh = (f ? 0.0075 : 0.006) * sy;
-    const lip = f || look.makeup ? new THREE.Color('#a8404c').lerp(skin, 0.3) : tint(0.18, -0.2, -0.12).lerp(new THREE.Color('#8a4a40'), 0.3);
+    const mw = (f ? 0.024 : 0.024) * sx, uh = (f ? 0.0075 : 0.0055) * sy, lh = (f ? 0.0095 : 0.0075) * sy;
+    const lip = f || look.makeup ? new THREE.Color('#a8404c').lerp(skin, 0.2) : tint(0.22, -0.22, -0.14).lerp(new THREE.Color('#8a4a40'), 0.4);
     g.fillStyle = hex(lip);
     g.beginPath(); g.moveTo(mx - mw, my); g.quadraticCurveTo(mx - mw * 0.5, my - uh * 1.1, mx - mw * 0.12, my - uh); g.quadraticCurveTo(mx, my - uh * 0.6, mx + mw * 0.12, my - uh); g.quadraticCurveTo(mx + mw * 0.5, my - uh * 1.1, mx + mw, my); g.closePath(); g.fill();
     g.fillStyle = hex(lip.clone().lerp(new THREE.Color('#ffffff'), 0.05));
@@ -285,7 +288,7 @@ export function faceTexture(look) {
     for (let y = -0.124; y < 0.0; y += 0.005) for (let x = -0.072; x <= 0.072; x += 0.005) {
       let k = look.beard === 'mustache' ? zoneM(x, y) : look.beard === 'keci' ? Math.max(zoneM(x, y), Math.abs(x) < 0.022 && y < -0.066 ? 1 : 0) : Math.max(zone(x, y), zoneM(x, y));
       if (k < 0.02) continue;
-      blob(x, y, 0.0065, 0.0065, shadowC, (look.beard === 'stubble' ? 0.16 : 0.3) * k);
+      blob(x, y, 0.0065, 0.0065, shadowC, (look.beard === 'stubble' ? 0.2 : 0.34) * k);
     }
     for (let i = 0; i < 11000; i++) {
       const x = r.float(-0.072, 0.072), y = r.float(-0.128, 0.0);
@@ -296,7 +299,7 @@ export function faceTexture(look) {
       if (look.beard === 'mustache' && !mus && r.next() > 0.2) continue;
       if (look.beard === 'keci' && !mus && !(ax < 0.022 && y < -0.065) && r.next() > 0.2) continue;
       const [px, py] = P(x, y);
-      g.fillStyle = rgba(hc.clone().multiplyScalar(0.8), dens * r.float(0.3, 0.9) * (1 - 0.75 * Math.min(1, Math.max(0, (ax - 0.05) / 0.022))));
+      g.fillStyle = rgba(hc.clone().multiplyScalar(0.8), dens * 0.6 * r.float(0.3, 0.9) * (1 - 0.75 * Math.min(1, Math.max(0, (ax - 0.05) / 0.022))));
       g.fillRect(px, py, 1, 1);
     }
   }
