@@ -17,7 +17,8 @@ import { RNG } from '../core/util.js';
 // ---- Katalog: kimlik → model üreten fonksiyon (THREE.Object3D döndürür) ----
 const CAT = {};
 // insanlar her zaman en ayrıntılı düzeyde (LOD0) görüntülenir; oyunda düzey kamera uzaklığına göre seçilir
-const person = (look) => () => { const m = new CharacterModel(typeof look === 'function' ? look() : look); m.forceLod = 0; m.setLod(0); m.animate(0.016, { speed: 0 }); return m.root; };
+const person = (look) => () => { const m = new CharacterModel(typeof look === 'function' ? look() : look); m.forceLod = 0; m.setLod(0); for (let i = 0; i < 60; i++) m.animate(0.016, { speed: 0, force: true }); return m.root; };
+// [insan] force: kök sahneye eklenmeden animate erken dönüyordu -> atölye bağlama (T benzeri) pozunu gösteriyordu; artık oyundaki boşta duruşu
 CAT['insan:kahraman'] = person(defaultLook('m'));
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
 CAT['insan:reis'] = person(REIS_LOOK);

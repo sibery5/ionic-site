@@ -757,7 +757,7 @@ export class CharacterModel {
       const ax = a < 0 ? a : a * 0.62;
       const fwd = Math.max(0, -a) / Math.max(0.01, armA);
       // kollar gövdeye yapışmaz: omuz/kas genişliği kadar dışarıda (kaslı/iri gövdede daha açık)
-      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.1 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
+      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.17 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
       setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd - 0.45 * wc, 0, 0);
       setJ(P, i ? J.wrR : J.wrL, -0.08 - 0.1 * run, 0, 0.05);
     }
