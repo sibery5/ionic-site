@@ -413,7 +413,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.42, 0, S.axles[1] + 0.42];
     S.handles = [0.12, S.axles[1] + 0.55];
   } else if (st === 'sport') {
-    dims({ cl: 0.17, r: 0.34, tw: 0.28, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: 0.64 * H, hood: 0.5 * H, tumble: 0.32, cabW: 0.9, taper: 0.14, taperStart: 0.6, grille: 'sport', interior: 0x1a1a1a });
+    dims({ cl: 0.17, r: 0.34, tw: 0.28, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: 0.64 * H, hood: 0.6 * H, tumble: 0.32, cabW: 0.9, taper: 0.14, taperStart: 0.6, grille: 'sport', interior: 0x1a1a1a });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.06, S.cl, 0.08], [L / 2, S.cl + 0.12, 0.1], [L / 2 - 0.05, S.cl + 0.3, 0.15], [L / 2 - 0.35, hd, 0.3], [L * 0.16, b - 0.02, 0.2], [-L * 0.4, b + 0.05, 0.1], [-L / 2 + 0.05, b + 0.02, 0.06], [-L / 2, b - 0.22, 0.1], [-L / 2, S.cl + 0.15, 0.08], [-L / 2 + 0.06, S.cl, 0.06]];
     S.cab = { ws: [L * 0.16, b], rf: [L * 0.16 - 0.85, H], rr: [-L * 0.14, H - 0.02], rw: [-L * 0.4, b + 0.03], roofR: 0.18 };
@@ -758,17 +758,19 @@ function bodyShell(S) {
   const { cl } = S;
   const P = planOutline(S), { cols, zF, zR, Rc, box, arches } = P;
   const pt = (c, y, out) => P.pt(c, y, out);
-  const yTop = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
+  // profil köşeleri (kaput ucu, bagaj kenarı) ±8 cm ortalamayla yuvarlanır: keskin kırık, sütunlar arasında dalgalı gölge yapıyordu
+  const yTop0 = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
+  const yTop = (z) => (yTop0(z - 0.08) + yTop0(z - 0.04) + yTop0(z) + yTop0(z + 0.04) + yTop0(z + 0.08)) / 5;
   const yBot = (z) => {
     for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
     return cl;
   };
-  const NW = 11, NC = 9, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
+  const NW = 11, NC = 12, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
   const pos = [], idx = [], xz = [0, 0, 0, 0];
   const rows = NW + NC + 1;
   for (const c of cols) {
     pt(c, (cl + S.belt) / 2, xz);
-    const zc = xz[1], yb = c.k === 's' ? yBot(zc) : cl, yt = yTop(zc) - 0.035;
+    const zc = xz[1], yb = c.k === 's' ? yBot(zc) : cl, yt = (c.k === 'ar' || c.k === 'r' ? yTop(Math.min(zc + 0.16, zR + Rc)) : yTop(zc)) - 0.035;
     // duvar: alttan omuza (alt 12 cm içe kıvrılır)
     let topX = 0, topZ = 0;
     const ys = S.shoulder, jS = ys > yb + 0.05 && ys < yt - 0.03 ? Math.round(((ys - yb) / (yt - yb)) * NW) : -1;
@@ -783,13 +785,19 @@ function bodyShell(S) {
       pos.push(x, y, z);
       if (j === NW) { topX = xz[0]; topZ = xz[1]; }
     }
-    // kapak: omuzdan omurgaya (x=0); omuz yuvarlatması mutlak mesafeyle
-    const qz = Math.max(zR + Rc, Math.min(zF - Rc, topZ)), D = Math.hypot(topX, topZ - qz);
+    // kapak: plan çevresini içe ötele (iç yuvarlatılmış dikdörtgen). Eski yol her sütunu omurgadaki bir noktaya yelpazeliyordu;
+    // köşe sütunlarının yolları kesişip kaput/bagajda katlanma ("buruşuk kaput") yapıyordu. Öteleme eğrileri kesişmez.
+    P.pt(c, yt, xz);
+    const nx = xz[2], nz = xz[3], hwC = S.hw(yt, c.k === 's' ? topZ : (nz > 0 ? zF - Rc : zR + Rc)), Dm = Math.max(0.3, S.hw(yt, 0));
     for (let k = 1; k <= NC; k++) {
-      const t = (k / NC) ** 1.7, x = topX * (1 - t), z = topZ + (qz - topZ) * t, sd = t * D;
+      const d = Dm * (k / NC) ** 1.7;
+      let x = topX - nx * d, z = topZ - nz * d;
+      x = Math.max(0, Math.min(x, hwC - d));
+      if (c.k !== 's') z = nz > 0 ? Math.min(z, zF - d) : Math.max(z, zR + d);
+      else z = Math.min(zF - d, Math.max(zR + d, z));
       const hwz = Math.max(0.2, S.hw(S.belt, z));
       const yc = yTop(z) - crown * Math.min(1, (x / hwz) ** 2);
-      const e = Math.min(1, sd / sh), bl = e * e * (3 - 2 * e);
+      const e = Math.min(1, d / sh), bl = e * e * (3 - 2 * e);
       pos.push(x, yt + (yc - yt) * bl, z);
     }
   }
@@ -1010,7 +1018,8 @@ function buildFrontRearCar(B, S) {
   } else {
     for (const s of [1, -1]) {
       const sel = (x, z) => x > hwF * 0.4 && z > Math.max(archF, zF - Rc - 0.08);
-      B.l(planBand(S, sel, yL0, yL1, 0.006, 0.006, s, 4), 0xc9d2d8, 0xfff4e0, 0);
+      B.d(planBand(S, sel, yL0 - 0.008, yL1 + 0.008, 0.004, 0.004, s, 4), 0x16191c);
+      B.l(planBand(S, sel, yL0, yL1, 0.008, 0.006, s, 4), 0x737e88, 0xfff4e0, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * 0.96, yL0 - 0.016, yL0 - 0.004, 0.012, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && z < zF - Rc * 0.55, yL0 + 0.01, yL1 - 0.01, 0.012, 0.004, s, 2), 0xd08a20, 0xff8a10, s > 0 ? 3 : 4);
       for (const k of [0.5, 0.7]) {
@@ -1052,7 +1061,6 @@ function buildFrontRearCar(B, S) {
   const bumpR = planBand(S, (x, z) => z < archR, cl - 0.01, rTop, 0.016, 0.022, 0, 6);
   if (S.bumper === 'chrome') B.c(bumpR, 'bumperR'); else if (S.bumper === 'dark') B.d(bumpR, 0x1a1a1a, 'bumperR'); else B.p(bumpR, 'bumperR');
   B.d(planBand(S, (x, z) => x < hwR * 0.75 && z < zR + 0.02, cl + 0.01, cl + 0.09, 0.045, 0, 0, 1), 0x0c0c0c, 'bumperR');
-  for (const s of [1, -1]) B.l(rbx(0.1, 0.025, 0.02, 0.008, s * hwR * 0.85, rTop - 0.07, zR - 0.035), 0x6a0a0a, 0x400000, 1);
   const ex = sport ? [-0.62, -0.5, 0.5, 0.62] : [-0.62];
   for (const k of ex) { B.c(cyl(0.04, 0.042, 0.12, 14, 'z', k * hwR, cl + 0.06, zR - 0.02)); B.d(cyl(0.03, 0.03, 0.01, 12, 'z', k * hwR, cl + 0.06, zR - 0.081), 0x050505); }
   // üçüncü stop
