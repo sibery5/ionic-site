@@ -26,7 +26,9 @@ CAT['insan:leyla'] = person(LEYLA_LOOK);
 CAT['insan:cinali'] = person(ALI_LOOK);
 const rng = new RNG(7);
 for (const kind of ['civilian', 'police', 'gang', 'swat', 'army']) for (let i = 1; i <= 2; i++) CAT[`insan:${kind}${i}`] = person(randomLook(rng, kind));
-for (const t of Object.keys(CARS)) CAT['araba:' + t] = () => buildCarModel(t);
+// [araç] stüdyoda ilk açık renk kullanılır: siyah boyada yüzey, kavis ve kapı çizgisi okunmuyor
+const acik = (cs) => cs.find((c) => { const k = new THREE.Color(c); return k.r + k.g + k.b > 0.35; }) || cs[0];
+for (const t of Object.keys(CARS)) CAT['araba:' + t] = () => buildCarModel(t, acik(CARS[t].colors));
 for (const t of Object.keys(AIR_TYPES)) CAT['hava:' + t] = () => buildAircraftModel(t);
 for (const t of Object.keys(BOAT_TYPES)) CAT['tekne:' + t] = () => buildBoatModel(t);
 for (const w of WEAPON_ORDER) if (w !== 'fists') CAT['silah:' + w] = () => buildWeaponModel(w);
@@ -135,4 +137,38 @@ export function glb(id) {
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
     resolve(btoa(s));
   }, reject, { binary: true, onlyVisible: true, maxTextureSize: 1024 }));
+}
+
+// [araç] Oran denetimi: şablon verisinden (çizimden değil) ölçüleri okur ve sınıf hedef tablosuyla karşılaştırır.
+// Tablo K2 görev metnindeki gerçek araç aralıklarıdır (m). Aralık dışı değerler '!' ile işaretlenir.
+const ARAC_HEDEF = {
+  hatch: { L: [4.0, 4.3], W: [1.75, 1.8], H: [1.45, 1.5], wb: [2.55, 2.65], td: [0.6, 0.64], tw: [0.195, 0.215] },
+  sedan: { L: [4.6, 4.9], W: [1.82, 1.88], H: [1.42, 1.48], wb: [2.7, 2.85], td: [0.63, 0.68], tw: [0.205, 0.235] },
+  station: { L: [4.7, 4.9], W: [1.82, 1.86], H: [1.46, 1.5], wb: [2.75, 2.85], td: [0.63, 0.68], tw: [0.205, 0.235] },
+  coupe: { L: [4.4, 4.7], W: [1.85, 1.95], H: [1.25, 1.36], wb: [2.6, 2.75], td: [0.66, 0.7], tw: [0.245, 0.295] },
+  suv: { L: [4.6, 4.9], W: [1.88, 1.95], H: [1.65, 1.75], wb: [2.7, 2.9], td: [0.72, 0.78], tw: [0.235, 0.265] },
+  arazi: { L: [4.3, 4.7], W: [1.85, 1.95], H: [1.8, 1.9], wb: [2.5, 2.8], td: [0.78, 0.84], tw: [0.255, 0.285] },
+  dolmus: { L: [5.4, 6.0], W: [1.95, 2.05], H: [2.3, 2.6], wb: [3.2, 3.7], td: [0.68, 0.72], tw: [0.205, 0.225] },
+  otobus: { L: [11.5, 12.2], W: [2.5, 2.55], H: [3.0, 3.2], wb: [5.8, 6.2], td: [0.95, 1.0], tw: [0.275, 0.295] },
+};
+const ARAC_SINIF = { kartal: 'sedan', hatch3: 'hatch', hatch: 'hatch', taksi: 'sedan', estate: 'station', dolmus: 'dolmus', sedan: 'sedan', offroad: 'arazi', coupe: 'coupe', suv: 'suv', cabrio: 'coupe', gt: 'coupe', police: 'sedan', polsuv: 'suv', bus: 'otobus', cip: 'arazi' };
+export function aracOlcu(id) {
+  const t = id.replace('araba:', ''), def = CARS[t];
+  const obj = CAT[id](), T = obj.userData.template, S = T && T.S;
+  if (!S || !S.axles) return { id, not: 'şablon ölçüsü yok' };
+  const r3 = (v) => +v.toFixed(3);
+  const ax = S.axles, wx = Math.abs(T.wheels[0].x);
+  const fender = S.hw(S.archY + S.archR * 0.3, ax[0]);
+  const m = {
+    L: S.L, W: S.W, H: S.H, wb: r3(ax[0] - ax[ax.length - 1]), iz: r3(T.track), td: r3(2 * S.r), tw: S.tw,
+    onCik: r3(S.L / 2 - ax[0]), arkaCik: r3(S.L / 2 + ax[ax.length - 1]), yerden: r3(S.cl), kusak: r3(S.belt / S.H),
+    tekerIc: r3(fender - (wx + S.tw / 2)), camIc: r3(S.W / 2 - S.hw(S.belt + 0.02, 0)),
+  };
+  let tris = 0, calls = 0;
+  place(id).obj.traverse((o) => { if (!o.isMesh || !o.visible) return; let v = o; while (v) { if (!v.visible) return; v = v.parent; } calls++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; });
+  const h = ARAC_HEDEF[ARAC_SINIF[t]], bad = [];
+  if (h) for (const k in h) if (m[k] < h[k][0] - 1e-3 || m[k] > h[k][1] + 1e-3) bad.push(`${k}=${m[k]}∉[${h[k]}]`);
+  if (h && Math.abs(m.iz - (m.W - 0.25)) > 0.06) bad.push(`iz≠W-0.25`);
+  if (m.tekerIc < 0.01 || m.tekerIc > 0.03) bad.push(`tekerIc=${m.tekerIc}`);
+  return { id, sinif: ARAC_SINIF[t] || '-', ...m, ucgen: Math.round(tris), cizim: calls, hata: bad.join(' ') };
 }

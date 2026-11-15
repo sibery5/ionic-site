@@ -374,8 +374,18 @@ function specFor(type, def) {
   const st = def.body || def.style;
   const S = { st, L, W, H, cabW: 0.94, tumble: 0.22, taper: 0.1, taperStart: 0.72, barrel: 0.03, bevel: 0.08, pillar: 0.07, windshield: true, rearGlass: true,
     bumper: 'paint', grille: 'sedan', mirrors: true, plate: true, interior: 0x2b2622, seats: 'car', doorSeams: [], handles: [], lights: 'modern', solidColor: null };
+  // [araç] Gerçek ölçüler CARS satırından gelir (dingil mesafesi wb, ön çıkıntı ohF, lastik çapı td ve eni tw, yerden yükseklik cl).
+  // Stil varsayılanları yalnızca satırda değer yoksa kalır; böylece gövde profili, kapı çizgileri, koltuk ve far konumları
+  // aynı sayılardan türer (oran tablosu: node scripts/atolye.js --on araba: --arac --resimsiz).
+  const dims = (o) => {
+    Object.assign(S, o);
+    if (def.cl) S.cl = def.cl;
+    if (def.td) S.r = def.td / 2;
+    if (def.tw) S.tw = def.tw;
+    if (def.wb && S.axles.length === 2) { const f = L / 2 - (def.ohF || (L - def.wb) * 0.45); S.axles = [f, f - def.wb]; }
+  };
   if (st === 'sedan' || st === 'taxi' || st === 'police') {
-    Object.assign(S, { cl: 0.27, r: 0.33, tw: 0.22, axles: [L * 0.3, -L * 0.3], arch: 0.07, belt: 0.67 * H, hood: 0.6 * H });
+    dims({ cl: 0.27, r: 0.33, tw: 0.22, axles: [L * 0.3, -L * 0.3], arch: 0.07, belt: 0.67 * H, hood: 0.6 * H });
     const b = S.belt, hd = S.hood, tr = 0.66 * H;
     S.top = [[L / 2 - 0.05, S.cl, 0.08], [L / 2, S.cl + 0.18, 0.1], [L / 2, hd - 0.12, 0.14], [L / 2 - 0.2, hd, 0.2], [L * 0.27, b - 0.01, 0.15], [-L * 0.3, b, 0.1], [-L / 2 + 0.18, tr, 0.18], [-L / 2, tr - 0.2, 0.12], [-L / 2, S.cl + 0.2, 0.1], [-L / 2 + 0.05, S.cl, 0.08]];
     S.cab = { ws: [L * 0.27, b], rf: [L * 0.27 - 1.75 * (H - b), H], rr: [-L * 0.17, H], rw: [-L * 0.3, b], roofR: 0.12 };
@@ -384,7 +394,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.47, -0.05, S.axles[1] + 0.47];
     S.handles = [0.08, S.axles[1] + 0.6];
   } else if (st === 'wagon') {
-    Object.assign(S, { cl: 0.26, r: 0.31, tw: 0.19, axles: [L * 0.3, -L * 0.31], arch: 0.06, belt: 0.66 * H, hood: 0.6 * H, tumble: 0.12, taper: 0.04, bevel: 0.05, bumper: 'chrome', grille: 'old', lights: 'old', interior: 0x5a4632 });
+    dims({ cl: 0.26, r: 0.31, tw: 0.19, axles: [L * 0.3, -L * 0.31], arch: 0.06, belt: 0.66 * H, hood: 0.6 * H, tumble: 0.12, taper: 0.04, bevel: 0.05, bumper: 'chrome', grille: 'old', lights: 'old', interior: 0x5a4632 });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.04, S.cl, 0.05], [L / 2, S.cl + 0.15, 0.05], [L / 2, hd - 0.06, 0.06], [L / 2 - 0.08, hd, 0.08], [L * 0.25, b - 0.02, 0.06], [-L / 2 + 0.06, b, 0.06], [-L / 2, b - 0.1, 0.06], [-L / 2, S.cl + 0.15, 0.05], [-L / 2 + 0.04, S.cl, 0.05]];
     S.cab = { ws: [L * 0.25, b], rf: [L * 0.25 - 0.55, H], rr: [-L / 2 + 0.12, H], rw: [-L / 2 + 0.04, b], roofR: 0.05 };
@@ -393,7 +403,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.42, 0, S.axles[1] + 0.42];
     S.handles = [0.12, S.axles[1] + 0.55];
   } else if (st === 'sport') {
-    Object.assign(S, { cl: 0.17, r: 0.34, tw: 0.28, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: 0.64 * H, hood: 0.5 * H, tumble: 0.32, cabW: 0.9, taper: 0.14, taperStart: 0.6, grille: 'sport', interior: 0x1a1a1a });
+    dims({ cl: 0.17, r: 0.34, tw: 0.28, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: 0.64 * H, hood: 0.5 * H, tumble: 0.32, cabW: 0.9, taper: 0.14, taperStart: 0.6, grille: 'sport', interior: 0x1a1a1a });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.06, S.cl, 0.08], [L / 2, S.cl + 0.12, 0.1], [L / 2 - 0.05, S.cl + 0.3, 0.15], [L / 2 - 0.35, hd, 0.3], [L * 0.16, b - 0.02, 0.2], [-L * 0.4, b + 0.05, 0.1], [-L / 2 + 0.05, b + 0.02, 0.06], [-L / 2, b - 0.22, 0.1], [-L / 2, S.cl + 0.15, 0.08], [-L / 2 + 0.06, S.cl, 0.06]];
     S.cab = { ws: [L * 0.16, b], rf: [L * 0.16 - 0.85, H], rr: [-L * 0.14, H - 0.02], rw: [-L * 0.4, b + 0.03], roofR: 0.18 };
@@ -402,7 +412,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.42, -L * 0.12];
     S.handles = [-L * 0.08];
   } else if (st === 'suv') {
-    Object.assign(S, { cl: 0.36, r: 0.4, tw: 0.27, axles: [L * 0.3, -L * 0.3], arch: 0.09, belt: 0.62 * H, hood: 0.57 * H, tumble: 0.14, interior: 0x221e1a });
+    dims({ cl: 0.36, r: 0.4, tw: 0.27, axles: [L * 0.3, -L * 0.3], arch: 0.09, belt: 0.62 * H, hood: 0.57 * H, tumble: 0.14, interior: 0x221e1a });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.05, S.cl, 0.1], [L / 2, S.cl + 0.2, 0.1], [L / 2, hd - 0.15, 0.15], [L / 2 - 0.2, hd, 0.2], [L * 0.26, b - 0.02, 0.12], [-L / 2 + 0.08, b, 0.08], [-L / 2, b - 0.15, 0.08], [-L / 2, S.cl + 0.2, 0.1], [-L / 2 + 0.05, S.cl, 0.08]];
     S.cab = { ws: [L * 0.26, b], rf: [L * 0.26 - 0.6, H], rr: [-L / 2 + 0.18, H], rw: [-L / 2 + 0.06, b], roofR: 0.14 };
@@ -411,7 +421,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.52, -0.05, S.axles[1] + 0.52];
     S.handles = [0.08, S.axles[1] + 0.65];
   } else if (st === 'jeep') {
-    Object.assign(S, { cl: 0.45, r: 0.42, tw: 0.3, axles: [L * 0.3, -L * 0.29], arch: 0.12, belt: 0.58 * H, hood: 0.56 * H, tumble: 0.03, cabW: 0.97, taper: 0.02, bevel: 0.04, bumper: 'dark', grille: 'jeep', lights: 'old', plate: false, interior: 0x2a2a1e, solidColor: 0x3b4128 });
+    dims({ cl: 0.45, r: 0.42, tw: 0.3, axles: [L * 0.3, -L * 0.29], arch: 0.12, belt: 0.58 * H, hood: 0.56 * H, tumble: 0.03, cabW: 0.97, taper: 0.02, bevel: 0.04, bumper: 'dark', grille: 'jeep', lights: 'old', plate: false, interior: 0x2a2a1e, solidColor: 0x3b4128 });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.03, S.cl, 0.04], [L / 2, S.cl + 0.1, 0.04], [L / 2, hd - 0.05, 0.05], [L / 2 - 0.05, hd, 0.05], [L * 0.2, hd + 0.02, 0.05], [L * 0.18, b, 0.03], [-L / 2 + 0.02, b, 0.04], [-L / 2, b - 0.05, 0.04], [-L / 2, S.cl + 0.1, 0.04], [-L / 2 + 0.03, S.cl, 0.04]];
     S.cab = { ws: [L * 0.18, b], rf: [L * 0.14, H], rr: [-L / 2 + 0.04, H], rw: [-L / 2 + 0.02, b], roofR: 0.06 };
@@ -422,7 +432,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.55, -0.1];
   } else if (st === 'hatch' || st === 'hatch3' || st === 'estate') {
     const est = st === 'estate', h3 = st === 'hatch3';
-    Object.assign(S, { cl: 0.24, r: est ? 0.33 : 0.3, tw: 0.2, axles: [L * (h3 ? 0.33 : 0.32), -L * (est ? 0.31 : 0.3)], arch: 0.06, belt: 0.64 * H, hood: 0.6 * H, tumble: 0.18, taper: 0.08, interior: 0x26221e });
+    dims({ cl: 0.24, r: est ? 0.33 : 0.3, tw: 0.2, axles: [L * (h3 ? 0.33 : 0.32), -L * (est ? 0.31 : 0.3)], arch: 0.06, belt: 0.64 * H, hood: 0.6 * H, tumble: 0.18, taper: 0.08, interior: 0x26221e });
     const b = S.belt, hd = S.hood, rz = -L / 2 + (est ? 0.07 : 0.1);
     S.top = [[L / 2 - 0.05, S.cl, 0.08], [L / 2, S.cl + 0.17, 0.1], [L / 2, hd - 0.1, 0.13], [L / 2 - 0.16, hd, 0.17], [L * 0.29, b - 0.01, 0.13], [rz, b, 0.06], [-L / 2, b - 0.14, 0.08], [-L / 2, S.cl + 0.2, 0.1], [-L / 2 + 0.05, S.cl, 0.08]];
     S.cab = { ws: [L * 0.29, b], rf: [L * 0.29 - 1.55 * (H - b), H], rr: [-L / 2 + (est ? 0.13 : 0.22), H - 0.01], rw: [rz + 0.01, b], roofR: 0.1 };
@@ -436,7 +446,7 @@ function specFor(type, def) {
     }
   } else if (st === 'coupe' || st === 'cabrio') {
     const open = st === 'cabrio';
-    Object.assign(S, { cl: 0.19, r: 0.33, tw: 0.24, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: (open ? 0.7 : 0.62) * H, hood: (open ? 0.64 : 0.54) * H, tumble: 0.26, cabW: 0.92, taper: 0.12, taperStart: 0.62, grille: 'sport', interior: open ? 0x6a3a22 : 0x1e1e1e });
+    dims({ cl: 0.19, r: 0.33, tw: 0.24, axles: [L * 0.31, -L * 0.3], arch: 0.05, belt: (open ? 0.7 : 0.62) * H, hood: (open ? 0.64 : 0.54) * H, tumble: 0.26, cabW: 0.92, taper: 0.12, taperStart: 0.62, grille: 'sport', interior: open ? 0x6a3a22 : 0x1e1e1e });
     const b = S.belt, hd = S.hood;
     if (open) {
       // açık kokpit: gövde üstünde iki kademeli çukur (ön koltuklar alçakta, arka koltuklar arka kavis üstünde)
@@ -452,14 +462,14 @@ function specFor(type, def) {
     }
     S.doorSeams = [S.axles[0] - 0.42, -L * 0.1]; S.handles = [-L * 0.07];
   } else if (st === 'offroad') {
-    Object.assign(S, { cl: 0.42, r: 0.43, tw: 0.3, axles: [L * 0.31, -L * 0.29], arch: 0.11, belt: 0.6 * H, hood: 0.58 * H, tumble: 0.05, cabW: 0.97, taper: 0.03, bevel: 0.05, bumper: 'dark', grille: 'jeep', lights: 'old', interior: 0x2a2a22, wheelKind: 'offroad' });
+    dims({ cl: 0.42, r: 0.43, tw: 0.3, axles: [L * 0.31, -L * 0.29], arch: 0.11, belt: 0.6 * H, hood: 0.58 * H, tumble: 0.05, cabW: 0.97, taper: 0.03, bevel: 0.05, bumper: 'dark', grille: 'jeep', lights: 'old', interior: 0x2a2a22, wheelKind: 'offroad' });
     const b = S.belt, hd = S.hood;
     S.top = [[L / 2 - 0.04, S.cl, 0.05], [L / 2, S.cl + 0.12, 0.05], [L / 2, hd - 0.06, 0.06], [L / 2 - 0.06, hd, 0.06], [L * 0.22, hd + 0.03, 0.06], [L * 0.19, b, 0.04], [-L / 2 + 0.03, b, 0.05], [-L / 2, b - 0.06, 0.05], [-L / 2, S.cl + 0.12, 0.05], [-L / 2 + 0.04, S.cl, 0.05]];
     S.cab = { ws: [L * 0.19, b], rf: [L * 0.19 - 0.32, H], rr: [-L / 2 + 0.06, H], rw: [-L / 2 + 0.03, b], roofR: 0.07 };
     S.windows = [[99, -0.08], [-0.16, -L * 0.3 + 0.06], [-L * 0.3 - 0.04, -99]]; S.pillars = [-0.12, -L * 0.3];
     S.doorSeams = [S.axles[0] - 0.55, -0.12, S.axles[1] + 0.55]; S.handles = [-0.02, S.axles[1] + 0.68];
   } else if (st === 'van' || st === 'swat' || st === 'ambulance') {
-    Object.assign(S, { cl: 0.3, r: 0.36, tw: 0.24, axles: [L * 0.33, -L * 0.31], arch: 0.07, belt: 0.47 * H, tumble: 0.05, cabW: 0.98, taper: 0.05, bevel: 0.07, bumper: st === 'swat' ? 'dark' : 'paint', grille: 'van', interior: 0x2a2a2a, seats: 'van' });
+    dims({ cl: 0.3, r: 0.36, tw: 0.24, axles: [L * 0.33, -L * 0.31], arch: 0.07, belt: 0.47 * H, tumble: 0.05, cabW: 0.98, taper: 0.05, bevel: 0.07, bumper: st === 'swat' ? 'dark' : 'paint', grille: 'van', interior: 0x2a2a2a, seats: 'van' });
     const b = S.belt;
     S.top = [[L / 2 - 0.05, S.cl, 0.08], [L / 2, S.cl + 0.2, 0.1], [L / 2, 0.36 * H, 0.15], [L / 2 - 0.42, b - 0.03, 0.25], [-L / 2 + 0.04, b, 0.04], [-L / 2, b - 0.1, 0.04], [-L / 2, S.cl + 0.2, 0.08], [-L / 2 + 0.05, S.cl, 0.06]];
     S.cab = { ws: [L / 2 - 0.42, b], rf: [L / 2 - 1.15, H], rr: [-L / 2 + 0.08, H], rw: [-L / 2 + 0.02, b], roofR: 0.15 };
@@ -473,7 +483,7 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.45, zB, zB - 1.1];
     S.handles = [zB + 0.15];
   } else if (st === 'bus') {
-    Object.assign(S, { cl: 0.3, r: 0.5, tw: 0.3, axles: [L / 2 - 2.4, -L / 2 + 3.0], arch: 0.08, belt: 0.36 * H, tumble: 0.03, cabW: 0.99, taper: 0.02, bevel: 0.1, bumper: 'dark', grille: 'bus', mirrors: true, interior: 0x2a3a5a, seats: 'bus', wheelKind: 'bus' });
+    dims({ cl: 0.3, r: 0.5, tw: 0.3, axles: [L / 2 - 2.4, -L / 2 + 3.0], arch: 0.08, belt: 0.36 * H, tumble: 0.03, cabW: 0.99, taper: 0.02, bevel: 0.1, bumper: 'dark', grille: 'bus', mirrors: true, interior: 0x2a3a5a, seats: 'bus', wheelKind: 'bus' });
     const b = S.belt;
     S.top = [[L / 2 - 0.08, S.cl, 0.08], [L / 2, S.cl + 0.15, 0.12], [L / 2, b, 0], [-L / 2, b, 0], [-L / 2, S.cl + 0.15, 0.12], [-L / 2 + 0.08, S.cl, 0.08]];
     S.cab = { ws: [L / 2 - 0.02, b], rf: [L / 2 - 0.18, H], rr: [-L / 2 + 0.12, H], rw: [-L / 2 + 0.02, b], roofR: 0.22 };
@@ -484,7 +494,7 @@ function specFor(type, def) {
     S.windows.push([z - 0.05, -99]);
   } else if (st === 'truck') {
     const cz = L / 2 - 2.3;
-    Object.assign(S, { cl: 0.55, r: 0.5, tw: 0.3, axles: [L / 2 - 1.2, -L / 2 + 2.9, -L / 2 + 1.6], arches: [L / 2 - 1.2], arch: 0.1, belt: 1.55, tumble: 0.04, cabW: 0.98, taper: 0.02, bevel: 0.08, bumper: 'dark', grille: 'truck', interior: 0x2a2a2a, seats: 'van', wheelKind: 'steel', cabRear: cz, wheelX: W / 2 - 0.2 });
+    dims({ cl: 0.55, r: 0.5, tw: 0.3, axles: [L / 2 - 1.2, -L / 2 + 2.9, -L / 2 + 1.6], arches: [L / 2 - 1.2], arch: 0.1, belt: 1.55, tumble: 0.04, cabW: 0.98, taper: 0.02, bevel: 0.08, bumper: 'dark', grille: 'truck', interior: 0x2a2a2a, seats: 'van', wheelKind: 'steel', cabRear: cz, wheelX: W / 2 - 0.2 });
     const b = S.belt, Hc = H - 0.25;
     S.top = [[L / 2 - 0.05, S.cl, 0.06], [L / 2, S.cl + 0.25, 0.08], [L / 2, b, 0.05], [cz, b, 0.04], [cz, S.cl, 0.04]];
     S.cab = { ws: [L / 2 - 0.04, b], rf: [L / 2 - 0.25, Hc], rr: [cz + 0.05, Hc], rw: [cz, b], roofR: 0.12 };
@@ -1071,7 +1081,7 @@ function buildCarTemplate(type, def) {
   }
   // tekerlekler + süspansiyon bağlantı yüksekliği (amortisör üst noktası, tekerlek merkezine göre)
   T.wheels = [];
-  const wx = S.wheelX || W / 2 - S.tw / 2 - 0.05;
+  const wx = S.wheelX || S.hw(S.archY + S.archR * 0.3, S.axles[0]) - 0.02 - S.tw / 2;
   const wk = S.wheelKind || (st === 'sport' || st === 'coupe' || st === 'cabrio' ? 'sport' : st === 'suv' || st === 'estate' ? 'suv' : st === 'jeep' ? 'steel' : st === 'swat' ? 'black' : 'car');
   T.wheelGeo = wheelGeo(S.r, S.tw, wk);
   for (let i = 0; i < S.axles.length; i++) for (const s of [1, -1]) T.wheels.push({ x: s * wx, z: S.axles[i], front: i === 0, side: s });
