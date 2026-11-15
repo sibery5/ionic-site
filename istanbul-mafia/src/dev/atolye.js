@@ -16,7 +16,8 @@ import { RNG } from '../core/util.js';
 
 // ---- Katalog: kimlik → model üreten fonksiyon (THREE.Object3D döndürür) ----
 const CAT = {};
-const person = (look) => () => { const m = new CharacterModel(typeof look === 'function' ? look() : look); m.animate(0.016, { speed: 0 }); return m.root; };
+// insanlar her zaman en ayrıntılı düzeyde (LOD0) görüntülenir; oyunda düzey kamera uzaklığına göre seçilir
+const person = (look) => () => { const m = new CharacterModel(typeof look === 'function' ? look() : look); m.forceLod = 0; m.setLod(0); m.animate(0.016, { speed: 0 }); return m.root; };
 CAT['insan:kahraman'] = person(defaultLook('m'));
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
 CAT['insan:reis'] = person(REIS_LOOK);
@@ -60,11 +61,15 @@ function place(id) {
   studio();
   holder.clear();
   const obj = CAT[id]();
-  obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  // Işık konisi, hale, gölge lekesi gibi yardımcı ağlar (eklemeli ya da neredeyse saydam) stüdyoda gizlenir:
+  // hem görüntüyü kirletir hem sınır kutusunu şişirir (araç 14 m görünüyordu).
+  const aux = (o) => { const m = Array.isArray(o.material) ? o.material[0] : o.material; return !m || m.blending === THREE.AdditiveBlending || (m.transparent && m.opacity < 0.35) || m.visible === false; };
+  obj.traverse((o) => { if (o.isMesh) { if (aux(o)) o.visible = false; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
   holder.add(obj); obj.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(obj);
-  obj.position.y -= box.min.y; obj.updateMatrixWorld(true); // zemine oturt
-  box.setFromObject(obj);
+  const box = new THREE.Box3();
+  const fit = () => { box.makeEmpty(); obj.traverse((o) => { if (o.isMesh && o.visible) box.expandByObject(o, false); }); };
+  fit();
+  obj.position.y -= box.min.y; obj.updateMatrixWorld(true); fit(); // zemine oturt
   return { obj, box };
 }
 
@@ -78,6 +83,32 @@ export function bilgi(id) {
   });
   const s = box.getSize(V(0, 0, 0));
   return { id, ucgen: Math.round(tris), ag: meshes, malzeme: mats.size, boyut: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2)] };
+}
+
+// Kesit ölçüsü (m). Modelin ön ve yan siluetini dik izdüşümle çizer (2–5 mm/piksel) ve boyuna göre verilen yükseklik
+// oranlarında yatay parçaların genişliğini okur: ör. göğüs hizasında [kol, gövde, kol], uylukta [bacak, bacak].
+// "derinlik" yan siluetteki toplam genişliktir. Amaç: oranları gözle değil antropometri / araç ölçü tablosuyla denetlemek.
+function siluet(box, yan) {
+  const size = box.getSize(V(0, 0, 0)), c = box.getCenter(V(0, 0, 0)), N = 1024;
+  const span = Math.max(yan ? size.z : size.x, size.y) * 1.08;
+  const oc = new THREE.OrthographicCamera(-span / 2, span / 2, span / 2, -span / 2, 0.1, 400);
+  oc.position.copy(c).add(yan ? V(100, 0, 0) : V(0, 0, 100)); oc.lookAt(c);
+  const rt = new THREE.WebGLRenderTarget(N, N), buf = new Uint8Array(N * N * 4);
+  const bg = scene.background; scene.background = new THREE.Color(0); scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); floor.visible = false;
+  R.setRenderTarget(rt); R.render(scene, oc); R.readRenderTargetPixels(rt, 0, 0, N, N, buf); R.setRenderTarget(null);
+  scene.background = bg; scene.overrideMaterial = null; floor.visible = true; rt.dispose();
+  const px = span / N, y0 = c.y - span / 2;
+  // y yüksekliğindeki satırda dolu parçalar: [genişlik (m), ...]
+  return (y) => {
+    const row = Math.max(0, Math.min(N - 1, Math.round((y - y0) / px))), seg = []; let run = 0;
+    for (let x = 0; x <= N; x++) { const on = x < N && buf[(row * N + x) * 4] > 127; if (on) run++; else { if (run > 2) seg.push(+(run * px).toFixed(3)); run = 0; } }
+    return seg;
+  };
+}
+export function olcu(id, oranlar = [0.965, 0.87, 0.815, 0.74, 0.63, 0.53, 0.44, 0.285, 0.2, 0.06]) {
+  const { box } = place(id);
+  const on = siluet(box, false), yan = siluet(box, true), Hh = box.max.y - box.min.y;
+  return { id, boy: +Hh.toFixed(3), dilim: oranlar.map((f) => ({ oran: f, y: +(f * Hh).toFixed(2), parcalar: on(box.min.y + f * Hh), derinlik: yan(box.min.y + f * Hh).reduce((t, w) => t + w, 0).toFixed(3) * 1 })) };
 }
 
 export function shot(id, view = 'q') {

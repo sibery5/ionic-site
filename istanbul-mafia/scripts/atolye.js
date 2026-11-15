@@ -3,6 +3,8 @@
 //   node scripts/atolye.js insan:kahraman araba:sedan --gorunus q,f,s        → .testout/atolye/<kimlik>-<görünüş>.jpg
 //   node scripts/atolye.js silah:pistol --glb                                 → assets/models/<kimlik>.glb
 //   node scripts/atolye.js --on insan: --gorunus q,yuz                        → kimliği "insan:" ile başlayan her model
+//   node scripts/atolye.js insan:kahraman --olcu                              → kesit ölçüleri (genişlik/derinlik, m)
+// Görünüşler: q ön-sol 3/4 · f ön · s yan · b arka 3/4 · t üst · yuz yüz yakın planı · el el yakın planı
 const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +37,7 @@ const [W, H] = opt('--boyut', '1600x900').split('x').map(Number);
     const safe = id.replace(/[:/]/g, '_');
     try {
       console.log(JSON.stringify(await p.evaluate((i) => atolye.bilgi(i), id)));
+      if (flag('--olcu')) console.log(JSON.stringify(await p.evaluate((i) => atolye.olcu(i), id)));
       for (const v of views) {
         const url = await p.evaluate(([i, vv]) => atolye.shot(i, vv), [id, v]);
         fs.writeFileSync(path.join(work, `${safe}-${v}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
