@@ -442,10 +442,10 @@ function specFor(type, def) {
     S.doorSeams = [S.axles[0] - 0.55, -0.1];
   } else if (st === 'hatch' || st === 'hatch3' || st === 'estate') {
     const est = st === 'estate', h3 = st === 'hatch3';
-    dims({ cl: 0.24, r: est ? 0.33 : 0.3, tw: 0.2, axles: [L * (h3 ? 0.33 : 0.32), -L * (est ? 0.31 : 0.3)], arch: 0.06, belt: 0.64 * H, hood: 0.6 * H, tumble: 0.18, taper: 0.08, interior: 0x26221e });
+    dims({ cl: 0.24, r: est ? 0.33 : 0.3, tw: 0.2, axles: [L * (h3 ? 0.33 : 0.32), -L * (est ? 0.31 : 0.3)], arch: 0.06, belt: 0.63 * H, hood: (est ? 0.58 : 0.55) * H, tumble: 0.18, taper: 0.08, interior: 0x26221e });
     const b = S.belt, hd = S.hood, rz = -L / 2 + (est ? 0.07 : 0.1);
     S.top = [[L / 2 - 0.05, S.cl, 0.08], [L / 2, S.cl + 0.17, 0.1], [L / 2, hd - 0.1, 0.13], [L / 2 - 0.16, hd, 0.17], [L * 0.29, b - 0.01, 0.13], [rz, b, 0.06], [-L / 2, b - 0.14, 0.08], [-L / 2, S.cl + 0.2, 0.1], [-L / 2 + 0.05, S.cl, 0.08]];
-    S.cab = { ws: [L * 0.29, b], rf: [L * 0.29 - 1.55 * (H - b), H], rr: [-L / 2 + (est ? 0.13 : 0.22), H - 0.01], rw: [rz + 0.01, b], roofR: 0.1 };
+    S.cab = { ws: [L * 0.29, b], rf: [L * 0.29 - 1.55 * (H - b), H], rr: [-L / 2 + (est ? 0.13 : 0.5), H - 0.01], rw: [rz + 0.01, b], roofR: 0.1 };
     if (h3) {
       S.windows = [[99, -L * 0.13], [-L * 0.13 - 0.08, -99]]; S.pillars = [-L * 0.13 - 0.04];
       S.doorSeams = [S.axles[0] - 0.42, -L * 0.15]; S.handles = [-L * 0.11];
@@ -586,10 +586,10 @@ function topYAt(top, z) {
   return best;
 }
 // gövde yüzeyine oturan ızgara panel (kaput üstte, kapı yanda): hasarda kopan parça olarak etiketlenir
-function hoodPanel(S, z0, z1, off = 0.012) {
+function hoodPanel(S, z0, z1, off = 0.006) {
   const NZ = 6, NX = 6, pos = [], idx = [];
   for (let j = 0; j <= NZ; j++) {
-    const z = z0 + ((z1 - z0) * j) / NZ, y = topYAt(S.top, z) + off;
+    const z = z0 + ((z1 - z0) * j) / NZ, y = (S.yTopS ? S.yTopS(z) : topYAt(S.top, z)) + off;
     const hw = S.hw(Math.min(y, S.belt), z) * 0.88;
     for (let i = 0; i <= NX; i++) { const u = (i / NX) * 2 - 1; pos.push(u * hw, y - u * u * 0.03, z); }
   }
@@ -761,6 +761,7 @@ function bodyShell(S) {
   // profil köşeleri (kaput ucu, bagaj kenarı) ±8 cm ortalamayla yuvarlanır: keskin kırık, sütunlar arasında dalgalı gölge yapıyordu
   const yTop0 = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
   const yTop = (z) => (yTop0(z - 0.08) + yTop0(z - 0.04) + yTop0(z) + yTop0(z + 0.04) + yTop0(z + 0.08)) / 5;
+  S.yTopS = yTop;
   const yBot = (z) => {
     for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
     return cl;
@@ -770,7 +771,7 @@ function bodyShell(S) {
   const rows = NW + NC + 1;
   for (const c of cols) {
     pt(c, (cl + S.belt) / 2, xz);
-    const zc = xz[1], yb = c.k === 's' ? yBot(zc) : cl, yt = (c.k === 'ar' || c.k === 'r' ? yTop(Math.min(zc + 0.16, zR + Rc)) : yTop(zc)) - 0.035;
+    const zc = xz[1], yb = c.k === 's' ? yBot(zc) : cl, yt = (c.k === 'ar' || c.k === 'r' ? yTop(Math.min(zc + 0.16, zR + Rc)) : c.k === 'af' ? yTop(zF - Rc * c.t) : c.k === 'f' ? yTop(zF) : yTop(zc)) - 0.035;
     // duvar: alttan omuza (alt 12 cm içe kıvrılır)
     let topX = 0, topZ = 0;
     const ys = S.shoulder, jS = ys > yb + 0.05 && ys < yt - 0.03 ? Math.round(((ys - yb) / (yt - yb)) * NW) : -1;
@@ -985,10 +986,11 @@ function buildGenericBody(B, S) {
   if (S.mirrors) {
     const zm = ws[0] - 0.16, ym = b + 0.1;
     for (const s of [1, -1]) {
-      const xm = s * (S.hw(b, zm) + 0.13), tag = s > 0 ? 'mirrorL' : 'mirrorR';
-      B.p(rbx(0.12, 0.12, 0.16, 0.04, xm, ym, zm), tag);
-      B.d(bx(0.14, 0.04, 0.05, s * (S.hw(b, zm) + 0.05), ym - 0.03, zm), 0x111111, tag);
-      B.c(bx(0.1, 0.1, 0.01, xm, ym, zm - 0.082), tag);
+      // [araç] saplı ayna: enine uzun damla gövde, arkada ayna camı, kapıdan çıkan koyu sap
+      const hx = S.hw(b, zm), xm = s * (hx + 0.13), tag = s > 0 ? 'mirrorL' : 'mirrorR';
+      B.p(rbx(0.2, 0.12, 0.085, 0.04, xm, ym, zm), tag);
+      B.d(beam(s * (hx - 0.01), ym - 0.07, zm + 0.04, s * (hx + 0.06), ym - 0.03, zm + 0.005, 0.035, 0.05), 0x111111, tag);
+      B.c(rbx(0.17, 0.095, 0.01, 0.02, xm, ym, zm - 0.043), tag);
     }
   }
   return { cabPoly };
@@ -1043,11 +1045,10 @@ function buildFrontRearCar(B, S) {
   const bumpF = planBand(S, bSel, cl - 0.01, bTop, 0.016, 0.022, 0, 6);
   if (S.bumper === 'chrome') B.c(bumpF, 'bumperF'); else if (S.bumper === 'dark') B.d(bumpF, 0x1a1a1a, 'bumperF'); else B.p(bumpF, 'bumperF');
   const iTop = cl + Math.min(0.17, (bTop - cl) * 0.5);
-  S.plateYF = Math.min(bTop - 0.07, iTop + 0.075);
-  const intake = planBand(S, (x, z) => x < hwF * (sport ? 0.85 : 0.7) && z > zF - Rc * 0.6, cl + 0.03, iTop, 0.045, 0, 0, 2);
+  S.plateYF = sport ? Math.max(cl + 0.1, (cl + bTop) / 2) : Math.min(bTop - 0.07, iTop + 0.075);
+  const intake = planBand(S, (x, z) => (sport ? x > hwF * 0.36 && x < hwF * 0.86 : x < hwF * 0.7) && z > zF - Rc * 0.6, cl + 0.03, sport ? bTop - 0.03 : iTop, 0.045, 0, 0, 2);
   B.d(intake, 0x0a0a0a, 'bumperF');
   if (!old && !rugged) for (const s of [1, -1]) B.d(rbx(0.16, 0.06, 0.03, 0.02, s * hwF * 0.8, cl + 0.1, zF + 0.035), 0x101010, 'bumperF');
-  if (sport) B.d(planBand(S, (x, z) => z > zF - Rc * 0.8, cl - 0.025, cl - 0.005, 0.07, 0, 0, 1), 0x0a0a0a, 'bumperF');
   // --- stoplar ---
   const tH = old ? 0.12 : 0.13, yT1 = yRr - 0.035, yT0 = yT1 - tH;
   for (const s of [1, -1]) {
@@ -1145,7 +1146,7 @@ function buildInterior(B, S, def) {
   // koltuk: minder + sırt + başlık. seats listesine oturma noktası (minder üstü, yerel) eklenir
   const seat = (x, z, wide, y = seatY, n = 1) => {
     B.d(rbx(wide ? W * 0.62 : 0.48, 0.14, 0.48, 0.05, x, y, z), ic);
-    B.d(beam(x, y + 0.05, z - 0.25, x, y + 0.62, z - 0.34, 0.1, wide ? W * 0.62 : 0.46), ic);
+    B.d(beam(x, y + 0.05, z - 0.25, x, y + (open && wide ? 0.24 : 0.62), z - 0.34, 0.1, wide ? W * 0.62 : 0.46), ic);
     if (!wide) B.d(rbx(0.24, 0.16, 0.08, 0.03, x, y + 0.72, z - 0.36), ic);
     if (wide && n > 1) for (let i = 0; i < n; i++) seats.push({ x: (i - (n - 1) / 2) * W * 0.26, y: y + 0.07, z });
     else seats.push({ x, y: y + 0.07, z });
@@ -1295,6 +1296,10 @@ function buildCarTemplate(type, def) {
   if (st === 'coupe') B.p(rbx(W * 0.7, 0.03, 0.12, 0.012, 0, S.belt + 0.04, -L / 2 + 0.12));
   if (st === 'coupe' || st === 'cabrio') for (const s of [1, -1]) B.d(rbx(0.05, 0.06, L * 0.42, 0.02, s * (S.hw(cl + 0.08, 0) + 0.01), cl + 0.08, 0), 0x0c0c0c);
   if (st === 'suv') {
+    for (const az of S.axles) for (const s of [1, -1]) {
+      const g = new THREE.TorusGeometry(S.archR + 0.025, 0.035, 5, 16, Math.PI); g.scale(1, 1, 0.6); g.rotateY(Math.PI / 2); g.translate(s * (S.hw(S.archY + 0.1, az) + 0.004), S.archY, az);
+      B.d(g, 0x1a1a1a);
+    }
     for (const s of [1, -1]) B.c(bx(0.04, 0.04, L * 0.55, s * W * 0.36, H + 0.04, -L * 0.08));
     sideStripH(B, S, cl + 0.12, -L / 2 + 0.3, L / 2 - 0.3, 0.16, 0x161616);
   }
