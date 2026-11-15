@@ -1612,8 +1612,9 @@ export function buildCarModel(type, color) {
 }
 // [araç] uzaklık düzeyi: kameradan 75 m ötede kaba modele geç, 65 m içinde geri dön (sınırda titremesin). Kare içinde ayırma yok.
 export function updateCarLod(v, cam) {
-  const L = v.mesh.userData.lod;
-  if (!L) return;
+  // yalnız bu dosyanın kurduğu araba düzeyi (tekne/uçak kendi lod alanını başka biçimde kullanır)
+  const L = v.mesh && v.mesh.userData.lod;
+  if (!L || !L.near || !L.far) return;
   const dx = cam.position.x - v.pos.x, dz = cam.position.z - v.pos.z, d2 = dx * dx + dz * dz;
   const far = L.on ? d2 > 65 * 65 : d2 > 75 * 75;
   if (far === L.on) return;
