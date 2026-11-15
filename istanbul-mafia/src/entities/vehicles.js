@@ -687,45 +687,84 @@ export function sideDecal(S, z0, z1, y0, y1) {
 // plan görünüşünde yuvarlatılmış dikdörtgen çevre (u) × yükseklik (duvar) + omuzdan omurgaya kapak (kaput/bagaj).
 // Genişlik S.hw (bombe, içe eğim, uç daralması), üst yükseklik S.top profili; böylece kapı, kaput paneli ve çıkartmalar
 // eski fonksiyonlarla aynı yüzeye oturur. Alt kenar teker kavislerini izler ve içe kıvrılır (çamurluk dudağı, marşpiyel).
-function bodyShell(S) {
-  const { L, cl } = S;
+// Plan görünüşü çevresi (x ≥ 0 yarısı): sütun listesi ve yükseklikte (x, z, dış normal) veren fonksiyon. Gövde kabuğu, tamponlar,
+// sarmal farlar ve stoplar aynı çevreyi kullanır; böylece hepsi gövdeye oturur.
+function planOutline(S) {
+  if (S._plan) return S._plan;
   const box = S.st === 'van' || S.st === 'swat' || S.st === 'ambulance' || S.st === 'bus' || S.st === 'truck';
   const tz = S.top.map((p) => p[0]);
   const zF = Math.max(...tz) - 0.004, zR = Math.min(...tz) + 0.004;
   const Rc = box ? 0.14 : Math.min(0.42, S.W * 0.2);
-  const yTop = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
   const arches = S.arches.map((z) => ({ z, r: S.archR, y: S.archY }));
-  const yBot = (z) => {
-    for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
-    return cl;
-  };
-  // yarım çevre (x ≥ 0): ön düz → ön köşe yayı → yan → arka köşe yayı → arka düz. Her sütun: [x(y), z, tür]
   const cols = [];
-  const NF = 4, NA = 7, NR = 4;
+  const NF = 5, NA = 8, NR = 5;
   for (let i = 0; i < NF; i++) cols.push({ k: 'f', t: i / NF });
   for (let i = 0; i < NA; i++) cols.push({ k: 'af', t: i / NA });
-  // yan sütunlar: düzgün aralık + teker kavislerinde sık örnek (kavis kenarı düzgün çıksın)
   const z0 = zF - Rc, z1 = zR + Rc, zs = new Set();
   const nS = Math.ceil((z0 - z1) / 0.09);
   for (let i = 0; i <= nS; i++) zs.add(+(z0 + (z1 - z0) * (i / nS)).toFixed(4));
   for (const a of arches) for (let k = 0; k <= 14; k++) { const z = a.z - a.r + (2 * a.r * k) / 14; if (z < z0 && z > z1) zs.add(+z.toFixed(4)); }
   const zl = [...zs].sort((a, b) => b - a);
-  // birbirine çok yakın sütunları ayıkla (ince üçgen ve gölge kırığı yapar)
   const zf = zl.filter((z, i) => i === 0 || zl[i - 1] - z > 0.02);
   for (const z of zf) cols.push({ k: 's', z });
   for (let i = 1; i <= NA; i++) cols.push({ k: 'ar', t: i / NA });
   for (let i = 1; i <= NR; i++) cols.push({ k: 'r', t: i / NR });
+  // out: [x, z, nx, nz]
   const pt = (c, y, out) => {
-    // (x, z) bu yükseklikte
-    if (c.k === 's') { out[0] = S.hw(y, c.z); out[1] = c.z; return; }
+    if (c.k === 's') { out[0] = S.hw(y, c.z); out[1] = c.z; out[2] = 1; out[3] = 0; return out; }
     const front = c.k === 'f' || c.k === 'af', zE = front ? zF : zR, sg = front ? 1 : -1;
     const cz = zE - sg * Rc, cx = S.hw(y, cz) - Rc;
-    if (c.k === 'f' || c.k === 'r') { const t = c.k === 'f' ? c.t : 1 - c.t; out[0] = t * cx; out[1] = zE; return; }
+    if (c.k === 'f' || c.k === 'r') { const t = c.k === 'f' ? c.t : 1 - c.t; out[0] = t * cx; out[1] = zE; out[2] = 0; out[3] = sg; return out; }
     const th = (c.k === 'af' ? c.t : 1 - c.t) * Math.PI / 2;
-    out[0] = cx + Rc * Math.sin(th); out[1] = cz + sg * Rc * Math.cos(th);
+    out[0] = cx + Rc * Math.sin(th); out[1] = cz + sg * Rc * Math.cos(th); out[2] = Math.sin(th); out[3] = sg * Math.cos(th);
+    return out;
+  };
+  S._plan = { cols, pt, zF, zR, Rc, box, arches };
+  return S._plan;
+}
+// yarım ızgara → iki yan (ayna, sarım çevrilir), yumuşak normaller; normal dışa bakmıyorsa sarım çevrilir
+function mirrorHalf(pos, idx, outward = true) {
+  const half = new THREE.BufferGeometry(); half.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); half.setIndex(idx);
+  const mir = half.clone(); mir.scale(-1, 1, 1);
+  const mi = mir.index.array; for (let i = 0; i < mi.length; i += 3) { const t = mi[i]; mi[i] = mi[i + 2]; mi[i + 2] = t; }
+  const g = mergeVertices(mergeGeometries([half, mir]), 1e-4);
+  g.computeVertexNormals();
+  return g;
+}
+// Çevre boyunca bant (tampon, sarmal far/stop, marşpiyel): sel(x,z) seçilen sütunlarda, y0..y1 arası, gövdeden off kadar dışarıda,
+// ortası bulge kadar şişkin, üst/alt kenarı içe yuvarlanır. side: 0 iki yan (ayna), 1/-1 yalnız o yan.
+function planBand(S, sel, y0, y1, off, bulge, side = 0, NY = 6) {
+  const P = planOutline(S), o = [0, 0, 0, 0], ym = (y0 + y1) / 2;
+  const cols = P.cols.filter((c) => { P.pt(c, ym, o); return sel(o[0], o[1]); });
+  const pos = [], idx = [];
+  for (const c of cols) for (let j = 0; j <= NY; j++) {
+    const v = j / NY, y = y0 + (y1 - y0) * v;
+    P.pt(c, y, o);
+    const e = Math.sin(v * Math.PI), d = off + bulge * Math.sqrt(e) - (1 - Math.sqrt(e)) * 0.012;
+    pos.push(o[0] + o[2] * d, y, o[1] + o[3] * d);
+  }
+  const R = NY + 1;
+  for (let i = 0; i + 1 < cols.length; i++) for (let j = 0; j < NY; j++) { const a = i * R + j, c = a + R; idx.push(a, a + 1, c, a + 1, c + 1, c); }
+  let g;
+  if (side === 0) g = mirrorHalf(pos, idx);
+  else { g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); if (side < 0) { g.scale(-1, 1, 1); } g.computeVertexNormals(); }
+  // dışa baksın: köşe ortalamasıyla normal karşılaştırması
+  const n = g.attributes.normal, p = g.attributes.position; let sdot = 0;
+  for (let i = 0; i < n.count; i++) sdot += n.getX(i) * p.getX(i) + n.getZ(i) * p.getZ(i);
+  if (sdot < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
+  return g;
+}
+function bodyShell(S) {
+  const { cl } = S;
+  const P = planOutline(S), { cols, zF, zR, Rc, box, arches } = P;
+  const pt = (c, y, out) => P.pt(c, y, out);
+  const yTop = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
+  const yBot = (z) => {
+    for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
+    return cl;
   };
   const NW = 11, NC = 9, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
-  const pos = [], idx = [], xz = [0, 0];
+  const pos = [], idx = [], xz = [0, 0, 0, 0];
   const rows = NW + NC + 1;
   for (const c of cols) {
     pt(c, (cl + S.belt) / 2, xz);
@@ -759,11 +798,7 @@ function bodyShell(S) {
     const a = i * rows + j, b = a + 1, c = a + rows, d = c + 1;
     idx.push(a, b, c, b, d, c);
   }
-  const half = new THREE.BufferGeometry(); half.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); half.setIndex(idx);
-  const mir = half.clone(); mir.scale(-1, 1, 1);
-  const mi = mir.index.array; for (let i = 0; i < mi.length; i += 3) { const t = mi[i]; mi[i] = mi[i + 2]; mi[i + 2] = t; }
-  const g = mergeVertices(mergeGeometries([half, mir]), 1e-4);
-  g.computeVertexNormals();
+  const g = mirrorHalf(pos, idx);
   // sarım dışa bakmalı: yan duvardaki bir normalin x işareti
   const n = g.attributes.normal; let sx = 0; for (let i = 0; i < n.count; i++) sx += n.getX(i) * Math.sign(g.attributes.position.getX(i));
   if (sx < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
@@ -791,20 +826,75 @@ function buildGenericBody(B, S) {
   const open = S.open;
   const pw = S.pillar;
   const edgeAt = (a, c, y) => a[0] + (c[0] - a[0]) * ((y - a[1]) / (c[1] - a[1]));
-  if (!open) {
-    const roofPts = [[rf[0] + 0.02, rf[1] - T, 0], [rf[0], rf[1], cab.roofR * 0.6], [(rf[0] + rr[0]) / 2, H + 0.02, 0], [rr[0], rr[1], cab.roofR * 0.6], [rr[0] + 0.02, rr[1] - T, 0]];
-    B.p(shapeX(extrudeSide(roofPts, W, 0.03, 3), S, true));
-  }
-  // A ve C direkleri (açık kasada yalnız ön cam çerçevesi)
-  for (const s of [1, -1]) {
-    const yA0 = b, yA1 = rf[1] - 0.02;
-    B.p(beam(s * (S.hw(yA0 + 0.01, ws[0]) - pw * 0.4), yA0, ws[0] - 0.02, s * (S.hw(yA1, rf[0]) - pw * 0.4), yA1, rf[0] - 0.02, pw, pw));
-    if (open) continue;
-    B.p(beam(s * (S.hw(b + 0.01, rw[0]) - pw * 0.4), b, rw[0] + 0.02, s * (S.hw(rr[1] - 0.02, rr[0]) - pw * 0.4), rr[1] - 0.02, rr[0] + 0.02, pw * 1.3, pw));
-    for (const zp of S.pillars) {
-      const y1 = H - 0.03;
-      B.p(beam(s * (S.hw(b + 0.01, zp) - pw * 0.4), b, zp, s * (S.hw(y1, zp) - pw * 0.4), y1, zp, pw * 1.2, pw));
+  // [araç] Tavan ve direkler. Eski tavan kalın bir levha, direkler gövdeden taşan kare kirişti. Şimdi: tavan, ön/arka cam
+  // üst kenarından başlayıp bombeli ve kenarları yuvarlanan ızgara yüzey (altında koyu tavan döşemesi); direkler cam
+  // düzlemine yatık ince şeritler (B direği parlak siyah). Cam kenarlarında koyu bant (serigrafi) ayrı şerittir.
+  const yG1 = H - cab.roofR * 0.6 - 0.05; // yan cam üst kenarı
+  const lineZ = (a, c, y) => a[0] + (c[0] - a[0]) * ((y - a[1]) / (c[1] - a[1]));
+  const wsTop = (y) => lineZ([ws[0], b], rf, y), rwTop = (y) => lineZ([rw[0], b], rr, y);
+  const strip = (zA, zB, ya, yb, off, n = 6) => {
+    // yan düzlemde (iki yanda) y boyunca şerit: zA(y)..zB(y) arası
+    const out = [];
+    for (const s of [1, -1]) {
+      const pos = [], idx = [];
+      for (let i = 0; i <= n; i++) {
+        const y = ya + ((yb - ya) * i) / n, z0 = zA(y), z1 = zB(y);
+        pos.push(s * (S.hw(y, z0) + off), y, z0, s * (S.hw(y, z1) + off), y, z1);
+        if (i < n) { const a = i * 2; if (s > 0) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); else idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+      out.push(g);
     }
+    return out;
+  };
+  if (!open) {
+    // tavan ızgarası: z istasyonları ön cam üst çizgisinden arka cam üst çizgisine
+    const zs = [wsTop(yG1 - 0.01)], NZ = 10;
+    for (let j = 0; j <= NZ; j++) zs.push(rf[0] + ((rr[0] - rf[0]) * j) / NZ);
+    zs.push(rwTop(yG1 - 0.01));
+    const NX = 12, pos = [], idx = [], pos2 = [];
+    zs.forEach((z, j) => {
+      const end = j === 0 || j === zs.length - 1;
+      for (let i = 0; i <= NX; i++) {
+        const u = (i / NX) * 2 - 1, au = Math.abs(u);
+        const hwr = S.hw(H - 0.02, z) - 0.004, hwe = S.hw(yG1, z) + 0.004;
+        // kenar yuvarlanması: |u| 0.82'den sonra yan cam üst kenarına iner
+        const e = Math.max(0, (au - 0.82) / 0.18), x = Math.sign(u) * (au <= 0.82 ? au / 0.82 * (hwr - 0.05) : hwr - 0.05 + (hwe - hwr + 0.05) * Math.sin(e * Math.PI / 2));
+        let y = H + 0.015 - 0.035 * u * u;
+        if (au > 0.82) y = y - (y - yG1 + 0.01) * (1 - Math.cos(e * Math.PI / 2));
+        if (end) y = Math.min(y, yG1 - 0.01 + (H - yG1) * 0.15 * (1 - u * u));
+        pos.push(x, y, z); pos2.push(x * 0.97, y - 0.025, z);
+      }
+    });
+    for (let j = 0; j + 1 < zs.length; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, c = a + NX + 1; idx.push(a, a + 1, c, a + 1, c + 1, c); }
+    const mk = (P, flip) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(flip ? idx.map((v, k) => idx[k - (k % 3) + (2 - (k % 3))]) : idx.slice()); g.computeVertexNormals(); return g; };
+    let roof = mk(pos, false);
+    if (roof.attributes.normal.getY(Math.floor(NX / 2)) < 0) roof = mk(pos, true);
+    const liner = mk(pos2, roof.index.array[1] === idx[1]);
+    B.p(roof, 'roof'); B.d(liner, 0x4a4640);
+  }
+  // A direği: yan düzlemde ön cam çizgisi boyunca + ön cam düzleminde kenar şeridi
+  const pwA = pw * 1.05;
+  for (const g of strip((y) => wsTop(y) + 0.012, (y) => wsTop(y) - pwA, b + 0.005, open ? rf[1] - 0.02 : yG1 + 0.02, 0.006)) B.p(g);
+  for (const s of [1, -1]) {
+    const pts = [];
+    for (const y of [b + 0.005, open ? rf[1] - 0.02 : yG1 + 0.02]) { const z = wsTop(y); pts.push([s * (S.hw(y, z) + 0.006), y, z + 0.004], [s * (S.hw(y, z) - pw * 0.9 - 0.012), y, z + 0.004]); }
+    let g = polyGeo([pts[0], pts[1], pts[3], pts[2]]); if (g.attributes.normal.getZ(0) < 0) g = polyGeo([pts[2], pts[3], pts[1], pts[0]]);
+    B.p(g);
+  }
+  if (!open) {
+    // C direği (yan düzlemde arka cam çizgisinden öne) + arka cam düzleminde kenar şeridi
+    const pwC = S.windows.length ? Math.max(pw * 1.3, (rwTop(b) - rwTop(yG1)) * 0.0 + pw * 1.3) : pw;
+    for (const g of strip((y) => rwTop(y) + pwC, (y) => rwTop(y) - 0.012, b + 0.005, yG1 + 0.02, 0.006)) B.p(g);
+    for (const s of [1, -1]) {
+      const pts = [];
+      for (const y of [b + 0.005, yG1 + 0.02]) { const z = rwTop(y); pts.push([s * (S.hw(y, z) + 0.006), y, z - 0.004], [s * (S.hw(y, z) - pw * 1.1 - 0.012), y, z - 0.004]); }
+      let g = polyGeo([pts[0], pts[1], pts[3], pts[2]]); if (g.attributes.normal.getZ(0) > 0) g = polyGeo([pts[2], pts[3], pts[1], pts[0]]);
+      B.p(g);
+    }
+    // ara direkler: modern gövdede parlak siyah, eski/askerî gövdede boya
+    const blackB = S.lights !== 'old' && S.st !== 'bus';
+    for (const zp of S.pillars) for (const g of strip(() => zp + pw * 0.6, () => zp - pw * 0.6, b + 0.005, yG1 + 0.015, 0.007, 2)) { if (blackB) B.d(g, 0x0b0b0c); else B.p(g); }
   }
   if (open) {
     // ön cam üst çıtası + kokpit yan duvarları (gövde kabuğu kokpitte çukur; kapılar ayrı ince duvar)
@@ -856,6 +946,9 @@ function buildGenericBody(B, S) {
     const poly = clipZ(trap, zLo, zHi);
     if (poly.length < 3) return;
     for (const s of [1, -1]) B.gl(polyGeo(poly.map((p) => [s * (S.hw(p[1], p[0]) + 0.003), p[1], p[0]])), `g_${s > 0 ? 'L' : 'R'}${wi}`);
+    // pencere çıtası: alt kenarda krom/siyah fitil, üst kenarda koyu bant
+    const zTop = poly.filter((p) => p[1] > y1 - 1e-3).map((p) => p[0]);
+    if (zTop.length >= 2) for (const g of strip(() => Math.max(...zTop), () => Math.min(...zTop), y1 - 0.025, y1 + 0.004, 0.005, 1)) B.d(g, 0x0a0a0a);
   });
   // iç mekân zemini (bel çizgisinde koyu kaplama)
   if (!open) B.d(bx(W - 0.3, 0.012, Math.abs(ws[0] - rw[0]) - 0.1, 0, b + 0.006, (ws[0] + rw[0]) / 2), S.interior);
@@ -893,6 +986,81 @@ function buildGenericBody(B, S) {
   return { cabPoly };
 }
 
+
+// [araç] Binek ön/arka yüz: farlar, stoplar, tamponlar ve ızgara gövde çevresine (planBand) sarılır; kutu tamponlar köşede
+// gövdeden taşıyordu, farlar düz yüzde küçük kutulardı. Far: camlı mercek + iki projektör + altında gündüz farı şeridi,
+// köşede sinyal. Stop: köşeye sarılan kırmızı bölme + geri vites ve sinyal bölmeleri. Tampon: gövde renginde, altta koyu hava girişi.
+function buildFrontRearCar(B, S) {
+  const P = planOutline(S), { zF, zR, Rc } = P, { cl, W } = S;
+  const yTop = (z) => topYAt(S.top, z);
+  const yF = yTop(zF - 0.01) - 0.035, yRr = yTop(zR + 0.01) - 0.035;
+  const old = S.lights === 'old', rugged = S.st === 'jeep' || S.st === 'offroad', sport = S.st === 'sport' || S.st === 'coupe' || S.st === 'cabrio';
+  const hwF = S.hw(yF - 0.1, zF - Rc), hwR = S.hw(yRr - 0.1, zR + Rc);
+  const archF = S.arches[0] + S.archR + 0.03, archR = S.arches[S.arches.length - 1] - S.archR - 0.03;
+  const lampH = sport ? 0.09 : rugged ? 0.16 : 0.12;
+  const yL1 = yF - 0.03, yL0 = yL1 - lampH;
+  // --- farlar ---
+  if (old) {
+    for (const s of [1, -1]) {
+      const xh = s * hwF * 0.66, zz = zF + 0.006;
+      B.c(cyl(0.1, 0.1, 0.04, 18, 'z', xh, (yL0 + yL1) / 2, zz));
+      B.l(cyl(0.085, 0.08, 0.03, 18, 'z', xh, (yL0 + yL1) / 2, zz + 0.02), 0xdfe6ea, 0xfff2d8, 0);
+      B.l(rbx(0.1, 0.05, 0.03, 0.012, s * hwF * 0.9, yL0 - 0.06, zF - 0.02 + 0.03), 0xc07a10, 0xff8a10, s > 0 ? 3 : 4);
+    }
+  } else {
+    for (const s of [1, -1]) {
+      const sel = (x, z) => x > hwF * 0.4 && z > Math.max(archF, zF - Rc - 0.08);
+      B.l(planBand(S, sel, yL0, yL1, 0.006, 0.006, s, 4), 0xc9d2d8, 0xfff4e0, 0);
+      B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * 0.96, yL0 - 0.016, yL0 - 0.004, 0.012, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
+      B.l(planBand(S, (x, z) => sel(x, z) && z < zF - Rc * 0.55, yL0 + 0.01, yL1 - 0.01, 0.012, 0.004, s, 2), 0xd08a20, 0xff8a10, s > 0 ? 3 : 4);
+      for (const k of [0.5, 0.7]) {
+        const x = s * hwF * k, y = (yL0 + yL1) / 2, z = zF + 0.01;
+        B.d(cyl(lampH * 0.36, lampH * 0.36, 0.012, 14, 'z', x, y, z), 0x23272b);
+        B.l(cyl(lampH * 0.24, lampH * 0.24, 0.014, 14, 'z', x, y, z + 0.002), 0xeef3f6, 0xffffff, 0);
+      }
+    }
+  }
+  // --- ızgara (farların arası) ---
+  const gTop = old || rugged ? yL1 : yL1 - 0.01, gBot = rugged ? yL0 - 0.2 : yL0 - (sport ? 0.04 : 0.08);
+  const gx = old || rugged ? hwF * 0.52 : hwF * 0.38;
+  B.d(planBand(S, (x, z) => x < gx && z > zF - 0.02, gBot, gTop, 0.006, 0.004, 0, 3), 0x0b0b0c);
+  const gw = gx * 2 - 0.06;
+  if (S.grille === 'jeep') for (let i = -3; i <= 3; i++) B.d(bx(0.035, (gTop - gBot) * 0.85, 0.03, i * gw / 7.5, (gTop + gBot) / 2, zF + 0.014), S.solidColor || 0x2a2a2a);
+  else if (!sport) for (let i = 0; i < 4; i++) B.c(bx(gw, 0.008, 0.012, 0, gBot + (gTop - gBot) * (0.2 + i * 0.2), zF + 0.016));
+  else for (let i = 0; i < 9; i++) for (let k = 0; k < 2; k++) B.d(bx(0.012, (gTop - gBot) * 0.8, 0.012, (i - 4) * gw / 9 + k * 0.03, (gTop + gBot) / 2, zF + 0.014), 0x2a2a2c);
+  if (!rugged) B.c(cyl(0.04, 0.04, 0.016, 16, 'z', 0, (gTop + gBot) / 2, zF + 0.022));
+  // --- ön tampon ---
+  const bTop = gBot - 0.015, bSel = (x, z) => z > archF;
+  const bumpF = planBand(S, bSel, cl - 0.01, bTop, 0.016, 0.022, 0, 6);
+  if (S.bumper === 'chrome') B.c(bumpF, 'bumperF'); else if (S.bumper === 'dark') B.d(bumpF, 0x1a1a1a, 'bumperF'); else B.p(bumpF, 'bumperF');
+  const iTop = cl + Math.min(0.17, (bTop - cl) * 0.5);
+  S.plateYF = Math.min(bTop - 0.07, iTop + 0.075);
+  const intake = planBand(S, (x, z) => x < hwF * (sport ? 0.85 : 0.7) && z > zF - Rc * 0.6, cl + 0.03, iTop, 0.045, 0, 0, 2);
+  B.d(intake, 0x0a0a0a, 'bumperF');
+  if (!old && !rugged) for (const s of [1, -1]) B.d(rbx(0.16, 0.06, 0.03, 0.02, s * hwF * 0.8, cl + 0.1, zF + 0.035), 0x101010, 'bumperF');
+  if (sport) B.d(planBand(S, (x, z) => z > zF - Rc * 0.8, cl - 0.025, cl - 0.005, 0.07, 0, 0, 1), 0x0a0a0a, 'bumperF');
+  // --- stoplar ---
+  const tH = old ? 0.12 : 0.13, yT1 = yRr - 0.035, yT0 = yT1 - tH;
+  for (const s of [1, -1]) {
+    const sel = (x, z) => x > hwR * (old ? 0.55 : 0.36) && z < Math.min(archR, zR + Rc + 0.1);
+    B.l(planBand(S, sel, yT0, yT1, 0.006, 0.006, s, 3), 0x5a0808, 0xff1a0a, 1);
+    B.l(planBand(S, (x, z) => sel(x, z) && x < hwR * (old ? 0.7 : 0.5), yT0 + 0.012, yT1 - 0.012, 0.012, 0.004, s, 1), 0xd8d8d8, 0xffffff, 7);
+    B.l(planBand(S, (x, z) => sel(x, z) && x > hwR * 0.55 && z < zR + Rc * 0.7, yT0 - 0.04, yT0 - 0.008, 0.01, 0.002, s, 1), 0xb06a10, 0xff8a10, s > 0 ? 3 : 4);
+  }
+  // --- arka tampon + difüzör + egzoz ---
+  const rTop = Math.min(yT0 - 0.07, S.belt - 0.36);
+  const bumpR = planBand(S, (x, z) => z < archR, cl - 0.01, rTop, 0.016, 0.022, 0, 6);
+  if (S.bumper === 'chrome') B.c(bumpR, 'bumperR'); else if (S.bumper === 'dark') B.d(bumpR, 0x1a1a1a, 'bumperR'); else B.p(bumpR, 'bumperR');
+  B.d(planBand(S, (x, z) => x < hwR * 0.75 && z < zR + 0.02, cl + 0.01, cl + 0.09, 0.045, 0, 0, 1), 0x0c0c0c, 'bumperR');
+  for (const s of [1, -1]) B.l(rbx(0.1, 0.025, 0.02, 0.008, s * hwR * 0.85, rTop - 0.07, zR - 0.035), 0x6a0a0a, 0x400000, 1);
+  const ex = sport ? [-0.62, -0.5, 0.5, 0.62] : [-0.62];
+  for (const k of ex) { B.c(cyl(0.04, 0.042, 0.12, 14, 'z', k * hwR, cl + 0.06, zR - 0.02)); B.d(cyl(0.03, 0.03, 0.01, 12, 'z', k * hwR, cl + 0.06, zR - 0.081), 0x050505); }
+  // üçüncü stop
+  if (S.cab) B.l(bx(0.4, 0.035, 0.03, 0, S.cab.rr[1] - 0.055, S.cab.rr[0] + 0.02), 0x5a0808, 0xff1a0a, 2);
+  // plaka yuvası (arka): koyu çerçeve
+  S.bumpers = { zF: zF + 0.03, zR: zR - 0.03, w: hwF * 2, y: (cl + bTop) / 2 };
+  return { zFb: zF + 0.012, zRb: zR - 0.012 };
+}
 
 function buildFrontRear(B, S) {
   const { L, W, cl } = S;
@@ -1051,7 +1219,7 @@ function buildCarTemplate(type, def) {
   const S = specFor(type, def);
   const B = new Parts();
   buildGenericBody(B, S);
-  const fr = buildFrontRear(B, S);
+  const fr = CAR_LIKE.has(S.st) ? buildFrontRearCar(B, S) : buildFrontRear(B, S);
   const inter = buildInterior(B, S, def);
   const { L, W, H, cl } = S;
   const T = { S, decals: [], extras: [], plates: [], siren: false, wheelR: S.r, driver: inter.driver, seats: inter.seats };
@@ -1059,7 +1227,7 @@ function buildCarTemplate(type, def) {
   const liv = def.livery || st;
   // plakalar
   if (S.plate) {
-    T.plates.push([0, cl + 0.2, fr.zFb + 0.04, false]);
+    T.plates.push([0, S.plateYF || cl + 0.2, fr.zFb + 0.04, false]);
     const yP = st === 'truck' ? cl + 0.3 : st === 'bus' ? cl + 0.45 : (S.st === 'van' || st === 'swat' || st === 'ambulance') ? cl + 0.42 : (S.rearZ ? S.belt - 0.3 : cl + 0.3);
     T.plates.push([0, yP, (st === 'truck' ? -L / 2 : S.rearZ(yP)) - 0.012, true]);
     T.plateSlot = liv === 'taxi' ? [104, 119] : (liv === 'police' || st === 'swat') ? [120, 127] : [0, 103];
