@@ -313,52 +313,62 @@ export function wheelGeo(r, w, kind) {
   const key = `${r}|${w}|${kind}`;
   if (wheelCache.has(key)) return wheelCache.get(key);
   const parts = [];
-  const ri = r * (kind === 'moto' ? 0.82 : 0.66);
-  // lastik: yuvarlak omuzlu dönel profil (Y ekseninde, sonra X'e çevrilir)
-  const prof = [];
+  const moto = kind === 'moto', knob = kind === 'offroad' || kind === 'steel';
+  const ri = r * (moto ? 0.82 : kind === 'sport' ? 0.72 : kind === 'bus' || knob ? 0.6 : 0.66);
   const hw = w / 2;
-  prof.push(new THREE.Vector2(ri, -hw * 0.9));
-  for (let k = 0; k <= 6; k++) { const a = -Math.PI / 2 + (k / 6) * Math.PI / 2; prof.push(new THREE.Vector2(r - 0.04 + Math.cos(a) * 0.04 - 0.0, -hw + 0.04 + Math.sin(a) * 0.04 + 0.04)); }
-  for (let k = 0; k <= 6; k++) { const a = (k / 6) * Math.PI / 2; prof.push(new THREE.Vector2(r - 0.04 + Math.cos(a) * 0.04, hw - 0.04 + Math.sin(a) * 0.04)); }
-  prof.push(new THREE.Vector2(ri, hw * 0.9));
-  const tire = new THREE.LatheGeometry(prof, 22); tire.rotateZ(-Math.PI / 2);
-  parts.push(colorize(tire, 0x141414));
-  // diş blokları
-  const nT = kind === 'moto' ? 16 : 20;
-  for (let i = 0; i < nT; i++) {
-    const a = (i / nT) * Math.PI * 2;
-    const t = kind === 'offroad' ? new THREE.BoxGeometry(w * 0.92, 0.045, 0.09) : new THREE.BoxGeometry(w * 0.78, 0.022, 0.05);
-    t.translate(0, r + 0.004, 0); t.rotateX(a);
-    parts.push(colorize(t, 0x0c0c0c));
+  // [araç] lastik: yanaklı (dışa bombeli) dönel profil; yol lastiğinde sırtta üç boyuna oluk, arazi/askerî türde tırtık blokları
+  const prof = [], P = (rad, ax) => prof.push(new THREE.Vector2(rad, ax));
+  const side = (sg) => { const h = r - ri; return [[ri, 0.86], [ri + h * 0.25, 0.97], [ri + h * 0.55, 1.02], [ri + h * 0.82, 0.99], [r - 0.012, 0.9], [r - 0.002, 0.8]].map(([a, b]) => [a, sg * b * hw]); };
+  for (const [a, b] of side(-1)) P(a, b);
+  if (!knob && !moto) {
+    for (const g of [-0.42, 0, 0.42]) { const gw = 0.045 * hw * 2; P(r, (g - 0.08) * hw - gw / 2); P(r - 0.008, (g - 0.08) * hw); P(r - 0.008, (g + 0.08) * hw); P(r, (g + 0.08) * hw + gw / 2); }
+  } else P(r, 0);
+  for (const [a, b] of side(1).reverse()) P(a, b);
+  const tire = new THREE.LatheGeometry(prof, moto ? 22 : 30); tire.rotateZ(-Math.PI / 2);
+  parts.push(colorize(tire, 0x151515));
+  if (knob || moto) {
+    const nT = moto ? 16 : 22;
+    for (let i = 0; i < nT; i++) {
+      const a = (i / nT) * Math.PI * 2;
+      for (const sg of [-1, 1]) {
+        const t = knob ? new THREE.BoxGeometry(w * 0.44, 0.03, 0.08) : new THREE.BoxGeometry(w * 0.4, 0.014, 0.045);
+        t.translate(sg * w * 0.22, r - 0.006, sg * 0.03); t.rotateX(a + (sg > 0 ? Math.PI / nT : 0));
+        parts.push(colorize(t, 0x111111));
+      }
+    }
   }
-  const face = hw - 0.025;
-  const silver = kind === 'steel' ? 0x6a6e58 : kind === 'black' ? 0x2a2a2a : 0xb9bcc0;
-  // jant çanağı
-  parts.push(colorize(cyl(ri, ri, w * 0.86, 18, 'x', 0, 0, 0, true), 0x3a3a3a));
-  parts.push(colorize(new THREE.TorusGeometry(ri, 0.014, 6, 22).rotateY(Math.PI / 2).translate(face, 0, 0), silver));
-  if (kind === 'moto') {
-    // telli jant
+  const face = hw * 0.78;
+  const silver = kind === 'steel' ? 0x5c6250 : kind === 'black' ? 0x2a2a2a : kind === 'sport' ? 0x9a9ea4 : 0xbfc2c6;
+  // jant: iç çanak (koyu), dış dudak, göbek, bijonlar
+  parts.push(colorize(cyl(ri, ri, w * 0.8, 24, 'x', -0.01, 0, 0, true), 0x2c2c2c));
+  parts.push(colorize(new THREE.TorusGeometry(ri - 0.006, 0.012, 6, 30).rotateY(Math.PI / 2).translate(face, 0, 0), silver));
+  if (moto) {
     for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; parts.push(colorize(beam(0, 0, 0, 0, Math.cos(a) * ri, Math.sin(a) * ri, 0.008, 0.008, true), 0xc0c0c0)); }
     parts.push(colorize(cyl(0.05, 0.05, w, 10, 'x', 0, 0, 0), 0xa0a0a0));
     parts.push(colorize(cyl(r * 0.45, r * 0.45, 0.01, 18, 'x', face - 0.02, 0, 0), 0x8a8a8a));
   } else {
-    parts.push(colorize(cyl(r * 0.16, r * 0.18, 0.06, 10, 'x', face - 0.01, 0, 0), silver));
-    const nS = kind === 'sport' ? 10 : kind === 'suv' || kind === 'offroad' ? 6 : kind === 'steel' || kind === 'bus' ? 0 : 5;
+    const hub = ri * 0.24, dish = kind === 'sport' ? 0.035 : 0.022;
+    parts.push(colorize(cyl(hub, hub * 1.08, 0.04, 14, 'x', face - dish, 0, 0), silver));
+    parts.push(colorize(cyl(hub * 0.5, hub * 0.5, 0.012, 12, 'x', face - dish + 0.024, 0, 0), 0x1c1c1c));
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; parts.push(colorize(cyl(0.011, 0.011, 0.02, 6, 'x', face - dish + 0.02, Math.cos(a) * hub * 0.68, Math.sin(a) * hub * 0.68), 0x8a8a8a)); }
+    // kollar: tür başına sayı ve çift kol; göbekten dudağa dışa doğru kavisli (çanak)
+    const spec = { sport: [7, 2, 0.02], suv: [6, 1, 0.05], car: [5, 2, 0.026], offroad: [6, 1, 0.055], black: [5, 1, 0.06], steel: [0], bus: [0] }[kind] || [5, 2, 0.026];
+    const [nS, pair, sw] = spec;
     if (nS) {
-      for (let i = 0; i < nS; i++) {
-        const a = (i / nS) * Math.PI * 2;
-        const s = new THREE.BoxGeometry(0.03, ri - r * 0.16, kind === 'sport' ? 0.03 : 0.07);
-        s.translate(face - 0.015, r * 0.16 + (ri - r * 0.16) / 2, 0); s.rotateX(a);
-        parts.push(colorize(s, silver));
+      for (let i = 0; i < nS; i++) for (let k = 0; k < pair; k++) {
+        const a = (i / nS) * Math.PI * 2 + (pair > 1 ? (k - 0.5) * 0.2 : 0), a2 = a + (pair > 1 ? (k - 0.5) * 0.12 : 0);
+        const y0 = Math.cos(a) * hub * 0.9, z0 = Math.sin(a) * hub * 0.9, y1 = Math.cos(a2) * (ri - 0.012), z1 = Math.sin(a2) * (ri - 0.012);
+        parts.push(colorize(beam(face - dish + 0.008, y0, z0, face - 0.004, y1, z1, sw, 0.026), silver));
       }
     } else {
-      // çelik/otobüs jantı: disk + bijon
-      parts.push(colorize(cyl(ri * 0.97, ri * 0.97, 0.02, 18, 'x', face - 0.03, 0, 0), silver));
+      // çelik/otobüs jantı: delikli disk + bijon halkası
+      parts.push(colorize(cyl(ri * 0.97, ri * 0.97, 0.02, 24, 'x', face - 0.03, 0, 0), silver));
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; parts.push(colorize(cyl(0.02, 0.02, 0.03, 6, 'x', face - 0.01, Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3), 0x9a9a9a)); }
     }
-    // fren diski ve kaliper
-    parts.push(colorize(cyl(r * 0.52, r * 0.52, 0.025, 18, 'x', face - 0.11, 0, 0), 0x8c8c8c));
-    parts.push(colorize(bx(0.06, r * 0.28, r * 0.2, face - 0.08, r * 0.38, 0), kind === 'sport' ? 0xc0141a : 0x505050));
+    // fren diski (havalandırmalı halka görünümü) + kaliper
+    parts.push(colorize(cyl(ri * 0.82, ri * 0.82, 0.026, 26, 'x', face - 0.075, 0, 0), 0x7d7f82));
+    parts.push(colorize(cyl(ri * 0.42, ri * 0.42, 0.03, 16, 'x', face - 0.07, 0, 0), 0x3a3a3a));
+    parts.push(colorize(rbx(0.05, ri * 0.42, ri * 0.32, 0.012, face - 0.055, ri * 0.58, ri * 0.18), kind === 'sport' ? 0xb01218 : 0x3c3c40));
   }
   const g = mergeGeometries(parts);
   wheelCache.set(key, g);
@@ -503,7 +513,9 @@ function specFor(type, def) {
     S.handles = [L / 2 - 1.15];
     S.Hc = Hc;
   }
-  S.archR = S.r + S.arch; S.archY = S.r + 0.02;
+  // [araç] teker ile kavis arası gerçek araçta 3–5 cm (arazi türünde süspansiyon yolu için daha fazla)
+  S.archR = S.r + Math.min(S.arch * 0.7, 0.08); S.archY = S.r + 0.01;
+  S.shoulder = S.belt - Math.min(0.16, (S.belt - S.cl) * 0.28);
   if (!S.arches) S.arches = S.axles;
   if (!S.solid) S.solid = [];
   // yarı genişlik fonksiyonu: önden-arkadan daralma + kabin içe eğimi
@@ -513,7 +525,8 @@ function specFor(type, def) {
     const az = Math.min(1.05, Math.abs(z) / L2);
     if (az > S.taperStart) k *= 1 - S.taper * ((az - S.taperStart) / (1 - S.taperStart)) ** 2;
     if (y > S.belt + 1e-3) k *= S.cabW * (1 - S.tumble * Math.min(1, (y - S.belt) / (H - S.belt)));
-    else { const m = (S.cl + S.belt) / 2, hh = (S.belt - S.cl) / 2; k *= 1 - S.barrel * ((y - m) / hh) ** 2; }
+    else if (y > S.shoulder) { const t = (y - S.shoulder) / (S.belt - S.shoulder); k *= 1 - 0.022 * t * t; } // omuzdan kuşağa yuvarlanma
+    else { const t = (S.shoulder - y) / (S.shoulder - S.cl); k *= 1 - 0.012 * t - S.barrel * 0.9 * t * t; } // omuz çizgisi (kırık) → marşpiyele içe
     return k;
   };
   S.hw = (y, z) => (W / 2) * S.hwK(y, z);
@@ -669,20 +682,100 @@ export function sideDecal(S, z0, z1, y0, y1) {
   return mergeGeometries(parts);
 }
 
+// [araç] Alt gövde kabuğu. Eski yol yan profili x boyunca kalıp çıkarıp genişliği köşelerde büküyordu: yan yüzey tek bir
+// düz kapak üçgen yelpazesiydi (bombe yok, çapraz gölge lekeleri, köşeler dik). Burada gövde bir ızgara yüzeydir:
+// plan görünüşünde yuvarlatılmış dikdörtgen çevre (u) × yükseklik (duvar) + omuzdan omurgaya kapak (kaput/bagaj).
+// Genişlik S.hw (bombe, içe eğim, uç daralması), üst yükseklik S.top profili; böylece kapı, kaput paneli ve çıkartmalar
+// eski fonksiyonlarla aynı yüzeye oturur. Alt kenar teker kavislerini izler ve içe kıvrılır (çamurluk dudağı, marşpiyel).
+function bodyShell(S) {
+  const { L, cl } = S;
+  const box = S.st === 'van' || S.st === 'swat' || S.st === 'ambulance' || S.st === 'bus' || S.st === 'truck';
+  const tz = S.top.map((p) => p[0]);
+  const zF = Math.max(...tz) - 0.004, zR = Math.min(...tz) + 0.004;
+  const Rc = box ? 0.14 : Math.min(0.42, S.W * 0.2);
+  const yTop = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
+  const arches = S.arches.map((z) => ({ z, r: S.archR, y: S.archY }));
+  const yBot = (z) => {
+    for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
+    return cl;
+  };
+  // yarım çevre (x ≥ 0): ön düz → ön köşe yayı → yan → arka köşe yayı → arka düz. Her sütun: [x(y), z, tür]
+  const cols = [];
+  const NF = 4, NA = 7, NR = 4;
+  for (let i = 0; i < NF; i++) cols.push({ k: 'f', t: i / NF });
+  for (let i = 0; i < NA; i++) cols.push({ k: 'af', t: i / NA });
+  // yan sütunlar: düzgün aralık + teker kavislerinde sık örnek (kavis kenarı düzgün çıksın)
+  const z0 = zF - Rc, z1 = zR + Rc, zs = new Set();
+  const nS = Math.ceil((z0 - z1) / 0.09);
+  for (let i = 0; i <= nS; i++) zs.add(+(z0 + (z1 - z0) * (i / nS)).toFixed(4));
+  for (const a of arches) for (let k = 0; k <= 14; k++) { const z = a.z - a.r + (2 * a.r * k) / 14; if (z < z0 && z > z1) zs.add(+z.toFixed(4)); }
+  const zl = [...zs].sort((a, b) => b - a);
+  // birbirine çok yakın sütunları ayıkla (ince üçgen ve gölge kırığı yapar)
+  const zf = zl.filter((z, i) => i === 0 || zl[i - 1] - z > 0.02);
+  for (const z of zf) cols.push({ k: 's', z });
+  for (let i = 1; i <= NA; i++) cols.push({ k: 'ar', t: i / NA });
+  for (let i = 1; i <= NR; i++) cols.push({ k: 'r', t: i / NR });
+  const pt = (c, y, out) => {
+    // (x, z) bu yükseklikte
+    if (c.k === 's') { out[0] = S.hw(y, c.z); out[1] = c.z; return; }
+    const front = c.k === 'f' || c.k === 'af', zE = front ? zF : zR, sg = front ? 1 : -1;
+    const cz = zE - sg * Rc, cx = S.hw(y, cz) - Rc;
+    if (c.k === 'f' || c.k === 'r') { const t = c.k === 'f' ? c.t : 1 - c.t; out[0] = t * cx; out[1] = zE; return; }
+    const th = (c.k === 'af' ? c.t : 1 - c.t) * Math.PI / 2;
+    out[0] = cx + Rc * Math.sin(th); out[1] = cz + sg * Rc * Math.cos(th);
+  };
+  const NW = 11, NC = 9, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
+  const pos = [], idx = [], xz = [0, 0];
+  const rows = NW + NC + 1;
+  for (const c of cols) {
+    pt(c, (cl + S.belt) / 2, xz);
+    const zc = xz[1], yb = c.k === 's' ? yBot(zc) : cl, yt = yTop(zc) - 0.035;
+    // duvar: alttan omuza (alt 12 cm içe kıvrılır)
+    let topX = 0, topZ = 0;
+    const ys = S.shoulder, jS = ys > yb + 0.05 && ys < yt - 0.03 ? Math.round(((ys - yb) / (yt - yb)) * NW) : -1;
+    for (let j = 0; j <= NW; j++) {
+      const v = j / NW;
+      let y = yb + (yt - yb) * v;
+      if (jS > 0 && jS < NW) y = j <= jS ? yb + (ys - yb) * (j / jS) : ys + (yt - ys) * ((j - jS) / (NW - jS));
+      pt(c, y, xz);
+      let x = xz[0], z = xz[1];
+      const u = Math.max(0, 1 - (y - yb) / 0.12), d = tuck * u * u;
+      if (d > 0) { const nx = x, nz = c.k === 's' ? 0 : z - (c.k === 'f' || c.k === 'af' ? zF - Rc : zR + Rc), ln = Math.hypot(nx, nz) || 1; x -= (nx / ln) * d * (c.k === 'f' || c.k === 'r' ? 0 : 1); z -= (nz / ln) * d; if (c.k === 'f' || c.k === 'r') z -= Math.sign(z) * d; }
+      pos.push(x, y, z);
+      if (j === NW) { topX = xz[0]; topZ = xz[1]; }
+    }
+    // kapak: omuzdan omurgaya (x=0); omuz yuvarlatması mutlak mesafeyle
+    const qz = Math.max(zR + Rc, Math.min(zF - Rc, topZ)), D = Math.hypot(topX, topZ - qz);
+    for (let k = 1; k <= NC; k++) {
+      const t = (k / NC) ** 1.7, x = topX * (1 - t), z = topZ + (qz - topZ) * t, sd = t * D;
+      const hwz = Math.max(0.2, S.hw(S.belt, z));
+      const yc = yTop(z) - crown * Math.min(1, (x / hwz) ** 2);
+      const e = Math.min(1, sd / sh), bl = e * e * (3 - 2 * e);
+      pos.push(x, yt + (yc - yt) * bl, z);
+    }
+  }
+  const nc = cols.length;
+  for (let i = 0; i + 1 < nc; i++) for (let j = 0; j + 1 < rows; j++) {
+    const a = i * rows + j, b = a + 1, c = a + rows, d = c + 1;
+    idx.push(a, b, c, b, d, c);
+  }
+  const half = new THREE.BufferGeometry(); half.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); half.setIndex(idx);
+  const mir = half.clone(); mir.scale(-1, 1, 1);
+  const mi = mir.index.array; for (let i = 0; i < mi.length; i += 3) { const t = mi[i]; mi[i] = mi[i + 2]; mi[i + 2] = t; }
+  const g = mergeVertices(mergeGeometries([half, mir]), 1e-4);
+  g.computeVertexNormals();
+  // sarım dışa bakmalı: yan duvardaki bir normalin x işareti
+  const n = g.attributes.normal; let sx = 0; for (let i = 0; i < n.count; i++) sx += n.getX(i) * Math.sign(g.attributes.position.getX(i));
+  if (sx < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
+  return g;
+}
+
 function buildGenericBody(B, S) {
   const { L, W, H, cl } = S;
-  // --- alt gövde (çamurluk kavisleriyle) ---
+  // --- alt gövde kabuğu (çamurluk kavisleriyle) + koyu alt taban ---
   const arches = S.arches.map((z) => ({ z, r: S.archR, y: S.archY })).sort((a, b) => a.z - b.z);
-  const pts = [S.top[S.top.length - 1]];
-  for (const a of arches) {
-    pts.push([a.z - a.r, cl, 0]);
-    if (a.y > cl + 1e-3) pts.push([a.z - a.r, a.y, 0]);
-    for (let k = 1; k < 12; k++) { const t = Math.PI - (k / 12) * Math.PI; pts.push([a.z + Math.cos(t) * a.r, a.y + Math.sin(t) * a.r, 0]); }
-    if (a.y > cl + 1e-3) pts.push([a.z + a.r, a.y, 0]);
-    pts.push([a.z + a.r, cl, 0]);
-  }
-  for (let i = 0; i < S.top.length - 1; i++) pts.push(S.top[i]);
-  B.p(shapeX(extrudeSide(pts, W, S.bevel), S, false));
+  B.p(bodyShell(S));
+  B.d(bx(W - 0.3, 0.03, L * 0.82, 0, cl + 0.04, 0), 0x0d0d0d);
   // kavis içi koyu astar
   for (const a of arches) {
     const g = new THREE.CylinderGeometry(a.r - 0.015, a.r - 0.015, W - 0.12, 14, 1, true, -Math.PI / 2, Math.PI);
@@ -871,7 +964,7 @@ function buildInterior(B, S, def) {
   const ic = S.interior;
   const open = S.open;
   const seatY = open ? open.fy + 0.1 : Math.max(cl + 0.25, b - 0.42);
-  const dz = ws - 0.75;
+  const dz = ws - 0.95;
   const seats = [];
   // koltuk: minder + sırt + başlık. seats listesine oturma noktası (minder üstü, yerel) eklenir
   const seat = (x, z, wide, y = seatY, n = 1) => {
@@ -890,8 +983,8 @@ function buildInterior(B, S, def) {
     if (S.seats === 'van' && S.st === 'van') for (let z = dz - 1.0; z > -S.L / 2 + 0.6; z -= 0.9) seat(0, z, true, seatY, 3);
   }
   // gösterge paneli ve direksiyon (sürücü solda: +x)
-  B.d(rbx(W - 0.35, 0.16, 0.38, 0.05, 0, b + 0.04, ws - 0.2), 0x141414);
-  const dx = S.st === 'bus' ? W * 0.28 : W * 0.22, sy = b + 0.06, sz = ws - 0.48;
+  B.d(rbx(W - 0.35, 0.16, 0.32, 0.05, 0, b + 0.02, ws - 0.44), 0x141414);
+  const dx = S.st === 'bus' ? W * 0.28 : W * 0.22, sy = b + 0.06, sz = ws - 0.62;
   const ring = new THREE.TorusGeometry(S.st === 'bus' ? 0.24 : 0.18, 0.022, 6, 18);
   ring.rotateX(-0.45); ring.translate(dx, sy, sz);
   B.d(ring, 0x0e0e0e);
