@@ -324,7 +324,7 @@ export function wheelGeo(r, w, kind) {
     for (const g of [-0.42, 0, 0.42]) { const gw = 0.045 * hw * 2; P(r, (g - 0.08) * hw - gw / 2); P(r - 0.008, (g - 0.08) * hw); P(r - 0.008, (g + 0.08) * hw); P(r, (g + 0.08) * hw + gw / 2); }
   } else P(r, 0);
   for (const [a, b] of side(1).reverse()) P(a, b);
-  const tire = new THREE.LatheGeometry(prof, moto ? 22 : 30); tire.rotateZ(-Math.PI / 2);
+  const tire = new THREE.LatheGeometry(prof, moto ? 22 : 24); tire.rotateZ(-Math.PI / 2);
   parts.push(colorize(tire, 0x151515));
   if (knob || moto) {
     const nT = moto ? 16 : 22;
