@@ -1,0 +1,107 @@
+// Model atölyesi (geliştirme aracı; oyuna paketlenmez).
+// Kodla üretilen her modeli nötr stüdyo ışığında büyük ve net görüntüler, sayılarını verir, GLB olarak dışa aktarır.
+// Amaç: modeli yazan kişi çıktısına BAKARAK düzeltsin ("kod çalışıyor" kabul değildir).
+// Çalıştırma: node scripts/atolye.js --liste | node scripts/atolye.js insan:kahraman araba:sedan --gorunus q,f,s [--glb]
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { CARS } from '../game/economy.js';
+import { buildCarModel } from '../entities/vehicles.js';
+import { buildAircraftModel, AIR_TYPES } from '../entities/aircraft.js';
+import { buildBoatModel, BOAT_TYPES } from '../entities/boats.js';
+import { buildWeaponModel, WEAPON_ORDER } from '../game/weapons.js';
+import { CharacterModel, defaultLook, randomLook } from '../entities/character.js';
+import { REIS_LOOK, KENAN_LOOK, LEYLA_LOOK, ALI_LOOK } from '../game/story_data.js';
+import { RNG } from '../core/util.js';
+
+// ---- Katalog: kimlik → model üreten fonksiyon (THREE.Object3D döndürür) ----
+const CAT = {};
+const person = (look) => () => { const m = new CharacterModel(typeof look === 'function' ? look() : look); m.animate(0.016, { speed: 0 }); return m.root; };
+CAT['insan:kahraman'] = person(defaultLook('m'));
+CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
+CAT['insan:reis'] = person(REIS_LOOK);
+CAT['insan:kenan'] = person(KENAN_LOOK);
+CAT['insan:leyla'] = person(LEYLA_LOOK);
+CAT['insan:cinali'] = person(ALI_LOOK);
+const rng = new RNG(7);
+for (const kind of ['civilian', 'police', 'gang', 'swat', 'army']) for (let i = 1; i <= 2; i++) CAT[`insan:${kind}${i}`] = person(randomLook(rng, kind));
+for (const t of Object.keys(CARS)) CAT['araba:' + t] = () => buildCarModel(t);
+for (const t of Object.keys(AIR_TYPES)) CAT['hava:' + t] = () => buildAircraftModel(t);
+for (const t of Object.keys(BOAT_TYPES)) CAT['tekne:' + t] = () => buildBoatModel(t);
+for (const w of WEAPON_ORDER) if (w !== 'fists') CAT['silah:' + w] = () => buildWeaponModel(w);
+
+export const liste = () => Object.keys(CAT);
+
+// ---- Stüdyo ----
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+let R = null, scene, cam, key, fill, rim, holder, floor;
+function studio() {
+  if (R) return;
+  const canvas = document.getElementById('c');
+  R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  R.setPixelRatio(1); R.setSize(canvas.width, canvas.height, false);
+  R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.0;
+  R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x9aa0a8);
+  scene.environment = new THREE.PMREMGenerator(R).fromScene(new RoomEnvironment(), 0.04).texture;
+  key = new THREE.DirectionalLight(0xfff2e0, 2.6); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+  fill = new THREE.DirectionalLight(0xcfe0ff, 0.55); rim = new THREE.DirectionalLight(0xffffff, 1.1);
+  floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8f949b, roughness: 0.96, metalness: 0 }));
+  floor.receiveShadow = true;
+  holder = new THREE.Group();
+  scene.add(key, key.target, fill, rim, floor, holder);
+  cam = new THREE.PerspectiveCamera(28, canvas.width / canvas.height, 0.02, 2000);
+}
+
+// Görünüşler: q = ön-sol 3/4, f = ön, s = yan, b = arka 3/4, t = üst, yuz = yüz yakın planı (insanlar)
+const DIRS = { q: [-0.75, 0.38, 1], f: [0, 0.12, 1], s: [1, 0.1, 0], b: [0.75, 0.38, -1], t: [0, 1, 0.001], yuz: [-0.35, 0.05, 1], el: [-0.6, 0.2, 1] };
+
+function place(id) {
+  studio();
+  holder.clear();
+  const obj = CAT[id]();
+  obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  holder.add(obj); obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  obj.position.y -= box.min.y; obj.updateMatrixWorld(true); // zemine oturt
+  box.setFromObject(obj);
+  return { obj, box };
+}
+
+export function bilgi(id) {
+  const { obj, box } = place(id);
+  let tris = 0, meshes = 0; const mats = new Set();
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++; (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => mats.add(m));
+    const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1);
+  });
+  const s = box.getSize(V(0, 0, 0));
+  return { id, ucgen: Math.round(tris), ag: meshes, malzeme: mats.size, boyut: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2)] };
+}
+
+export function shot(id, view = 'q') {
+  const { box } = place(id);
+  const c = box.getCenter(V(0, 0, 0)), size = box.getSize(V(0, 0, 0));
+  let r = size.length() / 2;
+  if (view === 'yuz') { c.set(c.x, box.min.y + size.y * 0.925, c.z + size.z * 0.1); r = Math.max(0.2, size.y * 0.115); }
+  if (view === 'el') { c.set(box.min.x + size.x * 0.12, box.min.y + size.y * 0.47, c.z); r = Math.max(0.16, size.y * 0.1); }
+  const d = V(...(DIRS[view] || DIRS.q)).normalize();
+  const dist = r / Math.sin(THREE.MathUtils.degToRad(cam.fov / 2)) * 1.06;
+  cam.position.copy(c).addScaledVector(d, dist); cam.near = Math.max(0.02, dist - r * 3); cam.far = dist + r * 40; cam.updateProjectionMatrix(); cam.lookAt(c);
+  const R0 = size.length() / 2;
+  key.position.copy(c).add(V(-0.7, 1.25, 0.9).multiplyScalar(R0 * 3)); key.target.position.copy(c);
+  const sc = key.shadow.camera; sc.left = sc.bottom = -R0 * 1.7; sc.right = sc.top = R0 * 1.7; sc.near = 0.1; sc.far = R0 * 12; sc.updateProjectionMatrix();
+  fill.position.copy(c).add(V(1, 0.4, 0.6).multiplyScalar(R0 * 3)); rim.position.copy(c).add(V(0.4, 0.9, -1).multiplyScalar(R0 * 3));
+  R.render(scene, cam);
+  return R.domElement.toDataURL('image/jpeg', 0.9);
+}
+
+export function glb(id) {
+  const { obj } = place(id);
+  return new Promise((resolve, reject) => new GLTFExporter().parse(obj, (buf) => {
+    const u8 = new Uint8Array(buf); let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    resolve(btoa(s));
+  }, reject, { binary: true, onlyVisible: true, maxTextureSize: 1024 }));
+}

@@ -70,6 +70,11 @@ ipcMain.handle('save:read', (e, slot) => {
   return null;
 });
 ipcMain.handle('save:delete', (e, slot) => { const f = slotFile(slot); for (const c of [f, f + '.bak']) if (fs.existsSync(c)) fs.unlinkSync(c); return true; });
+// Oyun varlıkları (dokular, modeller): yalnızca app/assets altından ve yalnızca bilinen uzantılarla okunur.
+ipcMain.handle('asset:read', (e, rel) => {
+  if (typeof rel !== 'string' || rel.includes('..') || !/^[a-z0-9_/-]+\.(webp|jpg|png|glb)$/i.test(rel)) return null;
+  return fs.promises.readFile(path.join(__dirname, '..', 'app', 'assets', rel)).catch(() => null);
+});
 ipcMain.on('app:quit', () => finishQuit());
 ipcMain.on('app:quit-ready', () => finishQuit());
 ipcMain.on('app:fullscreen', (e, v) => { if (win) win.setFullScreen(!!v); });

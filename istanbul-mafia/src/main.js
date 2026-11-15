@@ -5,6 +5,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { addPostFX } from './world/postfx.js';
+import { photoReady, setPhotoTextures } from './core/phototex.js';
+if (/[?&]nophoto/.test(location.search)) setPhotoTextures(false); // karşılaştırma/test: yalnızca prosedürel dokular
 import { Input } from './core/input.js';
 import { audio } from './core/audio.js';
 import { Particles } from './core/particles.js';
@@ -256,6 +258,10 @@ class Game {
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.applySettings();
     window.addEventListener('resize', () => this.onResize());
+    // fotoğraf dokuları (CC0): ilk kareden önce yüklenmiş olsun; süre aşımında yer tutucularla açılır
+    await step(0.96, 'Dokular yükleniyor...');
+    this.photoTex = await photoReady();
+    mark('Fotoğraf dokuları');
     // ilk derleme
     this.env.time = 18.3; this.env.update(0.01, new THREE.Vector3(-110, 0, 10));
     this.uniforms.uNight.value = this.env.nightFactor;

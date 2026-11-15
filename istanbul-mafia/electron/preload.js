@@ -3,6 +3,7 @@ contextBridge.exposeInMainWorld('desktop', {
   writeSave: (slot, json) => ipcRenderer.invoke('save:write', slot, json),
   readSave: (slot) => ipcRenderer.invoke('save:read', slot),
   deleteSave: (slot) => ipcRenderer.invoke('save:delete', slot),
+  readAsset: (rel) => ipcRenderer.invoke('asset:read', rel), // app/assets altındaki dosyayı bayt olarak okur
   quit: () => ipcRenderer.send('app:quit'),
   // çıkış öncesi kayıt: ana süreç sorar, oyun kaydedip quitReady() der
   onQuitRequest: (cb) => ipcRenderer.on('app:quit-request', () => cb()),

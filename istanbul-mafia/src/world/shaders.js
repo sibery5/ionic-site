@@ -43,7 +43,7 @@ export function pbrMaterial(set, { color = 0xffffff, scale = 0.5, rough = 1, met
   mat.normalScale.set(normalScale, normalScale);
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uWet = SHARED.uWet;
-    sh.uniforms.uTexScale = { value: scale };
+    sh.uniforms.uTexScale = { value: set.tile ? 1 / set.tile : scale }; // fotoğraf dokusu: gerçek dünya ölçüsü
     sh.uniforms.uWetK = { value: wetK };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + WP_VERT_DECL)
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n' + WP_VERT);
@@ -118,7 +118,7 @@ export function terrainMaterial(maskTex, quality, { slab = false } = {}) {
         vec2 wp = vWP.xz;
         vec4 M = texture2D(tMask, (wp + 1000.0) / 2000.0);
         vec4 nzL = texture2D(tNoise, wp / 151.0), nzM = texture2D(tNoise, wp / 23.0);
-        vec2 uvA = wp / 5.0, uvP = wp / 2.4, uvC = wp / 1.7, uvG = wp / 3.1;
+        vec2 uvA = wp / ${(A.tile || 5).toFixed(2)}, uvP = wp / ${(P.tile || 2.4).toFixed(2)}, uvC = wp / ${(C.tile || 1.7).toFixed(2)}, uvG = wp / ${(G.tile || 3.1).toFixed(2)};
         vec4 aA = texture2D(tAA, uvA), nA = texture2D(tAN, uvA);
         vec4 aP = texture2D(tPA, uvP), nP = texture2D(tPN, uvP);
         vec4 aC = texture2D(tCA, uvC), nC = texture2D(tCN, uvC);
@@ -180,6 +180,7 @@ export function terrainMaterial(maskTex, quality, { slab = false } = {}) {
 // Bayraklar: 1 dükkân zemin, 2 cumba (tekdüze katlar), 4 kör yan duvar, 8 emniyet şeritleri
 export function facadeMaterial(quality) {
   const PL = plasterPBR(quality), BR = brickPBR(quality), nz = noiseTexture();
+  const pT = (PL.tile || 2.5).toFixed(2), bT = (BR.tile || 2).toFixed(2); // döşeme kenarı (m)
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, {
@@ -312,13 +313,13 @@ export function facadeMaterial(quality) {
             bool hasWin = winOK && abs(fx) < ww * 0.5 && fy > sill && fy < sill + wh;
             // duvar dokusu
             vec3 wall;
-            vec4 pa = texture2D(tPA, nuv / 2.5);
-            vec4 pn = texture2D(tPN, nuv / 2.5);
+            vec4 pa = texture2D(tPA, nuv / ${pT});
+            vec4 pn = texture2D(tPN, nuv / ${pT});
             vec4 mac = texture2D(tNoise, (vWP.xz + vWP.y * 0.7) / 43.0);
             vec4 nzM = texture2D(tNoise, vec2(u * 0.8 + faceId, v * 0.12));
             fN = pn.xyz * 2.0 - 1.0; fN.xy *= 0.6;
             if (st > 0.5 && st < 1.5) {
-              vec4 ba = texture2D(tBA, nuv / 2.0); vec4 bn = texture2D(tBN, nuv / 2.0);
+              vec4 ba = texture2D(tBA, nuv / ${bT}); vec4 bn = texture2D(tBN, nuv / ${bT});
               wall = mix(ba.rgb, ba.rgb * base * 1.2, 0.25); fN = bn.xyz * 2.0 - 1.0;
             } else if (st > 2.5 && st < 3.5) {
               // ahşap bindirme tahta (köşk/yalı)
@@ -335,10 +336,10 @@ export function facadeMaterial(quality) {
             // yaşlanma: sıva dökülmesi (tuğla görünür)
             // (seyrek ve soluk: uzaktan kan lekesi gibi görünmesin)
             if (st < 0.5 && age > 0.75 && mac.b > 0.86 - (age - 0.75) * 0.2 && v > 0.8) {
-              vec4 ba = texture2D(tBA, nuv / 2.0);
+              vec4 ba = texture2D(tBA, nuv / ${bT});
               float bl = dot(ba.rgb, vec3(0.3, 0.59, 0.11));
               vec3 brick = mix(vec3(bl), ba.rgb, 0.45) * 0.95;
-              wall = mix(wall, brick, 0.7); fN = texture2D(tBN, nuv / 2.0).xyz * 2.0 - 1.0;
+              wall = mix(wall, brick, 0.7); fN = texture2D(tBN, nuv / ${bT}).xyz * 2.0 - 1.0;
             }
             // kat silmeleri ve gölge çizgisi
             if (!cumba && st < 2.5 && fi >= 1.0) {
@@ -472,10 +473,10 @@ export function roofMaterial(quality) {
       .replace('#include <map_fragment>', `
         vec3 an = abs(vWN);
         if (vKind < 0.5) {
-          RUV = (an.x > an.z ? vWP.zx : vWP.xz) / 2.0;
+          RUV = (an.x > an.z ? vWP.zx : vWP.xz) / ${(RT.tile || 2).toFixed(2)};
           rA = texture2D(tRA, RUV); rN = texture2D(tRN, RUV);
         } else {
-          RUV = (an.y > max(an.x, an.z) ? vWP.xz : (an.x > an.z ? vWP.zy : vWP.xy)) / 2.5;
+          RUV = (an.y > max(an.x, an.z) ? vWP.xz : (an.x > an.z ? vWP.zy : vWP.xy)) / ${(PL.tile || 2.5).toFixed(2)};
           rA = texture2D(tPA, RUV); rN = texture2D(tPN, RUV);
           if (vKind > 1.5) { rA = vec4(vec3(0.95), 0.4); rN = vec4(0.5, 0.5, 1.0, 1.0); }
         }

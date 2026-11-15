@@ -157,8 +157,33 @@ Dosyalar: `world/mountain.js`, `world/terrain.js`, `world/traffic_ai.js`, `ui/bi
 - Her madde bitince commit. Ekip raporu: madde · durum · sayı · bilinen sorun · doğrulanamayan.
 - Birleşimden sonra baş mühendis kilit testleri kendisi koşar; dalga sonunda **birleştirilmemiş dal kalmadığını** denetler.
 
-## 6. Kullanıcıya açık sorular (iş bunları beklemez, varsayılanla ilerler)
+## 6. Kullanıcı kararları (1.4.1 sonrası)
 
-1. "Çatışma bugları": hangi durumda ne oluyor? (Varsayılan: C6 hata avı.)
-2. Villa konumu: Boğaz kıyısı mı, orman yamacı mı? (Varsayılan: Boğaz yamacı.)
-3. Araba sürüşünde en çok neyi beğenmedin: direksiyon, hızlanma, fren, kamera? (Varsayılan: H6.)
+| Konu | Karar | Plana etkisi |
+|---|---|---|
+| Villa konumu | Hem Boğaz kıyısında hem ormanda | V1: Boğaz kıyısında, koruluğun içinde tek malikâne; özel iskele, arkası orman |
+| Araba sürüşü | "Hissiyatsız, frenler tutmuyor" | H6 öne alındı ve genişletildi (aşağıda H6+) |
+| Çatışma | "Gerçekçi değil, imleç kötü, vurulma mekanikleri kötü" | C1 (nişangâh, tepme) ve vurulma tepkileri Dalga 2'nin ilk işi |
+| 3B modeller | Dış servis yok, **kodla devam** | 7. bölüm: model atölyesi. Kodla üretimin tavanı kullanıcıya söylendi |
+| Şehir dokuları | **Telifsiz (CC0) gerçek fotoğraf dokuları** | 7. bölüm: 9 doku seti bağlandı |
+
+**H6+ Sürüş hissi ve frenler.** Belirti: "hissiyatsız, frenler tutmuyor". Ölçülmüş durum: 100 km/s'den duruş 34,8 m (önceki dalga 15 m'den buraya çekti);
+fren basıncı 0,1 sn'de doluyor. Yapılacak: 100→0 duruş ≤ 28 m (klavyede tam fren anında), fren yaparken burun dalması (2–3°) ve fren lambası,
+ABS takırtısı ve lastik sesi, hız hissi (hıza bağlı görüş açısı, kamera titreşimi, rüzgâr sesi), direksiyonda ağırlık ve merkezleme, gaz/fren tepkisinde gecikme yok.
+Kabul: `drivefeel-steps.js`: 100→0 ≤ 28 m · tam frende 0,15 sn içinde yavaşlama ≥ 7 m/s² · burun dalması 2–3,5° · 30 m/s'de görüş açısı ≥ +6°.
+
+## 7. Görsel kalite hattı (kullanıcı kararıyla)
+
+Kullanıcı şikâyeti: "karakterler çöp adam gibi, şehir paint ile çizilmiş gibi, arabalar ve silahlar çok kötü; gerçek modelleme yap, render al, dosyaya kaydet."
+
+1. **Fotoğraf dokuları (CC0).** `assets/tex/` altında 9 set (asfalt, kaldırım, Arnavut kaldırımı, çim, sıva, tuğla, kiremit, kesme taş, ağaç kabuğu);
+   `scripts/assets/pack-textures.py` indirir ve paketler, `src/core/phototex.js` yükler, dosya yoksa prosedürel yedek devreye girer.
+   Masaüstünde dosyalar ana süreçten okunur (`asset:read`). Kurulum dosyası 100 MB sınırına yaklaştı (GitHub tek dosya sınırı): yeni doku eklerken bütçe gözetilir.
+   Sıradaki adaylar (dağ için): `aerial_grass_rock`, `rocky_terrain_02`.
+2. **Model atölyesi.** `scripts/atolye.js`: her modeli nötr stüdyo ışığında, büyük ve net görüntüler (ön, yan, 3/4), `docs/galeri/` altına kaydeder ve
+   modeli `assets/models/<ad>.glb` olarak dışa aktarır (her 3B görüntüleyicide açılır). Ekipler modeli **görüntüye bakarak** düzeltir;
+   önceki dalgalarda ekipler çıktılarına bakmadan "bitti" demişti, asıl kalite kaybı buradaydı.
+3. **Sıra:** kahraman karakterler → sıradan insanlar → arabalar → silahlar → tekneler/helikopterler → hayvanlar. Her sınıf için önce atölyede 3 kare,
+   sorun listesi, düzeltme, yeniden 3 kare. Kabul: önce/sonra kareleri kullanıcıya gösterilir.
+4. **Dürüst sınır:** kodla üretilen model, üretici 3B servislerinin (ör. TripoAI) görünümüne ulaşmaz. Hedef: doğru oran, temiz siluet, gerçek malzeme,
+   yakın planda sırıtmayan ayrıntı. Kullanıcı ileride dış servise izin verirse `assets/models/*.glb` yolu bunun için hazırdır.

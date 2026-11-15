@@ -16,6 +16,9 @@ esbuild.buildSync({
   legalComments: 'none',
 });
 for (const f of ['index.html', 'styles.css']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
+// oyun varlıkları (CC0 dokular vb.): assets/ -> app/assets/ (belge dosyaları hariç)
+const assets = path.join(root, 'assets');
+if (fs.existsSync(assets)) fs.cpSync(assets, path.join(out, 'assets'), { recursive: true, filter: (src) => !src.endsWith('.md') });
 const icon = path.join(root, 'build', 'icon.png');
 if (fs.existsSync(icon)) fs.copyFileSync(icon, path.join(out, 'icon.png'));
 console.log('Derlendi ->', out, (fs.statSync(path.join(out, 'game.js')).size / 1024).toFixed(0) + ' KB');

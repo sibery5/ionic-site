@@ -1,6 +1,8 @@
-// Tüm dokular kod ile üretilir (canvas). Hiçbir hazır görsel yoktur.
+// Dokular kod ile üretilir (canvas). Tek istisna: zemin/duvar/çatı yüzeylerinde telifsiz (CC0) fotoğraf dokuları
+// (phototex.js); dosya yüklenemezse buradaki prosedürel üreticiler yedek olarak kullanılır.
 import * as THREE from 'three';
 import { RNG } from './util.js';
+import { photoSet } from './phototex.js';
 
 const cache = new Map();
 
@@ -354,7 +356,7 @@ function makePBR(S, strength, fn) {
     const dx = (H[y * S + ((x + 1) % S)] - H[y * S + ((x - 1 + S) % S)]) * strength;
     const dy = (H[((y + 1) % S) * S + x] - H[((y - 1 + S) % S) * S + x]) * strength;
     const l = Math.hypot(dx, dy, 1);
-    nrm[i * 4] = (-dx / l * 0.5 + 0.5) * 255; nrm[i * 4 + 1] = (dy / l * 0.5 + 0.5) * 255; nrm[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255;
+    nrm[i * 4] = (-dx / l * 0.5 + 0.5) * 255; nrm[i * 4 + 1] = (-dy / l * 0.5 + 0.5) * 255; nrm[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255;
     nrm[i * 4 + 3] = Math.max(0, Math.min(255, H[i] * 255));
   }
   return { map: dataTex(col, S, true), normalMap: dataTex(nrm, S, false) };
@@ -384,7 +386,7 @@ function crackMask(S, n, seed) {
 const SQ = (q) => (q === 'low' ? 256 : 512);
 
 // Asfalt: agrega taneleri, çatlaklar, aşınma
-export function asphaltPBR(q) {
+function asphaltProc(q) {
   return cached('pbr:asphalt', () => {
     const S = SQ(q), cr = crackMask(S, 3, 31);
     return makePBR(S, 2.2, (u, v, o, x, y) => {
@@ -401,7 +403,7 @@ export function asphaltPBR(q) {
   });
 }
 // Kaldırım taşı: kare beton/taş plakalar, derz, kırık köşeler
-export function pavementPBR(q) {
+function pavementProc(q) {
   return cached('pbr:pave', () => {
     const S = SQ(q), N = 6;
     return makePBR(S, 3, (u, v, o) => {
@@ -424,7 +426,7 @@ export function pavementPBR(q) {
   });
 }
 // Arnavut kaldırımı: düzensiz yuvarlak taşlar (Voronoi)
-export function cobblePBR(q) {
+function cobbleProc(q) {
   return cached('pbr:cobble', () => {
     const S = SQ(q), N = 9;
     return makePBR(S, 3.2, (u, v, o) => {
@@ -450,7 +452,7 @@ export function cobblePBR(q) {
   });
 }
 // Çim: ot lifleri, sararmış lekeler, toprak
-export function grassPBR(q) {
+function grassProc(q) {
   return cached('pbr:grass', () => {
     const S = SQ(q);
     return makePBR(S, 2.5, (u, v, o, x, y) => {
@@ -466,7 +468,7 @@ export function grassPBR(q) {
   });
 }
 // Sıva: ince kum dokusu + mala izleri (renk binaya göre çarpılır, açık gri tabanlı)
-export function plasterPBR(q) {
+function plasterProc(q) {
   return cached('pbr:plaster', () => {
     const S = SQ(q);
     return makePBR(S, 1.6, (u, v, o, x, y) => {
@@ -478,7 +480,7 @@ export function plasterPBR(q) {
   });
 }
 // Tuğla: kırmızı-turuncu tuğlalar, açık harç
-export function brickPBR(q) {
+function brickProc(q) {
   return cached('pbr:brick', () => {
     const S = SQ(q), rows = 28, cols = 8;
     return makePBR(S, 3, (u, v, o) => {
@@ -498,7 +500,7 @@ export function brickPBR(q) {
   });
 }
 // Alaturka kiremit (oluklu), yosun ve kararmalar
-export function roofTilePBR(q) {
+function roofTileProc(q) {
   return cached('pbr:roof', () => {
     const S = SQ(q), cols = 10, rows = 5;
     return makePBR(S, 4, (u, v, o) => {
@@ -533,7 +535,7 @@ export function granitePBR(q) {
   });
 }
 // Kesme taş (yığma rıhtım duvarı, simge yapılar). Tonu malzemede çarpılır.
-export function ashlarPBR(q) {
+function ashlarProc(q) {
   return cached('pbr:ashlar', () => {
     const S = SQ(q), rows = 4, cols = 2;
     return makePBR(S, 3, (u, v, o) => {
@@ -551,7 +553,7 @@ export function ashlarPBR(q) {
   });
 }
 // Ağaç kabuğu (çınar: alacalı lekeler)
-export function barkPBR(q) {
+function barkProc(q) {
   return cached('pbr:bark', () => {
     const S = q === 'low' ? 128 : 256;
     return makePBR(S, 3, (u, v, o) => {
@@ -565,6 +567,18 @@ export function barkPBR(q) {
 }
 
 // Döşenebilir çok kanallı gürültü (RGBA, doğrusal): şader makro varyasyon & bulutlar
+// ---- Dışa açılan setler: önce fotoğraf dokusu, yoksa prosedürel yedek. Dönüş: { map, normalMap, tile? } ----
+const photo = (name, q, proc) => cached('photo:' + name, () => photoSet(name, q === 'low', () => proc(q)));
+export const asphaltPBR = (q) => photo('asphalt', q, asphaltProc);
+export const pavementPBR = (q) => photo('pave', q, pavementProc);
+export const cobblePBR = (q) => photo('cobble', q, cobbleProc);
+export const grassPBR = (q) => photo('grass', q, grassProc);
+export const plasterPBR = (q) => photo('plaster', q, plasterProc);
+export const brickPBR = (q) => photo('brick', q, brickProc);
+export const roofTilePBR = (q) => photo('roof', q, roofTileProc);
+export const ashlarPBR = (q) => photo('ashlar', q, ashlarProc);
+export const barkPBR = (q) => photo('bark', q, barkProc);
+
 export function noiseTexture() {
   return cached('noiseRGBA', () => {
     const S = 256, d = new Uint8Array(S * S * 4);
