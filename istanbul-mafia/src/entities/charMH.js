@@ -8,7 +8,7 @@ let HEAD = null, BUF = null, BASE0 = 0, TEX = null, OFF = false, ready = null;
 const TYPES = { int16: Int16Array, uint8: Uint8Array, uint16: Uint16Array, uint32: Uint32Array, float32: Float32Array };
 const arr = (s) => (s ? new TYPES[s[0]](BUF, BASE0 + s[1], s[2]) : null);
 
-function readBin(rel) {
+export function readBin(rel) {
   const d = typeof window !== 'undefined' && window.desktop;
   if (d && d.readAsset) return d.readAsset(rel).then((b) => { if (!b) throw new Error('yok: ' + rel); const u = new Uint8Array(b); return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength); });
   return new Promise((res, rej) => {
@@ -212,7 +212,10 @@ export function mhGeometry(spec, lod, acc, accMap) {
     let r = c[0], g = c[1], b = c[2];
     if (s === 0 && BK) { // sakal/bıyık: ten rengi saç rengine doğru koyulaşır
       const k = Math.min(1, (BK[0] * S.bw[i] + BK[1] * S.mw[i]) / 255);
-      if (k > 0.004) { r += (spec.beardCol[0] - r) * k; g += (spec.beardCol[1] - g) * k; b += (spec.beardCol[2] - b) * k; }
+      if (k > 0.004) {
+        const st = spec.beard === 'stubble' ? 0.55 : 0; // kirli sakal: saç rengi yerine koyulaşmış ten (gri leke olmasın)
+        r += (spec.beardCol[0] * (1 - st) + c[0] * 0.5 * st - r) * k; g += (spec.beardCol[1] * (1 - st) + c[1] * 0.46 * st - g) * k; b += (spec.beardCol[2] * (1 - st) + c[2] * 0.44 * st - b) * k;
+      }
     }
     col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
   }
@@ -227,4 +230,4 @@ export function mhGeometry(spec, lod, acc, accMap) {
 }
 const WHITE = [1, 1, 1];
 // [sakal bölgesi, bıyık bölgesi] koyuluğu
-const BEARD = { stubble: [0.42, 0.42], mustache: [0, 0.9], full: [0.9, 0.9], keci: [0.5, 0.9] };
+const BEARD = { stubble: [0.5, 0.45], mustache: [0, 0.9], full: [0.9, 0.9], keci: [0.5, 0.9] };

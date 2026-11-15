@@ -7,6 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { addPostFX } from './world/postfx.js';
 import { photoReady, setPhotoTextures } from './core/phototex.js';
 import { mhReady, setMH } from './entities/charMH.js';
+import { propsReady } from './core/props.js';
 if (/[?&]nomh/.test(location.search)) setMH(false); // karşılaştırma/test: kodla üretilen gövdeler
 if (/[?&]nophoto/.test(location.search)) setPhotoTextures(false); // karşılaştırma/test: yalnızca prosedürel dokular
 import { Input } from './core/input.js';
@@ -264,6 +265,7 @@ class Game {
     await step(0.96, 'Dokular yükleniyor...');
     this.photoTex = await photoReady();
     this.mhOk = await mhReady(); // gerçekçi insan gövdeleri (ilk karakter kurulmadan önce)
+    this.propCount = await propsReady(); // hazır modeller (silahlar)
     mark('Fotoğraf dokuları');
     // ilk derleme
     this.env.time = 18.3; this.env.update(0.01, new THREE.Vector3(-110, 0, 10));

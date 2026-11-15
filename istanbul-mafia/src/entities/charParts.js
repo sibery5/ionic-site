@@ -479,7 +479,7 @@ function mhSpec(L, R, top, pants, shoes, hat) {
     beard: f ? 'none' : L.beard || 'none', beardCol: [hc[0] / sk[0] * 0.5, hc[1] / sk[1] * 0.5, hc[2] / sk[2] * 0.5],
     // ten: dokunun kendi rengi korunur; görünüş tonu çoğunlukla parlaklık, az miktarda renk kayması olarak uygulanır
     colors: [[0, 1, 2].map((i) => gl + (tone[i] / base[i] - gl) * 0.3), lin(camo ? camo[0] : L.topColor || '#30405a'), lin(camo ? camo[2] : dressCol || L.pantsColor || '#2a3550'),
-      lin(L.shirtColor || '#e6e2da'), lin(L.shoesColor || '#1a1410'), lin(L.hairColor || '#1a1410', 1.6), [1, 1, 1]],
+      lin(camo ? camo[1] : L.shirtColor || '#e6e2da'), lin(L.shoesColor || '#1a1410'), lin(L.hairColor || '#1a1410', 1.6), [1, 1, 1]],
   };
 }
 const ACC_OFF = { chain: false, tespih: false, bag: null, camera: false, watch: false, ring: false, bandana: null, apron: false, tie: false, waistcoat: false, carry: null, gloves: null };

@@ -2,6 +2,7 @@
 // Modeller ExtrudeGeometry (eğimli kenarlı profiller), LatheGeometry (namlu, dürbün, el bombası)
 // ve kutulardan kurulur; her silahın geometrisi bir kez birleştirilip önbelleğe alınır.
 import * as THREE from 'three';
+import { propParts } from '../core/props.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { woodTexture } from '../core/textures.js';
 
@@ -659,8 +660,12 @@ Object.assign(DEFS, {
 
 // Birleştirilmiş geometri önbelleği: id -> [{geo, mat}], muzzle, ejector
 const CACHE = new Map();
+// hazır (CC0) modeli olan silahlar: namlu ucu ve kovan atma noktası modelin ölçüsüne göre
+const PROP_DEF = { pistol: { muzzle: [0, 0.026, 0.14], ejector: [0.008, 0.04, 0.03] }, sniper: { muzzle: [0, 0.047, 0.906], ejector: [0.02, 0.055, 0.07] } };
 function getDef(id) {
   if (CACHE.has(id)) return CACHE.get(id);
+  const pp = PROP_DEF[id] && propParts(id);
+  if (pp) { const pd = { ...PROP_DEF[id], parts: pp }; CACHE.set(id, pd); return pd; }
   const fn = DEFS[id];
   if (!fn) { CACHE.set(id, null); return null; }
   const d = fn();

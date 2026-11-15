@@ -468,7 +468,7 @@ ym = J['oris01____tail'][1]; yn = J['oris06____head'][1]; yc = J['jaw____tail'][
 x, y, z = PM[:, 0], PM[:, 1], PM[:, 2]; ax = np.abs(x)
 isb = np.zeros(NV, bool); isb[body_verts] = True
 face = isb & (b_W[:, BI['head']] > 0.5) & (z > 0.25) & (ax < 0.78)
-line = (ym - 0.14) + ss(0.2, 0.55, ax) * (ye - 0.3 - (ym - 0.14))          # sakal üst sınırı: ortada alt dudağın altı, yanlarda favori
+line = (ym - 0.14) + ss(0.25, 0.62, ax) * 0.42          # sakal üst sınırı: ortada alt dudağın altı, yanlarda favori
 beard = face * (1 - ss(line - 0.04, line + 0.1, y)) * ss(yc - 0.5, yc - 0.2, y) * (1 - ss(0.6, 0.78, ax) * (y > ym))
 lip_top = ym + 0.11 - 0.3 * np.maximum(0, ax - 0.12)
 stache = face * (z > 1.25) * ss(lip_top - 0.02, lip_top + 0.03, y) * (1 - ss(yn - 0.02, yn + 0.05, y)) * (1 - ss(0.3, 0.42, ax))
