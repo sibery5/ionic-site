@@ -29,6 +29,8 @@ for (const kind of ['civilian', 'police', 'gang', 'swat', 'army']) for (let i = 
 // [araç] stüdyoda ilk açık renk kullanılır: siyah boyada yüzey, kavis ve kapı çizgisi okunmuyor
 const acik = (cs) => cs.find((c) => { const k = new THREE.Color(c); return k.r + k.g + k.b > 0.35; }) || cs[0];
 for (const t of Object.keys(CARS)) CAT['araba:' + t] = () => buildCarModel(t, acik(CARS[t].colors));
+// [araç] uzak düzey (70 m ötesi) denetimi
+for (const t of ['sedan', 'suv', 'gt', 'hatch']) CAT['uzak:' + t] = () => { const m = buildCarModel(t, acik(CARS[t].colors)); const L = m.userData.lod; L.near.visible = false; L.far.visible = true; L.wheels.forEach((w) => { w.visible = false; }); return m; };
 for (const t of Object.keys(AIR_TYPES)) CAT['hava:' + t] = () => buildAircraftModel(t);
 for (const t of Object.keys(BOAT_TYPES)) CAT['tekne:' + t] = () => buildBoatModel(t);
 for (const w of WEAPON_ORDER) if (w !== 'fists') CAT['silah:' + w] = () => buildWeaponModel(w);

@@ -754,9 +754,11 @@ function planBand(S, sel, y0, y1, off, bulge, side = 0, NY = 6) {
   if (sdot < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
   return g;
 }
-function bodyShell(S) {
+function bodyShell(S, lo = false) {
   const { cl } = S;
-  const P = planOutline(S), { cols, zF, zR, Rc, box, arches } = P;
+  const P = planOutline(S), { zF, zR, Rc, box, arches } = P;
+  // uzak düzey (lo): her üç sütundan biri, az satır
+  const cols = lo ? P.cols.filter((c, i) => i % 3 === 0 || i === P.cols.length - 1) : P.cols;
   const pt = (c, y, out) => P.pt(c, y, out);
   // profil köşeleri (kaput ucu, bagaj kenarı) ±8 cm ortalamayla yuvarlanır: keskin kırık, sütunlar arasında dalgalı gölge yapıyordu
   const yTop0 = (z) => { const y = topYAt(S.top, Math.max(zR + 0.01, Math.min(zF - 0.01, z))); return y < 0 ? cl + 0.3 : y; };
@@ -766,7 +768,7 @@ function bodyShell(S) {
     for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
     return cl;
   };
-  const NW = 11, NC = 12, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
+  const NW = lo ? 3 : 11, NC = lo ? 4 : 12, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
   const pos = [], idx = [], xz = [0, 0, 0, 0];
   const rows = NW + NC + 1;
   for (const c of cols) {
@@ -1365,6 +1367,13 @@ function buildCarTemplate(type, def) {
   T.travel = st === 'offroad' || st === 'jeep' ? 0.16 : st === 'sport' || st === 'coupe' || st === 'cabrio' ? 0.07 : 0.1;
   T.pool = { w: W * 1.8, d: 9, z: L / 2 + 4.6 };
   T.open = !!S.open;
+  // [araç] uzak düzey (~70 m ötesi): kaba gövde kabuğu + koyu cam bloğu + düz tekerler, 2 çizim çağrısı, ~1 bin üçgen
+  {
+    const c = S.cab, darkP = [];
+    if (!S.open) darkP.push(colorize(shapeX(extrudeSide([[c.ws[0], S.belt - 0.02, 0], [c.rf[0], c.rf[1], 0.05], [c.rr[0], c.rr[1], 0.05], [c.rw[0], S.belt - 0.02, 0]], W * 0.98, 0.03, 1), S, true), 0x1c2228));
+    for (const w of T.wheels) darkP.push(colorize(cyl(S.r, S.r, S.tw, 10, 'x', w.x, S.r, w.z), 0x111111));
+    T.far = { paint: bodyShell(S, true), dark: mergeGeometries(darkP.map((g) => { if (g.index) g = g.toNonIndexed(); for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'color') g.deleteAttribute(k); return g; })) };
+  }
   finishTemplate(T, B);
   return T;
 }
@@ -1518,14 +1527,18 @@ export function buildCarModel(type, color) {
   root.add(chassis);
   const bodyM = new THREE.Mesh(T.paint, paintMat(color0, matte));
   bodyM.castShadow = true;
-  chassis.add(bodyM);
+  // [araç] yakın düzey ağları ayrı grupta: uzak düzeye geçişte yalnız grup görünürlüğü değişir (parçaların kendi
+  // görünürlüğüne — kopan çıkartma, kırık cam — dokunulmaz)
+  const near = new THREE.Group();
+  chassis.add(near);
+  near.add(bodyM);
   let darkM = null, chromeM = null;
-  if (T.dark) { darkM = new THREE.Mesh(T.dark, darkMat); darkM.castShadow = true; chassis.add(darkM); }
-  if (T.chrome) { chromeM = new THREE.Mesh(T.chrome, chromeMat); chassis.add(chromeM); }
+  if (T.dark) { darkM = new THREE.Mesh(T.dark, darkMat); darkM.castShadow = true; near.add(darkM); }
+  if (T.chrome) { chromeM = new THREE.Mesh(T.chrome, chromeMat); near.add(chromeM); }
   let glassM = null;
-  if (T.glass) { glassM = new THREE.Mesh(T.glass, T.panes && T.panes.length ? carGlassMat : glassMat); glassM.renderOrder = 2; chassis.add(glassM); }
+  if (T.glass) { glassM = new THREE.Mesh(T.glass, T.panes && T.panes.length ? carGlassMat : glassMat); glassM.renderOrder = 2; near.add(glassM); }
   const lightsMat = makeLightsMat();
-  if (T.lights) chassis.add(new THREE.Mesh(T.lights, lightsMat));
+  if (T.lights) near.add(new THREE.Mesh(T.lights, lightsMat));
   const decalMeshes = [];
   for (const d of T.decals) if (!d.fitted && !d.truck && d.tag !== 'hood') { fitSideDecal(d.geo, T.paint); d.fitted = true; }
   for (const d of T.decals) {
@@ -1534,17 +1547,17 @@ export function buildCarModel(type, color) {
       for (const s of [1, -1]) { const mm = s > 0 ? m : m.clone(); mm.position.set(s * (d.truck.W / 2 + 0.01), d.truck.y, d.truck.z); mm.rotation.y = s * Math.PI / 2; chassis.add(mm); }
       continue;
     }
-    chassis.add(m);
+    near.add(m);
     decalMeshes.push({ m, tag: d.tag });
   }
-  for (const e of T.extras) chassis.add(new THREE.Mesh(e.geo, extraMat(e.mat)));
+  for (const e of T.extras) near.add(new THREE.Mesh(e.geo, extraMat(e.mat)));
   let plateGeo = null;
   if (T.plates.length) {
     const [s0, s1] = T.plateSlot;
     const slot = s0 + Math.floor(Math.random() * (s1 - s0 + 1));
     const [pw, ph] = T.plateSize || [0.52, 0.115];
     plateGeo = mergeGeometries(T.plates.map(([x, y, z, back]) => plateQuad(slot, pw, ph, x, y, z, back)));
-    chassis.add(new THREE.Mesh(plateGeo, plateMaterial()));
+    near.add(new THREE.Mesh(plateGeo, plateMaterial()));
   }
   // taret (tank, zırhlı): yatay dönen grup + dikey dönen namlu grubu
   let turret = null, barrel = null;
@@ -1559,13 +1572,13 @@ export function buildCarModel(type, color) {
     if (T.barrelParts.dark) barrel.add(new THREE.Mesh(T.barrelParts.dark, darkMat));
   }
   // tekerlekler (kasadan bağımsız: süspansiyon/yalpa yalnız kasayı etkiler) + amortisörler
-  const wheels = [];
+  const wheels = [], wheelMeshes = [];
   for (const w of T.wheels) {
     const piv = new THREE.Group(); piv.position.set(w.x, w.y || T.wheelR, w.z);
     const flip = new THREE.Group(); if (w.side < 0) flip.rotation.y = Math.PI;
     const spin = new THREE.Group();
     piv.add(flip); flip.add(spin);
-    spin.add(new THREE.Mesh(T.wheelGeo, wheelMat));
+    const wm = new THREE.Mesh(T.wheelGeo, wheelMat); spin.add(wm); wheelMeshes.push(wm);
     let strut = null;
     if (T.strut && !T.moto) {
       strut = new THREE.Mesh(strutGeo(), darkMat);
@@ -1588,8 +1601,24 @@ export function buildCarModel(type, color) {
     bodyMesh: bodyM, darkMesh: darkM, chromeMesh: chromeM, glassMesh: glassM, decalMeshes, chassis, wheels, wheelR: T.wheelR, lights: lightsMat.userData, lightsMat,
     driverDummy: drv, driverTorso: drv, siren: T.siren, pool, plateGeo, turret, barrel, template: T, moto: !!T.moto,
   });
+  if (T.far) {
+    const far = new THREE.Group(); far.visible = false;
+    far.add(new THREE.Mesh(T.far.paint, paintMat(color0, matte)), new THREE.Mesh(T.far.dark, darkMat));
+    chassis.add(far);
+    root.userData.lod = { near, far, wheels: wheelMeshes, on: false };
+  }
   if (T.decorate) T.decorate(root, chassis, root.userData, color0);
   return root;
+}
+// [araç] uzaklık düzeyi: kameradan 75 m ötede kaba modele geç, 65 m içinde geri dön (sınırda titremesin). Kare içinde ayırma yok.
+export function updateCarLod(v, cam) {
+  const L = v.mesh.userData.lod;
+  if (!L) return;
+  const dx = cam.position.x - v.pos.x, dz = cam.position.z - v.pos.z, d2 = dx * dx + dz * dz;
+  const far = L.on ? d2 > 65 * 65 : d2 > 75 * 75;
+  if (far === L.on) return;
+  L.on = far; L.near.visible = !far; L.far.visible = far;
+  for (const m of L.wheels) m.visible = !far;
 }
 
 // Lastik izi (halka tampon, tek çizim çağrısı)
@@ -2678,6 +2707,7 @@ export class VehicleManager {
       if (v.ai && v.ai.mode === 'traffic') trafficCount++;
       if (v.parked && !v.driver) parkedCount++;
       if (v.sirenOn && !v.destroyed) _sirens.push(v);
+      if (g.camera) updateCarLod(v, g.camera);
     }
     this.sirens = _sirens;
     this.debris.update(dt);
