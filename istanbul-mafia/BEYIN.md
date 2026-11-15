@@ -174,3 +174,11 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
 
 **Dalga bitişi:** birleştir · birleştirilmemiş dal denetimi (`git branch --no-merged`) · toplu test (tek tek) · marka taraması · sürüm numarası · kurulum dosyası · kullanıcıya
 "yapılan / yapılamayan / doğrulanamayan / bakmanı istediklerim" raporu · geriye bakış bu dosyaya işlendi.
+
+### 1.6 dersleri (hazır içerik ve kota)
+- **Önce hazır CC0 içerik ara, sonra kodla çiz.** İnsan modelinde üç kota penceresi kodla yontmaya gitti ve sonuç manken kaldı;
+  CC0 MakeHuman verisine geçiş tek oturumda gerçek yüz, el ve kıyafet getirdi. Paket kayıtları (npm, PyPI) ve herkese açık git depoları ağ izni olmadan okunabiliyor.
+- **Lisansı resmî kaynaktan doğrula ve varlığın yanına yaz** (`assets/*/KAYNAK.md`). Topluluk katkılı parçaları (lisansı parça başına değişir) alma.
+- **Aynı anda tek ekip, o da en sonda test çalıştırır.** İki test tarayıcısı aynı anda çalışınca bellek sınırı tarayıcıyı öldürüyor ("Target crashed"); bu bir kod hatası değil, yeniden tek başına çalıştır.
+- **Görüntü yakalama:** kareyi çizdiğin görevde `toDataURL` ile oku; sonradan alınan ekran görüntüsü oyun döngüsünün karesini verir.
+- **Sadeleştirme dikişte bozar:** uv dikişli ağlarda sadeleştirme yırtık ve leke üretir; az sayıda görünen nesnede (silah) ağı tam bırak.
