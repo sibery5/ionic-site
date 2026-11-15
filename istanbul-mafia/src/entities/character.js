@@ -196,13 +196,13 @@ function geoFor(L, lod) {
   if (g) { geoCache.delete(k); geoCache.set(k, g); return g; }
   g = buildCharGeometry(L, lod);
   geoCache.set(k, g);
-  if (geoCache.size > 180) { const [ok, ov] = geoCache.entries().next().value; geoCache.delete(ok); ov.dispose(); }
+  if (geoCache.size > 180) { const [ok, ov] = geoCache.entries().next().value; geoCache.delete(ok); if (!ov.userData.shared) ov.dispose(); }
   return g;
 }
 // bağlama pozu ters matrisleri: vücut ölçüsü başına paylaşılır
 const invCache = new Map();
 function bindInverses(R) {
-  const k = [R.shX, R.hipX, R.hk, BONES.length].join('|');
+  const k = [R.shX, R.hipX, R.hk, R.mh || '', BONES.length].join('|');
   if (invCache.has(k)) return invCache.get(k);
   const out = BONES.map((n) => new THREE.Matrix4().makeTranslation(-R.pos[n][0], -R.pos[n][1], -R.pos[n][2]));
   invCache.set(k, out);

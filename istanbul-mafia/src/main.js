@@ -6,6 +6,8 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { addPostFX } from './world/postfx.js';
 import { photoReady, setPhotoTextures } from './core/phototex.js';
+import { mhReady, setMH } from './entities/charMH.js';
+if (/[?&]nomh/.test(location.search)) setMH(false); // karşılaştırma/test: kodla üretilen gövdeler
 if (/[?&]nophoto/.test(location.search)) setPhotoTextures(false); // karşılaştırma/test: yalnızca prosedürel dokular
 import { Input } from './core/input.js';
 import { audio } from './core/audio.js';
@@ -261,6 +263,7 @@ class Game {
     // fotoğraf dokuları (CC0): ilk kareden önce yüklenmiş olsun; süre aşımında yer tutucularla açılır
     await step(0.96, 'Dokular yükleniyor...');
     this.photoTex = await photoReady();
+    this.mhOk = await mhReady(); // gerçekçi insan gövdeleri (ilk karakter kurulmadan önce)
     mark('Fotoğraf dokuları');
     // ilk derleme
     this.env.time = 18.3; this.env.update(0.01, new THREE.Vector3(-110, 0, 10));

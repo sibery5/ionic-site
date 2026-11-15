@@ -36,6 +36,9 @@ for (const t of Object.keys(AIR_TYPES)) CAT['hava:' + t] = () => buildAircraftMo
 for (const t of Object.keys(BOAT_TYPES)) CAT['tekne:' + t] = () => buildBoatModel(t);
 for (const w of WEAPON_ORDER) if (w !== 'fists') CAT['silah:' + w] = () => buildWeaponModel(w);
 
+import { mhReady, setMH } from '../entities/charMH.js';
+// gerçekçi insan verisi (assets/mh) yüklenir; --eski ile kodla üretilen gövdeler görüntülenir
+export const hazir = (eski) => mhReady().then((ok) => { if (eski) setMH(false); return ok; });
 export const liste = () => Object.keys(CAT);
 
 // ---- Stüdyo ----

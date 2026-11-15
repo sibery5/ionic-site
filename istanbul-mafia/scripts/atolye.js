@@ -29,6 +29,9 @@ const [W, H] = opt('--boyut', '1600x900').split('x').map(Number);
   p.on('pageerror', (e) => console.log('[sayfa hatası]', e.message));
   await p.goto('file://' + path.join(work, 'index.html'));
   await p.waitForFunction(() => window.atolye && window.atolye.liste, null, { timeout: 120000 });
+  try { fs.symlinkSync(path.join(root, 'assets'), path.join(work, 'assets')); } catch (e) { /* var */ }
+  const mhOk = await p.evaluate((e) => atolye.hazir(e), flag('--eski'));
+  if (!mhOk) console.log('UYARI: gerçekçi insan verisi yüklenemedi (assets/mh)');
   const all = await p.evaluate(() => atolye.liste());
   if (flag('--liste')) { console.log(all.join('\n')); await b.close(); return; }
   const todo = flag('--hepsi') ? all : prefix ? all.filter((i) => i.startsWith(prefix)) : ids;

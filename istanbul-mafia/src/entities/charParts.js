@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { RNG } from '../core/util.js';
 import { TILE, TILE_SIZE, headDims, headUV, EYE_UV, LABEL_UV, gearLabel } from './charTex.js';
+import { mhVariant, mhGeometry, mhHead } from './charMH.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -66,6 +67,13 @@ export function rigFor(L) {
     pos['fi' + S] = [x, 0.9 - 0.094 * hk, 0]; pos['fd' + S] = [x, 0.9 - 0.13 * hk, 0]; pos['th' + S] = [x - s * 0.007, 0.9 - 0.022 * hk, 0.017 * hk];
     const hx = s * hipX;
     pos['hip' + S] = [hx, 0.92, 0]; pos['kn' + S] = [hx, 0.49, 0]; pos['an' + S] = [hx, 0.08, 0]; pos['toe' + S] = [hx, 0.025, 0.12];
+  }
+  // gerçekçi gövde (CC0 MakeHuman): kol/el eklemleri ve omuz-kalça genişliği gövde tipinden gelir; bacak boyları sabit kalır
+  const mv = L.noMH ? null : mhVariant(f, fat, age, mu, bk);
+  if (mv) {
+    const mp = mv.info.pos;
+    for (const n in mp) pos[n] = mp[n];
+    return { f, bk, sw, fat, age, mu, height: height * ((f ? 1.762 : 1.765) / mv.info.top), shX: mp.shL[0], hipX: mp.hipL[0], hk, pos, mh: mv.name, mhInfo: mv.info };
   }
   return { f, bk, sw, fat, age, mu, height, shX, hipX, hk, pos };
 }
@@ -426,7 +434,7 @@ function camoMat(pal, tile, rough) {
 export function lookKey(L, lod) {
   return [lod, L.gender, L.build, L.height, L.shoulders, L.fat, L.age, L.muscle, L.body, L.skin, L.top, L.topStyle, L.topColor, L.shirtColor, L.accentColor, L.pants, L.pantsStyle, L.pantsColor, L.dressLen, L.shoes, L.shoesStyle, L.shoesColor,
     L.chain, L.chainStyle, L.chainColor, L.hair, L.hairColor, L.beard, L.hat, L.hatStyle, L.hatColor, L.glasses, L.glassesStyle, L.glassesColor, L.tieColor, L.tie, L.watch, L.watchColor, L.ring, L.tespih, L.bag, L.bagColor,
-    L.carry, L.apron, L.apronColor, L.waistcoat, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.earringColor, L.tights, L.camo, L.eyeColor].join('|');
+    L.noMH, L.carry, L.apron, L.apronColor, L.waistcoat, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.earringColor, L.tights, L.camo, L.eyeColor].join('|');
 }
 
 // ---------------- LOD kalite tablosu ----------------
@@ -437,8 +445,65 @@ const LODQ = [
 ];
 
 // ================= ANA KURUCU =================
-export function buildCharGeometry(L, lod = 0) {
-  const R = rigFor(L), Q = LODQ[clamp(lod, 0, 2)], mb = new MB();
+// ---------------- gerçekçi gövde eşlemesi (görünüş -> gövde tipi, kıyafet, ayakkabı, saç) ----------------
+const MH_TOP_M = { suit: 'male_elegantsuit01', tuxedo: 'male_elegantsuit01', blazer: 'male_elegantsuit01', vest: 'male_elegantsuit01', coat: 'male_elegantsuit01', pardesu: 'male_elegantsuit01',
+  denim: 'male_casualsuit05', leather: 'male_casualsuit05', bomber: 'male_casualsuit05', army: 'male_casualsuit05', jandarma: 'male_casualsuit05', swat: 'male_casualsuit05',
+  shirt: 'male_casualsuit01', police: 'male_casualsuit01', police_shirt: 'male_casualsuit01', police_vest: 'male_casualsuit01', blouse: 'male_casualsuit03',
+  sweater: 'male_casualsuit02', hoodie: 'male_casualsuit02', track: 'male_casualsuit02', polo: 'male_casualsuit04', tshirt: 'male_casualsuit06', tank: 'male_casualsuit06', crop: 'male_casualsuit06' };
+const MH_TOP_F = { suit: 'male_elegantsuit01', tuxedo: 'male_elegantsuit01', blazer: 'male_casualsuit05', coat: 'male_casualsuit05', pardesu: 'male_casualsuit01', ferace: 'male_casualsuit01',
+  denim: 'male_casualsuit05', leather: 'male_casualsuit05', bomber: 'male_casualsuit05', army: 'male_casualsuit05', jandarma: 'male_casualsuit05', swat: 'male_casualsuit05',
+  shirt: 'male_casualsuit03', blouse: 'male_casualsuit03', police: 'male_casualsuit01', police_shirt: 'male_casualsuit01', police_vest: 'male_casualsuit01',
+  sweater: 'male_casualsuit02', hoodie: 'male_casualsuit02', track: 'female_sportsuit01', tank: 'female_sportsuit01', crop: 'female_sportsuit01', polo: 'female_casualsuit01', tshirt: 'female_casualsuit01' };
+const MH_SHOE = { sneaker: 'shoes05', hightop: 'shoes06', loafer: 'shoes01', polished: 'shoes03', boots: 'shoes04', wellies: 'shoes03', sandal: 'shoes02', heels: 'shoes03', flats: 'shoes01' };
+const MH_HAIR = { kisa: 'short02', arkaya: 'short04', yan_ayrik: 'short01', fade: 'short03', asker: 'short03', kel: null, kivircik: 'afro01', uzun: 'long01', dalgali: 'long01', kare: 'bob02', at_kuyrugu: 'ponytail01', topuz: 'bob01' };
+const _lin = new THREE.Color();
+const lin = (hex, k = 1) => { _lin.set(hex); return [_lin.r * k, _lin.g * k, _lin.b * k]; };
+function mhSpec(L, R, top, pants, shoes, hat) {
+  const f = R.f, H = mhHead();
+  const skirt = SKIRTS[pants] || top === 'dress' || top === 'sundress';
+  const modest = top === 'pardesu' || top === 'ferace' || hat === 'basortusu';
+  let outfit = f ? (skirt && !modest ? 'female_elegantsuit01' : (pants === 'shorts' || pants === 'minishort') && !modest ? 'female_casualsuit02' : MH_TOP_F[top] || 'female_casualsuit01') : MH_TOP_M[top] || 'male_casualsuit06';
+  if (L.apron || top === 'overall') outfit = 'male_worksuit01';
+  const covered = hat !== 'none' || L.helmet;
+  let hair = MH_HAIR[L.hair] !== undefined ? MH_HAIR[L.hair] : (f ? 'long01' : 'short02');
+  if (hat === 'basortusu' || L.helmet) hair = null; else if (covered && hair) hair = f ? 'ponytail01' : 'short04';
+  const skin = (f ? 'f_' : 'm_') + (R.age < 0.25 ? 'young' : R.age < 0.6 ? 'mid' : 'old');
+  const sm = H.skins[skin].mean; _lin.setRGB(sm[0], sm[1], sm[2], THREE.SRGBColorSpace);
+  const sk = [_lin.r, _lin.g, _lin.b]; // cilt dokusunun ortalama rengi (doğrusal)
+  const tone = lin(L.skin || '#e0b493'), base = lin('#f1d0b5'), hc = lin(L.hairColor || '#1a1410', 1.6);
+  const dressCol = top === 'dress' || top === 'sundress' ? L.topColor : null;
+  const camo = L.camo ? CAMO[L.camo] : null;
+  const gl = (0.2126 * tone[0] + 0.7152 * tone[1] + 0.0722 * tone[2]) / (0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2]);
+  return {
+    variant: R.mh, skin, outfit, shoes: MH_SHOE[shoes] || 'shoes05', hair, brow: f ? 'eyebrow001' : 'eyebrow010',
+    beard: f ? 'none' : L.beard || 'none', beardCol: [hc[0] / sk[0] * 0.5, hc[1] / sk[1] * 0.5, hc[2] / sk[2] * 0.5],
+    // ten: dokunun kendi rengi korunur; görünüş tonu çoğunlukla parlaklık, az miktarda renk kayması olarak uygulanır
+    colors: [[0, 1, 2].map((i) => gl + (tone[i] / base[i] - gl) * 0.3), lin(camo ? camo[0] : L.topColor || '#30405a'), lin(camo ? camo[2] : dressCol || L.pantsColor || '#2a3550'),
+      lin(L.shirtColor || '#e6e2da'), lin(L.shoesColor || '#1a1410'), lin(L.hairColor || '#1a1410', 1.6), [1, 1, 1]],
+  };
+}
+const ACC_OFF = { chain: false, tespih: false, bag: null, camera: false, watch: false, ring: false, bandana: null, apron: false, tie: false, waistcoat: false, carry: null, gloves: null };
+function accKeyOf(L, hat) {
+  return [hat, L.hatColor, L.glasses && (L.glassesStyle || 1), L.glassesColor, L.vest, L.vestColor, L.vestLabel, L.helmet, L.visor, L.earrings, L.earringColor, L.camo].join(',');
+}
+
+export function buildCharGeometry(L, lod = 0, accOnly = false) {
+  const R = rigFor(L);
+  if (R.mh && !accOnly) {
+    const top = topKind(L), pants = pantsKind(L), shoes = shoeKind(L), hat = hatKind(L);
+    const spec = mhSpec(L, R, top, pants, shoes, hat);
+    const need = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings;
+    spec.accKey = need ? accKeyOf(L, hat) : '';
+    let acc = null, accMap = null;
+    if (need) {
+      acc = buildCharGeometry({ ...L, ...ACC_OFF, noMH: true, beard: 'none' }, 1, true);
+      const D = headDims(R.f), hb = acc.userData.headBase, G = gearFit({ ...L, noMH: true });
+      accMap = { head: { c: [hb[0], hb[1] + D.cy, hb[2] + D.cz], r: [D.rx, D.ry, D.rz] }, torso: { rx: G.rx, rf: G.rf, rb: G.rb } };
+      if (!acc.index || !acc.index.count) acc = null;
+    }
+    return mhGeometry(spec, lod, acc, accMap);
+  }
+  const Q = LODQ[clamp(lod, 0, 2)], mb = new MB();
   const f = R.f, b = R.bk, fat = R.fat;
   const P = R.pos;
   const skinM = M(L.skin || '#e0b493', 'skin', 0.6, 0);
@@ -454,11 +519,12 @@ export function buildCharGeometry(L, lod = 0) {
   buildFeet(ctx);
   buildHead(ctx);
   buildHair(ctx);
+  if (accOnly) { ctx.mb = new MB(); ctx.accOnly = true; } // gövde yalnız ölçü için kuruldu; aksesuarlar ayrı ağa
   buildHat(ctx);
   buildExtras(ctx);
   buildGear(ctx);
-  const g = mb.geometry();
-  g.userData = { verts: mb.n, tris: mb.I.length / 3 };
+  const g = ctx.mb.geometry();
+  g.userData = { verts: ctx.mb.n, tris: ctx.mb.I.length / 3, headBase: ctx.headBase };
   return g;
 }
 
@@ -1396,7 +1462,7 @@ function beardCov(L, f) {
 }
 function buildBeard(c) {
   const { L, Q, f } = c;
-  if (!L.beard || L.beard === 'none' || L.beard === 'stubble' || f) return;
+  if (c.accOnly || !L.beard || L.beard === 'none' || L.beard === 'stubble' || f) return;
   const hc = L.hairColor || '#1a1410';
   const cov = beardCov(L, f);
   const capM = M(hc, 'haircap', 0.55);
@@ -1735,5 +1801,9 @@ export function gearFit(L) {
   if (R.f) rf += 0.028; // göğüs hacmi
   rf += 0.011 * R.mu + off; rb += 0.008 * R.mu + off; rx += off;
   const D = headDims(R.f), ht = HAIR_T[L.hair] || 0;
+  if (R.mh) { // gerçekçi gövde: ölçüler gövde tipinden (kıyafet payı ile); baş ölçüleri baş kemiğine göre
+    const hd = R.mhInfo.hd, ts = R.mhInfo.ts, hy = R.pos.head[1];
+    return { rx: ts.rx + 0.014, rf: ts.zf + 0.014, rb: -ts.zb + 0.014, headTop: hd.top - hy + 0.006, headRx: hd.rx + 0.01, headRz: (hd.zf - hd.zb) / 2 + 0.008 };
+  }
   return { rx, rf, rb, headTop: D.cy + D.ry + Math.min(ht, 0.012), headRx: D.rx + Math.min(ht, 0.012), headRz: D.rz + Math.min(ht, 0.012) };
 }

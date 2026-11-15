@@ -18,10 +18,13 @@ Bir şey "teknik olarak çalışıyor" diye bitmiş sayılmaz; oyuncu ona baktı
 4. **Performans hissiyatın parçasıdır:** Yeni bir özellik FPS'i düşürüyorsa bitmiş değildir. Ölç, sonra çıkar.
 
 ## Çalışma kuralları
-- Modeller, sesler ve müzik kodla üretilir; hazır model ya da ses kullanılmaz. Gerçek marka adı kullanılmaz.
-- Tek istisna (kullanıcı kararı, 1.5): şehir yüzeylerinde (asfalt, kaldırım, duvar, çatı, çim, taş, ağaç kabuğu) telifsiz **CC0**
-  fotoğraf dokuları kullanılır. Kaynak ve lisans `assets/tex/KAYNAK.md` içindedir; yeni doku `scripts/assets/pack-textures.py`
-  tablosuna satır eklenerek gelir. Atıf isteyen ya da ticari kullanımı kısıtlı içerik kullanılmaz.
+- Sesler ve müzik kodla üretilir. Gerçek marka adı kullanılmaz.
+- Görsel varlıklar (kullanıcı kararı, 1.5–1.6): telifsiz **CC0** içerik kullanılabilir; atıf isteyen ya da ticari kullanımı
+  kısıtlı içerik kullanılmaz. Her varlık klasöründe kaynak ve lisansı yazan bir `KAYNAK.md` bulunur.
+  - Şehir yüzeyleri: CC0 fotoğraf dokuları (`assets/tex/`, `scripts/assets/pack-textures.py`).
+  - İnsanlar: CC0 MakeHuman gövde, kıyafet, saç ve cilt verisi (`assets/mh/`, `scripts/assets/pack-mh.py`, `src/entities/charMH.js`).
+    Kodla üretilen gövde yalnız yedek yoldur (veri yüklenemezse, `?nomh`, node testleri) ve aksesuarlar (şapka, gözlük, yelek, kask) için kullanılır.
+  - CC0 karşılığı olmayan modeller (araçlar, silahlar, yapılar) kodla üretilir.
 - Kodla üretilen her model atölyede (`scripts/atolye.js`) stüdyo ışığında görüntülenir ve gözle denetlenir; "kod çalışıyor" kabul değildir.
 - Arayüz metinleri ve yorumlar Türkçe.
 - Her değişiklikten sonra ilgili headless testler çalıştırılır (`scripts/test/`): en az `smoke-steps.js`,

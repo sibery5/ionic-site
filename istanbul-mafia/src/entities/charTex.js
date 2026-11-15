@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { makeCanvas } from '../core/textures.js';
 import { RNG } from '../core/util.js';
+import { mhEnabled, mhTexture } from './charMH.js';
 
 // karo indeksleri (100 eklenirse döşenmez: clamp — saç kartları)
 export const TILE = {
@@ -366,8 +367,13 @@ function patchShader(sh, depthOnly) {
   sh.fragmentShader = FRAG_PARS + sh.fragmentShader
     .replace('#include <map_fragment>', `
       vec4 texel;
-      if (vMatp.x < -0.5) texel = texture2D(map, vDuv);
-      else texel = atlasSample(tAtlas, vDuv, vMatp.x);
+      if (vMatp.x < -0.5) {
+        texel = texture2D(map, vDuv);
+        #ifdef MH_TINT
+          // gerçekçi gövde atlası (yalnız işaretli parçalar): alfa 1 = görünüş rengiyle çarpılır, 0.6 = dokunun kendi rengi kalır
+          if (vMatp.x < -1.5) texel.rgb = mix(texel.rgb / max(vColor.rgb, vec3(0.004)), texel.rgb, clamp((texel.a - 0.6) * 2.5, 0.0, 1.0));
+        #endif
+      } else texel = atlasSample(tAtlas, vDuv, vMatp.x);
       if (texel.a < 0.5) discard;
       diffuseColor.rgb *= texel.rgb;`)
     .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vMatp.y;')
@@ -388,11 +394,13 @@ function patchShader(sh, depthOnly) {
 const matCache = new Map();
 let depthMat = null;
 export function charMaterial(look) {
-  const key = faceKey(look);
+  const mh = mhEnabled() && !look.noMH;
+  const key = mh ? 'mh' : faceKey(look);
   if (matCache.has(key)) return matCache.get(key);
-  const m = new THREE.MeshStandardMaterial({ map: faceTexture(look), vertexColors: true, roughness: 0.7, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ map: mh ? mhTexture() : faceTexture(look), vertexColors: true, roughness: 0.7, metalness: 0 });
+  if (mh) m.defines = { MH_TINT: 1 };
   m.onBeforeCompile = (sh) => patchShader(sh, false);
-  m.customProgramCacheKey = () => 'charMat2';
+  m.customProgramCacheKey = () => (mh ? 'charMatMH' : 'charMat2');
   matCache.set(key, m);
   return m;
 }
