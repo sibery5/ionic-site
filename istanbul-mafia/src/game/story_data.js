@@ -2,18 +2,18 @@
 // Adım: { cp?, place?(M), time?, start?(M), update?(M,dt) -> 'next'|'done'|'fail:..'|null, populate?(M,ctx,I), end?(M), cleanup?(M) }
 // Seçim bayrakları (g.state.storyFlags): sinan ('spare'|'kill'), ally ('kartallar'|'bogaz'), ledger, nevzat ('teslim'|'olum'), kenan ('affet'|'oldur')
 import * as THREE from 'three';
-import { randomLook } from '../entities/character.js';
+import { randomLook, defaultLook } from '../entities/character.js';
 import { rng } from '../core/util.js';
 import { GANGS, CARS } from './economy.js';
 import { buildArc } from './story_acts.js';
 
 export const ACTS = ['Birinci Perde · Dönüş', 'İkinci Perde · Sınavlar', 'Üçüncü Perde · Kan Bağı', 'Dördüncü Perde · Boğaz Savaşı', 'Beşinci Perde · Gizli Masa', 'Altıncı Perde · Tek Hâkim'];
 
-export const LEYLA_LOOK = () => ({ ...randomLook(rng, 'civilian'), gender: 'f', hair: 'uzun', hairColor: '#1a1410', top: 'coat', topColor: '#5a1a1a', pants: 'slacks', pantsColor: '#111111', glasses: false, hat: 'none', beard: 'none' });
-export const ALI_LOOK = () => ({ ...randomLook(rng, 'civilian'), gender: 'm', hair: 'kivircik', hairColor: '#3b2a1e', top: 'leather', topColor: '#4a2c1a', beard: 'stubble', hat: 'kasket', hatColor: '#2a2a2a', glasses: false });
-export const KENAN_LOOK = () => ({ ...randomLook(rng, 'boss'), hat: 'none', hairColor: '#1a1410', beard: 'stubble', topColor: '#1d2440', glasses: true, build: 1.02 });
+export const LEYLA_LOOK = () => ({ ...defaultLook('f'), skin: '#e0b493', eyeColor: '#2e4a2a', height: 1.0, build: 0.96, shoulders: 0.98, fat: 0, age: 0.15, hair: 'dalgali', hairColor: '#2a1a12', top: 'coat', topColor: '#5a1a1a', shirtColor: '#1a1a1a', pants: 'slacks', pantsColor: '#111111', shoes: 'boots', shoesColor: '#1a1210', earrings: 'stud', earringColor: '#d4af37', glasses: false, hat: 'none', beard: 'none', watch: 'classic' }); // [insan] tasarlanmış: bordo palto, dalgalı koyu saç
+export const ALI_LOOK = () => ({ ...defaultLook('m'), skin: '#c99572', eyeColor: '#3b2414', height: 0.97, build: 0.92, shoulders: 0.96, fat: 0, age: 0.2, muscle: 0.25, hair: 'kivircik', hairColor: '#3b2a1e', beard: 'stubble', top: 'leather', topColor: '#4a2c1a', shirtColor: '#c8b89a', pants: 'jeans', pantsColor: '#2e3442', shoes: 'boots', shoesColor: '#3a2412', hat: 'kasket', hatColor: '#2a2a2a', glasses: false, chain: false, tespih: false }); // [insan] Cin Ali: ince, kasket, kahve deri
+export const KENAN_LOOK = () => ({ ...defaultLook('m'), skin: '#e0b493', eyeColor: '#5a3a1c', height: 1.02, build: 1.02, shoulders: 1.0, fat: 0.1, age: 0.4, muscle: 0.3, hair: 'yan_ayrik', hairColor: '#1a1410', beard: 'stubble', top: 'suit', topColor: '#1d2440', shirtColor: '#c8d8ec', tie: false, pants: 'slacks', pantsColor: '#1d2440', shoes: 'polished', shoesColor: '#1a1008', glasses: true, glassesStyle: 'glasses', glassesColor: '#2a2a2a', hat: 'none', watch: 'classic', chain: false, tespih: false }); // [insan] Kenan: lacivert takım, gözlük, kravatsız
 const NEVZAT_LOOK = () => ({ ...randomLook(rng, 'civilian'), gender: 'm', top: 'coat', topColor: '#3a3a3a', pants: 'slacks', pantsColor: '#222222', hair: 'kel', beard: 'mustache', glasses: true, hat: 'fedora', hatColor: '#222222', build: 1.08 });
-export const REIS_LOOK = () => ({ ...randomLook(rng, 'boss'), hat: 'none', hairColor: '#cccccc' });
+export const REIS_LOOK = () => ({ ...defaultLook('m'), skin: '#c99572', eyeColor: '#3b2414', height: 1.0, build: 1.18, shoulders: 1.06, fat: 0.45, age: 0.75, muscle: 0.3, hair: 'arkaya', hairColor: '#b4b2ae', beard: 'mustache', top: 'suit', topColor: '#1a1a20', waistcoat: '#1a1a20', shirtColor: '#ece8e0', tie: true, tieColor: '#4a1418', pants: 'slacks', pantsColor: '#1a1a20', shoes: 'polished', shoesColor: '#0e0a08', tespih: true, tespihColor: '#6a1e0c', ring: true, ringColor: '#d4af37', watch: 'goldwatch', glasses: false, chain: false, hat: 'none' }); // [insan] Reis Baba: ~60, kır saç/bıyık, iri, koyu üç parça takım, tespih
 const BOSS_LOOK = (gang, extra = {}) => ({ ...randomLook(rng, 'boss'), topColor: GANGS[gang] ? GANGS[gang].color : '#111', ...extra });
 
 // ---------------- adım fabrikaları ----------------

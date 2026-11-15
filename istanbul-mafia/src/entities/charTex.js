@@ -99,9 +99,9 @@ function buildTiles() {
     const h = 0.5 + 0.5 * Math.sin(TAU * d);
     return { h, alb: 0.9 + 0.07 * h + 0.04 * n2(u, v) };
   };
-  tiles[5] = (u, v) => { // deri: hücre kırışıkları
-    const c = cl(u, v), cr = sst(0.0, 0.09, c);
-    return { h: 0.4 + 0.4 * cr + 0.1 * n3(u, v), alb: 0.88 + 0.1 * cr + 0.04 * n1(u, v) };
+  tiles[5] = (u, v) => { // deri: ince gren + seyrek yumuşak kırışık (iri hücreler "dövme metal" gibi duruyordu)
+    const c = cl(u, v), cr = sst(0.0, 0.05, c);
+    return { h: 0.5 + 0.18 * pore(u, v) + 0.1 * cr + 0.08 * n1(u, v), alb: 0.92 + 0.06 * n1(u, v) + 0.03 * cr };
   };
   tiles[6] = (u, v) => { const h = 0.5 + 0.5 * Math.sin(TAU * 18 * u) * (0.85 + 0.15 * Math.sin(TAU * 48 * v)); return { h, alb: 0.82 + 0.18 * h }; };
   tiles[7] = (u, v) => { const h = fuzz(u, v); return { h, alb: 0.86 + 0.16 * h }; };
@@ -124,7 +124,7 @@ export function charAtlas() {
   const ga = ca.getContext('2d'), gn = cn.getContext('2d');
   const ia = ga.createImageData(S, S), inn = gn.createImageData(S, S);
   const H = new Float32Array(T * T), A = new Float32Array(T * T), AL = new Float32Array(T * T);
-  const STR = [2.2, 3, 3, 3, 2.5, 1.6, 3, 2.5, 1.5, 3, 3, 3, 0, 3, 3, 3];
+  const STR = [2.2, 3, 3, 3, 2.5, 0.9, 3, 2.5, 1.5, 3, 3, 3, 0, 3, 3, 3];
   for (let id = 0; id < 16; id++) {
     const fn = tiles[id];
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
@@ -180,6 +180,7 @@ export function faceKey(look) {
   const old = (look.age || 0) > 0.55 || ['#8a8a8a', '#aaaaaa', '#cccccc'].includes(look.hairColor);
   return ['face2', look.skin, look.gender, look.beard, look.hairColor, look.eyeColor || EYE_COLORS[0], old, !!look.makeup, gearLabel(look)].join('|');
 }
+const smooth01 = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 export function faceTexture(look) {
   const key = faceKey(look);
   if (texCache.has(key)) return texCache.get(key);
@@ -217,14 +218,14 @@ export function faceTexture(look) {
     g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R, 0, TAU); g.fill(); g.restore();
   };
   for (const s of [-1, 1]) {
-    blob(s * 0.042, -0.03, 0.026, 0.02, tint(0.28, -0.08, -0.08), f ? 0.38 : 0.22); // yanak
-    blob(s * 0.031, 0.012, 0.022, 0.014, tint(-0.32, -0.32, -0.22), 0.5); // göz çukuru
-    blob(s * 0.033, -0.004, 0.016, 0.008, tint(-0.22, -0.26, -0.12), 0.45); // göz altı
+    blob(s * 0.042, -0.03, 0.026, 0.02, tint(0.2, -0.06, -0.06), f ? 0.16 : 0.08); // yanak (hafif; güçlüsü boya lekesi gibi duruyordu)
+    blob(s * 0.031, 0.012, 0.022, 0.014, tint(-0.3, -0.3, -0.2), 0.28); // göz çukuru (derinlik artık geometride)
+    blob(s * 0.033, -0.004, 0.016, 0.008, tint(-0.2, -0.24, -0.12), 0.22); // göz altı
     blob(s * 0.063, 0.03, 0.02, 0.03, tint(-0.15, -0.15, -0.1), 0.3); // şakak
     blob(s * 0.045, -0.088, 0.025, 0.02, tint(-0.12, -0.12, -0.1), 0.22);
     blob(s * 0.02, -0.048, 0.008, 0.016, tint(-0.18, -0.2, -0.15), 0.35); // nazolabial
     blob(s * 0.012, -0.018, 0.006, 0.02, tint(-0.3, -0.3, -0.25), 0.35); // burun yanı
-    blob(s * 0.0095, -0.041, 0.0055, 0.0035, new THREE.Color('#2a1510'), 0.8); // burun deliği
+    blob(s * 0.0092, -0.0415, 0.0042, 0.0026, tint(-0.6, -0.62, -0.6), 0.6); // burun deliği
   }
   blob(0, -0.036, 0.013, 0.011, tint(0.2, -0.05, -0.05), 0.35);
   blob(0, -0.1, 0.03, 0.02, tint(-0.1, -0.1, -0.08), 0.25);
@@ -276,7 +277,16 @@ export function faceTexture(look) {
   }
   if (look.beard && look.beard !== 'none') {
     const hc = new THREE.Color(look.hairColor);
-    const dens = look.beard === 'stubble' ? 0.55 : 0.85;
+    const dens = look.beard === 'stubble' ? 0.3 : 0.6;
+    // önce yumuşak gölge katmanı (traş izi / sakal kökü): tek tek benekler "kir lekesi" gibi okunuyordu
+    const shadowC = skin.clone().lerp(hc, 0.55).multiplyScalar(0.85);
+    const zone = (x, y) => { const ax = Math.abs(x); const top = -0.024 - Math.max(0, 0.03 - ax) * 0.6; return smooth01((top - y) / 0.014) * (1 - smooth01((ax - 0.05) / 0.02)) * (ax < 0.022 && Math.abs(y + 0.062) < 0.007 ? 0.3 : 1); };
+    const zoneM = (x, y) => (Math.abs(x) < 0.028 && y > -0.058 && y < -0.044 ? 1 : 0);
+    for (let y = -0.124; y < 0.0; y += 0.005) for (let x = -0.072; x <= 0.072; x += 0.005) {
+      let k = look.beard === 'mustache' ? zoneM(x, y) : look.beard === 'keci' ? Math.max(zoneM(x, y), Math.abs(x) < 0.022 && y < -0.066 ? 1 : 0) : Math.max(zone(x, y), zoneM(x, y));
+      if (k < 0.02) continue;
+      blob(x, y, 0.0065, 0.0065, shadowC, (look.beard === 'stubble' ? 0.16 : 0.3) * k);
+    }
     for (let i = 0; i < 11000; i++) {
       const x = r.float(-0.072, 0.072), y = r.float(-0.128, 0.0);
       const ax = Math.abs(x);
@@ -287,7 +297,7 @@ export function faceTexture(look) {
       if (look.beard === 'keci' && !mus && !(ax < 0.022 && y < -0.065) && r.next() > 0.2) continue;
       const [px, py] = P(x, y);
       g.fillStyle = rgba(hc.clone().multiplyScalar(0.8), dens * r.float(0.3, 0.9) * (1 - 0.75 * Math.min(1, Math.max(0, (ax - 0.05) / 0.022))));
-      g.fillRect(px, py, 1.4, 1.4);
+      g.fillRect(px, py, 1, 1);
     }
   }
   // göz küresi: sklera, iris lifleri, göz bebeği, limbus, parlama
