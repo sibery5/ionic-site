@@ -25,10 +25,11 @@ const EYE_COLORS = ['#3b2414', '#5a3a1c', '#2e4a2a', '#3a5a7a', '#6a5030'];
 
 export function defaultLook(gender = 'm') {
   return {
-    gender, skin: SKIN_TONES[1], hair: gender === 'f' ? 'uzun' : 'kisa', hairColor: HAIR_COLORS[0], beard: gender === 'f' ? 'none' : 'stubble',
-    top: 'leather', topColor: '#1c1c1c', shirtColor: '#e8e8e8', pants: 'jeans', pantsColor: '#2a3550', shoes: 'sneaker', shoesColor: '#eeeeee',
-    hat: 'none', hatColor: '#222222', glasses: false, chain: false, tespih: false, build: 1.0, eyeColor: EYE_COLORS[1],
-    height: 1, shoulders: 1, fat: 0, age: 0,
+    // ana karakter: 20'lerin sonu, atletik, deri ceket, koyu kot, bot (beyaz spor ayakkabı "topak" gibi duruyordu)
+    gender, skin: SKIN_TONES[1], hair: gender === 'f' ? 'uzun' : 'yan_ayrik', hairColor: HAIR_COLORS[0], beard: gender === 'f' ? 'none' : 'stubble',
+    top: 'leather', topColor: '#1c1a19', shirtColor: '#d6d2ca', pants: 'jeans', pantsColor: '#242c3c', shoes: 'boots', shoesColor: '#2a1c14',
+    hat: 'none', hatColor: '#222222', glasses: false, chain: false, tespih: false, build: gender === 'f' ? 1.0 : 1.04, eyeColor: EYE_COLORS[1],
+    height: 1, shoulders: gender === 'f' ? 1 : 1.04, fat: 0, age: 0.1, muscle: gender === 'f' ? 0.3 : 0.6,
   };
 }
 
@@ -757,7 +758,7 @@ export class CharacterModel {
       const ax = a < 0 ? a : a * 0.62;
       const fwd = Math.max(0, -a) / Math.max(0.01, armA);
       // kollar gövdeye yapışmaz: omuz/kas genişliği kadar dışarıda (kaslı/iri gövdede daha açık)
-      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.1 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
+      setJ(P, i ? J.shR : J.shL, ax - 0.04 * run - 0.28 * wc, 0.12 * run * fwd, 0.17 + 0.03 * this.rig.bk + 0.05 * this.rig.mu + 0.04 * this.rig.fat + 0.04 * run * (1 - fwd) + 0.06 * wc);
       setJ(P, i ? J.elR : J.elL, elb - 0.28 * armA * fwd - 0.45 * wc, 0, 0);
       setJ(P, i ? J.wrR : J.wrL, -0.08 - 0.1 * run, 0, 0.05);
     }

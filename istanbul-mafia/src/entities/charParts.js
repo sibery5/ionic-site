@@ -353,12 +353,13 @@ export function headPoint(f, dx, dy, dz, out, age = 0) {
   let x = dx * D.rx, y = dy * D.ry, z = dz * D.rz;
   const low = smooth(0.0, -0.95, dy);
   // çene hattı: önde dar çene ucu, yanlarda köşeli çene açısı
-  const jaw = f ? 0.34 : 0.26;
+  const jaw = f ? 0.3 : 0.2;
   x *= 1 - low * jaw * (0.6 + 0.4 * Math.max(0, dz));
-  if (!f) x *= 1 + 0.06 * gauss(dy + 0.55, 0.22) * gauss(dz - 0.1, 0.5);
-  if (dz > 0) z *= 1 - low * 0.1; else z *= 1 - low * 0.5;
+  x *= 1 + (f ? 0.04 : 0.1) * gauss(dy + 0.58, 0.2) * gauss(dz + 0.05, 0.45); // çene açısı (kulağa giden çene hattı; sivri koni gibi durmasın)
+  if (dz > 0) z *= 1 - low * 0.03; else z *= 1 - low * 0.5; // alt yüz önde kalır (ağız/çene geri kaçıp maske gibi durmasın)
   if (dz < 0 && dy > -0.3) z *= 1.07 + 0.03 * gauss(dy - 0.2, 0.4); // kafatası arkası
   x *= 1 - 0.05 * gauss(dy - 0.25, 0.3) * gauss(dz - 0.45, 0.4); // şakak
+  x *= 1 + 0.05 * gauss(dy - 0.5, 0.3); // kafatası üstü yuvarlak (yumurta/armut biçimi olmasın)
   if (dz > 0.3) z -= (dz - 0.3) * 0.014; // yüz düzlüğü
   const fy = y, fx = x;
   if (dz > 0.15) {
@@ -366,26 +367,27 @@ export function headPoint(f, dx, dy, dz, out, age = 0) {
     const g2 = (cx, cy, sx, sy) => Math.exp(-(((fx - cx) / sx) ** 2) - (((fy - cy) / sy) ** 2));
     let dzv = 0;
     // burun: köprü -> uç, kanatlar, burun altı
-    if (fy > -0.052 && fy < 0.022) {
-      const t = (0.022 - fy) / 0.064;
-      const A = (f ? 0.02 : 0.026) * (0.3 + 0.7 * Math.pow(t, 1.3)) * (fy < -0.038 ? Math.max(0, 1 - (-0.038 - fy) / 0.014) : 1);
-      const wN = 0.0068 + t * 0.0085;
+    if (fy > -0.052 && fy < 0.016) {
+      const t = (0.016 - fy) / 0.058;
+      const A = (f ? 0.019 : 0.025) * (0.22 + 0.78 * Math.pow(t, 1.4)) * (fy < -0.038 ? Math.max(0, 1 - (-0.038 - fy) / 0.014) : 1);
+      const wN = 0.0052 + t * 0.0062; // dar köprü -> kanatlara doğru genişler (geniş Gauss topak gibi duruyordu)
       dzv += A * Math.exp(-((fx / wN) ** 2));
     }
     for (const s of [-1, 1]) {
       dzv += 0.0075 * g2(s * 0.0128, -0.037, 0.0062, 0.006); // burun kanadı
-      dzv -= 0.011 * g2(s * 0.031, 0.012, 0.016, 0.0105); // göz çukuru
-      dzv += (f ? 0.0068 : 0.0062) * g2(s * 0.047, -0.012, 0.018, 0.011); // elmacık
+      dzv -= 0.015 * g2(s * 0.031, 0.012, 0.016, 0.0105); // göz çukuru
+      dzv += (f ? 0.0085 : 0.0085) * g2(s * 0.048, -0.014, 0.022, 0.013); // elmacık
       dzv -= 0.0032 * g2(s * 0.025, -0.05, 0.01, 0.016) * (0.6 + age); // nazolabial
       dzv += (f ? 0.002 : 0.0035) * g2(s * 0.03, 0.03, 0.017, 0.006); // kaş kavisi
       dzv -= 0.0022 * g2(s * 0.052, -0.045, 0.012, 0.02) * (f ? 0.6 : 1); // yanak çukuru (elmacık altı)
     }
-    dzv += (f ? 0.0045 : 0.0085) * g2(0, 0.031, 0.05, 0.007); // kaş kemeri
-    dzv += (f ? 0.0072 : 0.0056) * g2(0, -0.054, 0.019, 0.0045); // üst dudak
-    dzv += (f ? 0.0085 : 0.0066) * g2(0, -0.066, 0.018, 0.005); // alt dudak
-    dzv -= 0.002 * g2(0, -0.0602, 0.013, 0.0022); // ağız çizgisi
+    dzv += (f ? 0.0055 : 0.0105) * g2(0, 0.031, 0.05, 0.007); // kaş kemeri
+    dzv += (f ? 0.0082 : 0.007) * g2(0, -0.054, 0.019, 0.0045); // üst dudak
+    dzv += (f ? 0.0095 : 0.008) * g2(0, -0.066, 0.018, 0.005); // alt dudak
+    dzv -= 0.003 * g2(0, -0.0602, 0.016, 0.0022); // ağız çizgisi
     dzv -= 0.0034 * g2(0, -0.078, 0.016, 0.004); // dudak altı çukur
-    dzv += (f ? 0.0045 : 0.0085) * g2(0, -0.097, 0.02, 0.013); // çene ucu
+    dzv += (f ? 0.0045 : 0.0085) * g2(0, -0.097, f ? 0.02 : 0.027, 0.013); // çene ucu
+    dzv += 0.006 * g2(0, -0.062, 0.03, 0.022); // ağız çıkıntısı (diş kemeri): ağız bölgesi düz levha olmasın
     dzv -= 0.0016 * g2(0, -0.046, 0.004, 0.005); // filtrum
     z += dzv * fade;
   }
@@ -424,12 +426,12 @@ function camoMat(pal, tile, rough) {
 export function lookKey(L, lod) {
   return [lod, L.gender, L.build, L.height, L.shoulders, L.fat, L.age, L.muscle, L.body, L.skin, L.top, L.topStyle, L.topColor, L.shirtColor, L.accentColor, L.pants, L.pantsStyle, L.pantsColor, L.dressLen, L.shoes, L.shoesStyle, L.shoesColor,
     L.chain, L.chainStyle, L.chainColor, L.hair, L.hairColor, L.beard, L.hat, L.hatStyle, L.hatColor, L.glasses, L.glassesStyle, L.glassesColor, L.tieColor, L.tie, L.watch, L.watchColor, L.ring, L.tespih, L.bag, L.bagColor,
-    L.carry, L.apron, L.apronColor, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.earringColor, L.tights, L.camo, L.eyeColor].join('|');
+    L.carry, L.apron, L.apronColor, L.waistcoat, L.vest, L.vestColor, L.helmet, L.visor, L.gloves, L.bandana, L.bandanaColor, L.earrings, L.earringColor, L.tights, L.camo, L.eyeColor].join('|');
 }
 
 // ---------------- LOD kalite tablosu ----------------
 const LODQ = [
-  { torso: 26, limb: 16, dtT: 0.022, dtL: 0.028, fingers: true, fseg: 6, head: [48, 36], cards: 1, detail: 2, eyes: true },
+  { torso: 26, limb: 16, dtT: 0.022, dtL: 0.028, fingers: true, fseg: 6, head: [64, 46], cards: 1, detail: 2, eyes: true },
   { torso: 14, limb: 9, dtT: 0.05, dtL: 0.06, fingers: false, fseg: 4, head: [22, 16], cards: 0.3, detail: 1, eyes: true },
   { torso: 8, limb: 6, dtT: 0.11, dtL: 0.13, fingers: false, fseg: 3, head: [10, 8], cards: 0, detail: 0, eyes: false },
 ];
@@ -467,10 +469,10 @@ function torsoKeys(R) {
   const f = R.f, b = R.bk, sw = R.sw, fat = R.fat, mu = R.mu;
   const rows = f
     ? [[0.8, 0.03, 0.02, 0.02], [0.83, 0.124, 0.076, 0.088], [0.88, 0.18, 0.092, 0.118], [0.94, 0.186, 0.092, 0.118], [1.0, 0.162, 0.083, 0.096], [1.06, 0.134, 0.078, 0.08], [1.11, 0.124, 0.077, 0.077],
-      [1.18, 0.133, 0.084, 0.08], [1.25, 0.146, 0.098, 0.086], [1.31, 0.152, 0.1, 0.089], [1.36, 0.155, 0.095, 0.091], [1.41, 0.154, 0.088, 0.089], [1.45, 0.142, 0.072, 0.082], [1.475, 0.11, 0.061, 0.068], [1.495, 0.074, 0.054, 0.056],
+      [1.18, 0.128, 0.084, 0.08], [1.25, 0.137, 0.098, 0.086], [1.31, 0.141, 0.1, 0.089], [1.36, 0.144, 0.095, 0.091], [1.41, 0.148, 0.088, 0.089], [1.45, 0.14, 0.072, 0.082], [1.475, 0.11, 0.061, 0.068], [1.495, 0.074, 0.054, 0.056],
       [1.515, 0.057, 0.05, 0.051], [1.57, 0.053, 0.049, 0.05], [1.63, 0.045, 0.04, 0.044], [1.66, 0.01, 0.01, 0.01]]
-    : [[0.8, 0.03, 0.02, 0.02], [0.83, 0.116, 0.071, 0.082], [0.87, 0.158, 0.088, 0.106], [0.93, 0.165, 0.09, 0.112], [0.99, 0.158, 0.088, 0.097], [1.05, 0.147, 0.089, 0.086], [1.12, 0.149, 0.095, 0.087],
-      [1.2, 0.162, 0.101, 0.092], [1.28, 0.178, 0.109, 0.099], [1.35, 0.188, 0.114, 0.103], [1.41, 0.19, 0.104, 0.101], [1.45, 0.174, 0.084, 0.094], [1.475, 0.138, 0.071, 0.082], [1.495, 0.096, 0.063, 0.07],
+    : [[0.8, 0.03, 0.02, 0.02], [0.83, 0.116, 0.071, 0.082], [0.87, 0.162, 0.088, 0.108], [0.93, 0.17, 0.09, 0.114], [0.99, 0.158, 0.088, 0.097], [1.05, 0.147, 0.089, 0.086], [1.12, 0.149, 0.095, 0.087],
+      [1.2, 0.154, 0.103, 0.094], [1.28, 0.163, 0.113, 0.103], [1.35, 0.168, 0.119, 0.107], [1.41, 0.176, 0.108, 0.104], [1.45, 0.174, 0.086, 0.096], [1.475, 0.148, 0.071, 0.082], [1.495, 0.108, 0.063, 0.07],
       [1.515, 0.07, 0.058, 0.061], [1.57, 0.062, 0.056, 0.057], [1.63, 0.051, 0.046, 0.05], [1.66, 0.01, 0.01, 0.01]];
   return rows.map(([y, rx, rf, rb]) => {
     const bulk = y < 1.47 ? 0.62 + 0.38 * b : 0.85 + 0.15 * b;
@@ -729,6 +731,17 @@ function buildTorso(c) {
   if (top === 'suit' || top === 'blazer' || top === 'tuxedo' || top === 'coat') {
     const lapM = top === 'tuxedo' ? M(shade(tc, 0.9), 'flat', 0.25, 0.1) : M(tc, topSpec.tile, topSpec.rough, 0, 0.88);
     const o0 = topSpec.open;
+    // yelek (üç parça takım): ceket açıklığında gömleğin üstünde, kendi V'si daha dar
+    if (L.waistcoat && top !== 'coat') {
+      const wm = M(L.waistcoat, topSpec.tile, topSpec.rough, 0, 0.92);
+      const vh = (t) => 0.012 + 0.16 * smooth(1.26, 1.43, t);
+      for (const s of [1, -1]) {
+        const a = (t) => Math.PI / 2 + s * Math.min(vh(t), openHalf(t)), b = (t) => Math.PI / 2 + s * (openHalf(t) + 0.02);
+        T.patch(mb, a, b, o0 - 0.06, 1.43, topSpec.off + 0.0028, wm, 2, Q.detail ? 6 : 2);
+        T.patch(mb, b, a, o0 - 0.06, 1.43, topSpec.off + 0.0028, wm, 2, Q.detail ? 6 : 2); // sarım yönü yanına göre değişiyor: iki yön (biri ayıklanır)
+      }
+      if (Q.detail > 1) for (const y of [1.06, 1.12, 1.18]) T.button(mb, y, Math.PI / 2, topSpec.off + 0.004, 0.005, M('#1a1410', 'flat', 0.35));
+    }
     for (const s of [1, -1]) {
       // yaka devriği: açık kenar boyunca, çentikli
       T.patch(mb, (t) => Math.PI / 2 + s * (openHalf(t) - 0.005), (t) => Math.PI / 2 + s * (openHalf(t) + 0.06 + 0.26 * smooth(o0, 1.38, t) * (t > 1.39 ? 0.35 : 1)), o0 + 0.01, 1.45, topSpec.off + 0.005, lapM, 2, 6);
@@ -831,7 +844,7 @@ function buildArms(c) {
   const mu = R.mu;
   // [t, yanal, ön, arka]: deltoid başı (0.04-0.1) -> pazı/arka kol (0.15) -> dirsek (0.31, arkada olekranon)
   // -> ön kol kası (0.36-0.4, en kalın) -> ince, yassı bilek (0.565)
-  const rows = [[0, 0.006, 0.006, 0.006], [0.015, 0.03, 0.032, 0.031], [0.035, 0.047, 0.049, 0.047], [0.065, 0.054, 0.051, 0.049], [0.1, 0.052, 0.049, 0.048], [0.15, 0.045, 0.05, 0.048], [0.21, 0.042, 0.048, 0.045],
+  const rows = [[0, 0.006, 0.006, 0.006], [0.015, 0.026, 0.03, 0.029], [0.035, 0.042, 0.046, 0.044], [0.065, 0.051, 0.05, 0.048], [0.1, 0.052, 0.049, 0.048], [0.15, 0.045, 0.05, 0.048], [0.21, 0.042, 0.048, 0.045],
     [0.265, 0.039, 0.041, 0.041], [0.305, 0.036, 0.036, 0.04], [0.345, 0.041, 0.04, 0.038], [0.39, 0.042, 0.039, 0.036], [0.46, 0.035, 0.032, 0.03], [0.53, 0.025, 0.027, 0.026], [0.565, 0.02, 0.026, 0.025], [0.585, 0.019, 0.026, 0.026], [0.595, 0.015, 0.02, 0.02], [0.602, 0.004, 0.004, 0.004]]
     .map(([t, a, b2, c2]) => { const m = 1 + mu * (0.13 * smooth(0.0, 0.05, t) * smooth(0.3, 0.24, t) + 0.09 * smooth(0.3, 0.34, t) * smooth(0.5, 0.42, t)); return [t, a * m, b2 * m, c2 * m]; });
   const shortS = top === 'tshirt' || top === 'polo' || top === 'police_shirt' || top === 'crop' || top === 'dress';
@@ -841,7 +854,7 @@ function buildArms(c) {
   const handM = c.gloveM || c.skinM;
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R', sh = P(c, 'sh' + S);
-    const top0 = sh[1] + 0.018; // omuz başı gövdeye gömülsün (vatka gibi yukarı taşmasın)
+    const top0 = sh[1] + 0.004; // omuz başı gövdeye gömülsün (vatka gibi yukarı taşmasın)
     const keys = rows.map(([t, rx, rf, rb]) => [t, sh[0] - s * 0.004 * smooth(0.0, 0.1, t), top0 - t, 0.0, rx * k, rf * k, rb * k, 2]);
     // dirsek: dar geçiş (0.275-0.335, hacim korunur); ön kol: dirsek -> burulma kemiği (pronasyon ön kol boyunca dağılır)
     const st = [[0, { [BI.chest]: 0.45, [BI['sh' + S]]: 0.55 }], [0.07, W(BI['sh' + S])], [0.275, W(BI['sh' + S])], [0.335, W(BI['el' + S])], [0.37, W(BI['el' + S])], [0.54, W(BI['fa' + S])], [0.56, W(BI['fa' + S])], [0.59, W(BI['wr' + S])]];
@@ -960,7 +973,7 @@ function buildLegs(c) {
   const mu = R.mu;
   // [t, yanal, ön, arka]: dolgun uyluk (ön dört başlı, arka hamstring) -> diz (0.5) -> baldır (0.6, arkada) -> ince bilek
   const rows = [[0, 0.02, 0.02, 0.02], [0.02, 0.062, 0.072, 0.072], [0.06, 0.084, 0.088, 0.094], [0.12, 0.089, 0.092, 0.093], [0.2, 0.083, 0.088, 0.082], [0.3, 0.072, 0.078, 0.07], [0.4, 0.06, 0.066, 0.058], [0.46, 0.053, 0.057, 0.05],
-    [0.5, 0.05, 0.054, 0.048], [0.55, 0.049, 0.049, 0.056], [0.61, 0.05, 0.046, 0.064], [0.68, 0.045, 0.04, 0.056], [0.77, 0.036, 0.034, 0.04], [0.85, 0.03, 0.031, 0.031], [0.91, 0.028, 0.03, 0.03], [0.93, 0.02, 0.02, 0.02], [0.94, 0.005, 0.005, 0.005]]
+    [0.5, 0.047, 0.053, 0.046], [0.55, 0.049, 0.048, 0.058], [0.61, 0.053, 0.046, 0.072], [0.68, 0.048, 0.04, 0.062], [0.77, 0.036, 0.033, 0.042], [0.85, 0.027, 0.03, 0.03], [0.91, 0.026, 0.03, 0.029], [0.93, 0.02, 0.02, 0.02], [0.94, 0.005, 0.005, 0.005]]
     .map(([t, a, b2, c2]) => { const th = mu * 0.08 * smooth(0.0, 0.06, t) * smooth(0.48, 0.38, t), ca = mu * 0.09 * smooth(0.5, 0.56, t) * smooth(0.8, 0.68, t); return [t, a * (1 + th + ca * 0.5), b2 * (1 + th), c2 * (1 + th * 0.8 + ca)]; });
   const pOff = { jeans: f ? 0.005 : 0.008, cargo: 0.012, slacks: 0.012, chino: 0.01, track: 0.013, shorts: 0.014, minishort: 0.006, leggings: 0.0025, tactical: 0.013, camo: 0.013 }[pants] || 0;
   for (const s of [1, -1]) {
@@ -1081,9 +1094,11 @@ function buildHead(c) {
   const hw = W(BI.head), mw = mixW(W(BI.head), W(BI.neck), 0.25);
   const rows = [];
   for (let i = 0; i <= hs; i++) {
-    const lat = -Math.PI / 2 + (Math.PI * i) / hs, row = [];
+    // yüz bölgesine sık örnekleme: eşit aralıklı kürede burun/dudak 1-2 köşeye düşüp "topak" oluyordu.
+    // enlem/boylam kübik eğriyle önde (boylam 0) ve göz-ağız bandında (enlem ~ -0.2) sıklaşır, arkada seyrekleşir.
+    const xv = (2 * i) / hs - 1, lat = -0.18 + (xv < 0 ? Math.PI / 2 - 0.18 : Math.PI / 2 + 0.18) * (0.42 * xv + 0.58 * xv * xv * xv), row = [];
     for (let j = 0; j <= ws; j++) {
-      const lon = -Math.PI + (TAU * j) / ws;
+      const xu = (2 * j) / ws - 1, lon = Math.PI * (0.34 * xu + 0.66 * xu * xu * xu);
       const dx = Math.cos(lat) * Math.sin(lon), dy = Math.sin(lat), dz = Math.cos(lat) * Math.cos(lon);
       headPoint(f, dx, dy, dz, _p, age);
       const [u, v] = headUV(dx, dy, dz);
@@ -1139,7 +1154,7 @@ function buildHead(c) {
         const row = [];
         for (let j = 0; j <= na; j++) {
           const az = -1.35 + (2.7 * j) / na;
-          const edge = up > 0 ? 0.3 * Math.pow(Math.cos(az * 0.95), 1.5) - 0.04 : -0.34 * Math.pow(Math.cos(az * 0.95), 1.3) + 0.02;
+          const edge = up > 0 ? 0.2 * Math.pow(Math.cos(az * 0.95), 1.5) - 0.02 : -0.26 * Math.pow(Math.cos(az * 0.95), 1.3) + 0.01; // üst kapak irisin üstünü örter (bakış dik/ürkek olmasın)
           const end = up > 0 ? 1.25 : -1.1;
           const el = edge + (end - edge) * (i / nl);
           const x = Math.cos(el) * Math.sin(az) * rl, y = Math.sin(el) * rl, z = Math.cos(el) * Math.cos(az) * rl;
@@ -1156,7 +1171,7 @@ function buildHead(c) {
       if (up > 0 && Q.detail > 1) {
         const pts = [], sides = [];
         for (let j = 0; j <= 6; j++) {
-          const az = -1.1 + (2.2 * j) / 6, el = 0.3 * Math.pow(Math.cos(az * 0.95), 1.5) - 0.03;
+          const az = -1.1 + (2.2 * j) / 6, el = 0.2 * Math.pow(Math.cos(az * 0.95), 1.5) - 0.01;
           pts.push(V(E.x + Math.cos(el) * Math.sin(az) * (rl + 0.0004), E.y + Math.sin(el) * (rl + 0.0004), E.z + Math.cos(el) * Math.cos(az) * (rl + 0.0004)));
         }
         for (let j = 0; j <= 6; j++) { const a = pts[Math.max(0, j - 1)], b = pts[Math.min(6, j + 1)]; sides.push(b.clone().sub(a).normalize()); }
@@ -1187,12 +1202,12 @@ function hairline(style, f, aphi) {
     ? [[0, 0.062], [0.55, 0.066], [0.9, 0.03], [1.2, -0.07], [3.2, -0.08]]
     : style === 'asker' || style === 'fade'
       ? [[0, 0.07], [0.55, 0.072], [0.95, 0.045], [1.3, 0.0], [1.75, 0.02], [2.4, -0.02], [3.2, -0.04]]
-      : [[0, f ? 0.062 : 0.057], [0.55, 0.066], [0.95, 0.034], [1.1, -0.018], [1.28, -0.02], [1.4, 0.028], [1.75, 0.035], [2.1, 0.0], [2.6, -0.062], [3.2, -0.068]];
+      : [[0, f ? 0.062 : 0.06], [0.45, 0.06], [0.8, 0.048], [1.05, 0.018], [1.22, -0.022], [1.36, -0.012], [1.48, 0.026], [1.75, 0.032], [2.1, 0.0], [2.6, -0.062], [3.2, -0.068]]; // yumuşak alın kavisi
   for (let i = 0; i < tbl.length - 1; i++) if (aphi <= tbl[i + 1][0]) { const t = (aphi - tbl[i][0]) / (tbl[i + 1][0] - tbl[i][0]); return tbl[i][1] + (tbl[i + 1][1] - tbl[i][1]) * t; }
   return -0.08;
 }
 // kafa üzerinde kabuk: cov(x,y,z,phi)->0..1, th -> kalınlık
-function shell(c, covFn, thFn, mat, ws, hs, mod, cmFn) {
+function shell(c, covFn, thFn, mat, ws, hs, mod, cmFn, edgeFn) {
   const { mb, f, R } = c;
   const D = headDims(f), hb = c.headBase;
   const rows = [], cov = [];
@@ -1207,7 +1222,7 @@ function shell(c, covFn, thFn, mat, ws, hs, mod, cmFn) {
       const ly = _p.y - D.cy, phi = Math.atan2(dx, dz);
       const cv = covFn(_p.x, ly, _p.z - D.cz, phi);
       n.set(dx / D.rx, dy / D.ry, dz / D.rz).normalize();
-      const t = cv > 0.02 ? 0.0015 + thFn(_p.x, ly, _p.z - D.cz, phi) * cv : -0.004;
+      const t = cv > 0.02 ? 0.0015 + thFn(_p.x, ly, _p.z - D.cz, phi) * cv * (edgeFn ? edgeFn(ly, phi) : 1) : -0.004;
       _p.addScaledVector(n, t);
       if (mod) mod(_p, ly, phi, dx, dy, dz);
       crow.push(cv);
@@ -1273,6 +1288,8 @@ function hairCards(c, opts) {
       if (ly > hairline(opts.style, c.f, Math.abs(phi)) + 0.012 + (opts.minY || 0) && ly < c.hatCut) { u = d; break; }
     }
     if (!u) continue;
+    // uzun tutamlar yüzün önünden başlamasın (alnın ortasından düşen kart yüzü ikiye bölüyordu)
+    if (opts.gravity && u.z > 0.45 && Math.abs(u.x) < 0.55) continue;
     const len = opts.len * r.float(0.7, 1.2);
     const { pts, nrm } = strandPath(c, u, opts.flow, len, opts.seg || 3, (s) => opts.base + opts.lift * Math.sin(Math.PI * Math.min(1, s * 1.4)) * (1 - s * 0.3), opts.gravity);
     const sides = pts.map((p, k) => { const a = pts[Math.max(0, k - 1)], b = pts[Math.min(pts.length - 1, k + 1)]; return new THREE.Vector3().crossVectors(b.clone().sub(a), nrm[k]).normalize(); });
@@ -1288,7 +1305,7 @@ function buildHair(c) {
   const hc = L.hairColor || '#1a1410';
   const T = HAIR_T[hs] || 0;
   const capM = M(hc, 'haircap', 0.5);
-  const [ws, hsg] = Q.detail > 1 ? [40, 30] : Q.detail ? [20, 14] : [12, 8];
+  const [ws, hsg] = Q.detail > 1 ? [64, 48] : Q.detail ? [20, 14] : [12, 8];
   // yaşlı keller: yanlarda at nalı saç
   if (hs === 'kel') {
     if (R.age > 0.4 || L.hairRing) shell(c, (x, y, z, phi) => smooth(0.0, 0.012, -y + 0.035) * smooth(0.8, 1.5, Math.abs(phi)) * smooth(-0.075, -0.055, y), () => 0.004, capM, ws, hsg);
@@ -1300,7 +1317,7 @@ function buildHair(c) {
   c.hatCut = hatCut;
   const part = hs === 'yan_ayrik' ? 0.03 : null;
   shell(c,
-    (x, y, z, phi) => smooth(hairline(hs, f, Math.abs(phi)), hairline(hs, f, Math.abs(phi)) + 0.014, y) * (y > hatCut + 0.04 ? 0 : 1),
+    (x, y, z, phi) => smooth(hairline(hs, f, Math.abs(phi)), hairline(hs, f, Math.abs(phi)) + 0.02, y) * (y > hatCut + 0.04 ? 0 : 1),
     (x, y, z, phi) => {
       let t = T;
       if (hs === 'kisa') t += 0.004 * smooth(0.04, 0.1, y) * (z > 0 ? 1 : 0.5);
@@ -1311,7 +1328,9 @@ function buildHair(c) {
       if (hs === 'topuz' || hs === 'at_kuyrugu') t -= 0.002;
       if (hs === 'fade') t = 0.003 + 0.016 * smooth(0.045, 0.085, y) * (z > -0.02 ? 1 : 0.6); // yanlar sıfıra yakın, üst hacimli
       return Math.max(0.002, t);
-    }, capM, ws, hsg, null, (ly) => 0.85 + 0.2 * smooth(-0.05, 0.1, ly));
+    }, capM, ws, hsg, null, (ly, phi) => (0.85 + 0.2 * smooth(-0.05, 0.1, ly)) * (0.8 + 0.2 * smooth(hairline(hs, f, Math.abs(phi)), hairline(hs, f, Math.abs(phi)) + 0.03, ly)),
+    // saç çizgisinde kalınlık sıfıra iner: kenarda "kask duvarı" yerine deriye yatan ince saç
+    (ly, phi) => 0.25 + 0.75 * smooth(hairline(hs, f, Math.abs(phi)), hairline(hs, f, Math.abs(phi)) + 0.04, ly));
   if (!Q.cards) {
     // uzak LOD: uzun saç / at kuyruğu kaba hacim
     if (hs === 'uzun' || hs === 'dalgali') { const hb = c.headBase, D = headDims(f); ellip(c.mb, V(0, hb[1] + D.cy - 0.1, hb[2] + D.cz - 0.06), 0.085, 0.13, 0.05, 8, 6, capM, W(BI.head)); }
@@ -1391,6 +1410,8 @@ function buildBeard(c) {
   for (let i = 0; i < n; i++) {
     const x = r.float(-0.08, 0.08), y = r.float(-0.13, -0.04);
     const dx = x / D.rx, dy = y / D.ry; if (dx * dx + dy * dy > 0.98) continue;
+    // kartlar yalnızca sakalın alt/yan kenarında (yumuşak siluet); yüz önünde kabuk yeter (kartlar beyaz pul gibi duruyordu)
+    if (Math.abs(x) < 0.045 && y > -0.095 && !(Math.abs(x) < 0.027 && y > -0.058)) continue;
     const dz = Math.sqrt(1 - dx * dx - dy * dy);
     headPoint(f, dx, dy, dz, _p, c.R.age);
     const ly = _p.y - D.cy;
@@ -1398,11 +1419,12 @@ function buildBeard(c) {
     const nn = V(dx / D.rx, dy / D.ry, dz / D.rz).normalize();
     const base = V(_p.x + hb[0], _p.y + hb[1], _p.z + hb[2]).addScaledVector(nn, 0.003);
     const mus = Math.abs(x) < 0.027 && ly > -0.058 && ly < -0.044;
-    const len = mus ? 0.012 : L.beard === 'full' ? r.float(0.014, 0.024) : 0.012;
+    if (mus) continue; // bıyık kabukla; kartlar ağız üstünde pul gibi duruyordu
+    const len = mus ? 0.01 : L.beard === 'full' ? r.float(0.012, 0.02) : 0.01;
     const d = V(mus ? Math.sign(x) * 0.4 : 0, -1, 0.35).addScaledVector(nn, -0.2).normalize();
     const pts = [base, base.clone().addScaledVector(d, len * 0.5).addScaledVector(nn, 0.003), base.clone().addScaledVector(d, len)];
     const side = new THREE.Vector3().crossVectors(d, nn).normalize();
-    card(c.mb, pts, [side, side, side], (s) => 0.012 * (1 - 0.4 * s), mat, () => hw, (s) => 0.75 + 0.3 * s);
+    card(c.mb, pts, [side, side, side], (s) => 0.009 * (1 - 0.4 * s), mat, () => hw, (s) => 0.7 + 0.2 * s);
   }
 }
 
