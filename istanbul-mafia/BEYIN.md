@@ -147,6 +147,11 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
   Ders: bir değeri düşüren her mekanizmanın geri yükselme yolunu da sına; koşulları hedef donanımın değil yalnızca test ortamının varsayımıyla yazma.
 - **Gece cepheler beyaz, yol karanlıktı:** her yöne yayan nokta ışık yakındaki duvarı, uzaktaki yoldan yüzlerce kat fazla aydınlatır. Ders: ışığı sayıyla düşün
   (şiddet ÷ mesafe², sonra yüzey rengi); "parlak görünsün" diye şiddet artırma.
+- **İki kota penceresi boşa yandı:** iki uygulama ekibi baş mühendisle aynı (en pahalı) modelde başlatıldı; kota dakikalar içinde bitti,
+  hiçbir şey commit'lenmeden iki pencere gitti. Ders: baş mühendis teşhisi, planı ve görev dosyasını yazar; uygulama ekipleri daha ekonomik
+  modelde çalışır; görev metni `docs/ekip/` altında dosyada durur (yeniden başlatmak bedava olsun); her ekip ilk 15 dakikada ilk commit'ini atar.
+- **Ekipler çıktılarına bakmıyordu:** karakter, araç ve silah işleri "bitti" diye raporlandı ama kimse modele bakmamıştı; stüdyoda bakınca manken
+  bedenler, gövdeden taşan tekerlekler, siyah blok tabanca çıktı. Ders: görsel işin kabulü görüntüdür; atölyede (`scripts/atolye.js`) bak, sonra "bitti" de.
 - **Deniz yolda görünüyordu:** su shader'ı `modelMatrix`'i kullanmıyordu; su zemin seviyesinde çiziliyordu. Ders: kendi shader'ını yazan her malzemede dönüşümleri sına.
 - **Gökdelen bölgesi sis gibi parlıyordu:** beyaz tavan ışığı emissive + ayna gibi cam bloom eşiğini aşıyordu.
 - **Polis "Araçtan in!" demiyordu:** `npc.think` her karede tutuklama durumunu saldırıya çeviriyordu. Suçlanan birleşim değildi; hata önceden vardı. Ders: önce "önceden var mıydı?" ölç.

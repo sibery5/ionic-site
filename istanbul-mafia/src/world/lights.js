@@ -1,5 +1,5 @@
 // Gece aydınlatması (ucuz "kümelenmiş ileri" ışık seti):
-//  - Sabit sayıda gerçek PointLight (kalite: düşük 6 / orta 12 / yüksek 20) kameraya en yakın sokak lambalarına
+//  - Sabit sayıda aşağı bakan SpotLight (kalite: düşük 4 / orta 8 / yüksek 12 / ultra 16) kameraya en yakın sokak lambalarına
 //    0.2 sn'de bir yeniden atanır; yuvalar arasında yumuşak geçiş (söner → taşınır → yanar), patlama yok.
 //  - Sabit sayıda SpotLight (düşük 2 / orta 4 / yüksek 6): oyuncu aracının farları, en yakın trafik araçlarının
 //    farları ve yakındaki askeri gözetleme kulesi projektörleri.
@@ -11,7 +11,10 @@ import * as THREE from 'three';
 const COUNTS = { low: [4, 1], medium: [8, 2], high: [12, 3], ultra: [16, 4] };
 const CELL = 40;
 const cellKey = (i, j) => (i + 500) + 1000 * (j + 500);
-const LAMP_I = 38, LAMP_R = 24; // kandela, menzil (m)
+// Sokak lambası = aşağı bakan spot. Eskiden her yöne yayan nokta ışıktı: lambaya 1,5 m'deki cephe, 8 m'deki yoldan
+// ~150 kat parlak kalıyor, cepheler bembeyaz yanarken yol karanlıkta kalıyordu. Gerçek armatür ışığı aşağı verir.
+const LAMP_I = 170, LAMP_R = 26; // kandela (aşağı doğru), menzil (m)
+const LAMP_ANGLE = 1.15, LAMP_PEN = 0.8; // koni yarı açısı (rad), kenar yumuşaklığı
 const HEAD_I = 260, HEAD_R = 48;
 const SEARCH_I = 1400, SEARCH_R = 140;
 
@@ -23,9 +26,9 @@ export class NightLights {
     game.scene.add(this.group);
     this.points = [];
     for (let i = 0; i < np; i++) {
-      const l = new THREE.PointLight(0xffc27a, 0, LAMP_R, 1.7);
-      l.position.set(0, -500, 0);
-      this.group.add(l);
+      const l = new THREE.SpotLight(0xffc27a, 0, LAMP_R, LAMP_ANGLE, LAMP_PEN, 2);
+      l.position.set(0, -500, 0); l.target.position.set(0, -510, 0);
+      this.group.add(l); this.group.add(l.target);
       this.points.push({ light: l, src: null, next: null, k: 0 });
     }
     this.spots = [];
@@ -108,9 +111,12 @@ export class NightLights {
       p.k += (tgt - p.k) * kf;
       if (p.next !== p.src && p.k < 0.04) {
         p.src = p.next; p.k = 0;
-        if (p.src) { p.light.position.set(p.src.x, p.src.y - 0.25, p.src.z); p.light.color.setHex(p.src.color || 0xffc27a); p.light.distance = p.src.r || LAMP_R; }
+        if (p.src) {
+          p.light.position.set(p.src.x, p.src.y - 0.25, p.src.z); p.light.target.position.set(p.src.x, p.src.y - 10, p.src.z);
+          p.light.color.setHex(p.src.color || 0xffc27a); p.light.distance = Math.max(p.src.r || 0, LAMP_R);
+        }
       }
-      if (!p.src) p.light.position.y = -500;
+      if (!p.src) { p.light.position.y = -500; p.light.target.position.y = -510; }
       p.light.intensity = p.src ? LAMP_I * (p.src.i || 1) * night * p.k * flick : 0;
     }
     // ---- projektör tarama açıları + ışık konileri ----

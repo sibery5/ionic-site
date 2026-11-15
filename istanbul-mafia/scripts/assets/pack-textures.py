@@ -24,7 +24,7 @@ UA = 'IstanbulMafyaAssetFetcher/1.0'
 # neutral/keep: rengi oyunun verdiği dokular (sıva, kiremit, kesme taş) nötr açık tona çekilir;
 #   neutral = hedef ortalama (0-255), keep = özgün renk farkından korunacak oran.
 SETS = {
-    'asphalt': dict(slug='asphalt_pit_lane', tile=2.0),
+    'asphalt': dict(slug='asphalt_pit_lane', tile=2.0, neutral=92, keep=1.0),  # özgün doku çok koyu: yol gündüz siyah, gece görünmez kalıyordu
     'pave': dict(slug='pavement_03', tile=2.0),
     'cobble': dict(slug='cobblestone_floor_08', tile=2.0),
     'grass': dict(slug='forrest_ground_01', tile=2.0),

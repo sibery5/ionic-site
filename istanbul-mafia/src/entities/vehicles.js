@@ -1981,8 +1981,10 @@ export class Vehicle {
     const muRoad = muGrip * 0.8; // yanal: binek ~1.05 g, spor ~1.35 g
     // fren basıncı ~0.1 sn'de oluşur (ani duvar etkisi yok); ABS'li ~1.1 g, ağır araç daha zayıf
     const brakeWant = throttle < 0 && fs > 0.5 ? -throttle : 0;
-    this.brakeP = (this.brakeP || 0) + (brakeWant - (this.brakeP || 0)) * Math.min(1, dt * (brakeWant > (this.brakeP || 0) ? 10 : 16));
-    this.brakeDecel = Math.min(muGrip * 0.85, heavy ? 7 : 10.5);
+    // 1.5 (oyuncu: "frenler tutmuyor"): basınç ~0,05 sn'de dolar; binek ~1,5 g, spor ~1,6 g, ağır araç ~0,85 g.
+    // 100 km/s'den duruş ~35 m'den ~26 m'ye iner (gerçekçi sınırın biraz üstü, oyun hissi için).
+    this.brakeP = (this.brakeP || 0) + (brakeWant - (this.brakeP || 0)) * Math.min(1, dt * (brakeWant > (this.brakeP || 0) ? 20 : 16));
+    this.brakeDecel = Math.min(muGrip * 1.15, heavy ? 8.5 : 16);
     if (throttle > 0) {
       if (fs < -0.5) fs += this.brakeDecel * throttle * dt; // geri giderken ileri gaz = fren
       else {

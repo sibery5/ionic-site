@@ -65,7 +65,7 @@ const CLEAR_KEYS = [
 ];
 // Kapalı gök anahtarları: [e, tepe, ufuk, aydınlık bulut, gölge bulut] (gece: şehir ışığını yansıtan turuncumsu bulut)
 const OVC_KEYS = [
-  [-0.3, C(0x0c0b0d), C(0x201b19), C(0x2c2420), C(0x15120f)],
+  [-0.3, C(0x0a0b0e), C(0x1b1a1d), C(0x26242a), C(0x121216)], // 1.5: kahverengi gece göğü yerine nötr koyu, hafif sıcak
   [-0.06, C(0x272a34), C(0x3a3c44), C(0x48464e), C(0x28292f)],
   [0.0, C(0x474954), C(0x666062), C(0x787070), C(0x44454c)],
   [0.12, C(0x7c828b), C(0x9a9ea5), C(0xb2b6bb), C(0x6c7079)],
@@ -74,7 +74,7 @@ const OVC_KEYS = [
 // Güneş ışığı: [e, renk, ışınım]
 const SUN_KEYS = [[-0.04, C(0x000000), 0], [0.0, C(0xff5418), 0.25], [0.05, C(0xff8a40), 1.1], [0.12, C(0xffbe80), 2.0], [0.3, C(0xffe6c8), 2.8], [0.6, C(0xfff2e4), 3.1], [1.0, C(0xfff6ee), 3.2]];
 // Pozlama: [e, pozlama]
-const EXPO_KEYS = [[-0.3, 1.3], [-0.1, 1.15], [-0.03, 0.85], [0.02, 0.74], [0.12, 0.66], [0.4, 0.62], [1, 0.6]];
+const EXPO_KEYS = [[-0.3, 1.2], [-0.1, 1.1], [-0.03, 0.85], [0.02, 0.74], [0.12, 0.66], [0.4, 0.62], [1, 0.6]];
 
 function keyIdx(keys, e) {
   if (e <= keys[0][0]) return [0, 0, 0];
@@ -307,12 +307,13 @@ export class Environment {
     // gece: ay ışığı + şehir ışık kirliliği (turuncumsu taban)
     const n = this.nightFactor;
     this.ambient.color.setRGB(lerp(0.32, 0.5, ovc), lerp(0.34, 0.4, ovc), lerp(0.5, 0.36, ovc));
-    this.ambient.intensity = n * 0.16 + 0.02;
+    this.ambient.intensity = n * 0.08 + 0.02;
     // gece tabanı: mavi ay ışığı gök ışığı + aşağıdan turuncu şehir ışığı (aydınlık pencereler/sokak ışığı
     // bulutlardan ve cephelerden seken ışık). Böylece gece "kapkara" değil, okunur ve sinematik olur.
     if (n > 0) {
       const nk = smooth(0.1, 0.75, n);
-      const floorI = nk * (1.6 + 0.3 * ovc);
+      // 1.5: taban 1,6 idi (gündüz gök ışığı kadar) ve gece pozlamasıyla cepheler gündüz gibi aydınlanıyordu; okunur ama karanlık bir gece için düşürüldü
+      const floorI = nk * (0.6 + 0.15 * ovc);
       if (this.hemi.intensity < floorI) {
         const k = 1 - this.hemi.intensity / Math.max(floorI, 1e-4);
         this.hemi.color.lerp(cT.setRGB(0.52, 0.64, 1.0), k * 0.85);

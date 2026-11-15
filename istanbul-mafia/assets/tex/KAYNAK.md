@@ -4,7 +4,7 @@ Bu klasördeki dokular [Poly Haven](https://polyhaven.com) kaynaklıdır ve **CC
 
 | Oyundaki ad | Poly Haven dokusu | Döşeme (m) | Boyut |
 |---|---|---|---|
-| asphalt | [asphalt_pit_lane](https://polyhaven.com/a/asphalt_pit_lane) | 2.0 | 1207 KB |
+| asphalt | [asphalt_pit_lane](https://polyhaven.com/a/asphalt_pit_lane) | 2.0 | 1284 KB |
 | pave | [pavement_03](https://polyhaven.com/a/pavement_03) | 2.0 | 1252 KB |
 | cobble | [cobblestone_floor_08](https://polyhaven.com/a/cobblestone_floor_08) | 2.0 | 1144 KB |
 | grass | [forrest_ground_01](https://polyhaven.com/a/forrest_ground_01) | 2.0 | 1624 KB |
