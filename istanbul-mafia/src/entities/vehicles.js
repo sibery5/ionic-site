@@ -1678,6 +1678,8 @@ const PHYS = {
   bike: { grip: 9, cs: 10, steer: 0.8, gears: 1, rev: 0, soft: 0.5, snd: 'bike', horn: 'bell' },
   tank: { grip: 30, cs: 20, steer: 0, gears: 3, rev: 0.5, soft: 0.3, snd: 'tank', horn: 'truck', offroad: true },
 };
+// [A2] egzoz alevi atan motor sesi sınıfları -> audio.exhaustPops türü
+const FLAME_SND = { sport: 'sport', v8: 'v8', moto: 'moto', car: 'sport', small: 'sport' };
 const rnd = (k = 1) => (Math.random() * 2 - 1) * k;
 
 // birleşik geometriden etiket aralığını ayrı geometri olarak kopyala
@@ -2097,6 +2099,26 @@ export class Vehicle {
   }
 
   // ortak: yangın/duman/enkaz
+  // [A2] egzoz alevi: havuzlu parçacıklar (fireSys + add), kare içinde ayırma yok. flameT > 0 iken her karede 1-2 parçacık.
+  updateExhaustFlame(dt) {
+    if (!(this.flameT > 0)) return;
+    this.flameT -= dt;
+    const pt = this.game.particles;
+    if (!pt || !pt.fireSys || this.destroyed) { this.flameT = 0; return; }
+    const d = this.def, h = this.heading, fx = Math.sin(h), fz = Math.cos(h), cx = Math.cos(h), cz = -Math.sin(h);
+    const moto = this.kind === 'car' && this.mesh.userData.moto;
+    const back = moto ? d.len * 0.42 : d.len / 2 + 0.06, y = this.pos.y + (moto ? 0.42 : (d.cl || 0.15) + 0.08);
+    const k = this.flameK || 1, twin = !moto && (this.P.snd === 'sport' || this.P.snd === 'v8');
+    for (let s = 0; s < (twin ? 2 : 1); s++) {
+      const ox = moto ? 0.18 : twin ? (s ? 0.22 : -0.22) : -0.25 * d.wid;
+      const x = this.pos.x - fx * back + cx * ox, z = this.pos.z - fz * back + cz * ox;
+      const sp = 5 + Math.random() * 4;
+      // sıcak mavi-beyaz çekirdek + turuncu dil (arkaya doğru, aracın hızını taşır)
+      pt.add.emit(x, y, z, this.vx - fx * sp, 0.2, this.vz - fz * sp, 0.06, 0.16 * k, 0.6, 0.75, 1.6, 1);
+      const j = pt.fireSys.emit(x, y, z, this.vx - fx * sp * 0.8, 0.3, this.vz - fz * sp * 0.8, 0.09 + Math.random() * 0.05, (0.22 + Math.random() * 0.12) * k, 1.6, 0.9, 0.5, 1, 0.8, 0);
+      if (j >= 0 && pt.fireSys.spin) pt.fireSys.spin[j] = rnd(4);
+    }
+  }
   updateFire(dt) {
     const g = this.game, f = this.fwd, L = this.def.len;
     if (this.burnT > 0 && !this.destroyed) {
@@ -2271,6 +2293,7 @@ export class Vehicle {
     const phys = g.physics;
     const def = this.def, P = this.P, ud = this.mesh.userData;
     this.updateFire(dt);
+    this.updateExhaustFlame(dt);
 
     const c = this.controls;
     const canDrive = !this.destroyed && this.sinking <= 0 && (this.driver || this.ai);
@@ -2306,6 +2329,8 @@ export class Vehicle {
       const a = g.audio || audio;
       if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
       if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
+      // [A2] egzoz alevi: vites yükseltmede (gazdayken) ve düşürmede kısa alev + patlama
+      if (FLAME_SND[P.snd] && (this.gear < g0 ? fs > 6 : throttle > 0.5 && this.rpm > 0.6)) { this.flameT = 0.16; this.flameK = this.gear > g0 ? 1 : 0.7; if (a.exhaustPops) a.exhaustPops(FLAME_SND[P.snd], 0.6); }
       // [B1] vites küçültmede devir eşleme gazı (blip): devir anında yükselir
       if (this.gear < g0 && fs > 3) this.rpm = Math.min(1.05, this.rpm + 0.22);
     }
@@ -2318,6 +2343,7 @@ export class Vehicle {
       if (P.turbo && a.turbo) a.turbo(0.6); // turbo boşaltma "pışşt"
       // [B1] egzoz patlamaları: spor/V8/motosiklet sınıfı gaz kesince
       if ((P.snd === 'sport' || P.snd === 'v8' || P.snd === 'moto') && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(P.snd, Math.min(1, this.rpm));
+      if (FLAME_SND[P.snd]) { this.flameT = 0.22; this.flameK = 0.85; } // [A2] gaz kesince yüksek devirde alev
     }
     // [B1] devir sınırlayıcı: vites sonunda tam gazda devir titrer (son vites hariç)
     if (throttle > 0.8 && this.gear === nG - 1 && sp > max * 0.97) rpmT = Math.min(rpmT, 0.97);
