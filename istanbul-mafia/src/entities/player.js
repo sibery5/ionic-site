@@ -298,7 +298,8 @@ export class Player extends Actor {
     const def = this.wdef;
     const wantFire = def.auto ? input.mouse.left : input.mouse.leftPressed;
     if (wantFire && !this.swimming && !busy && !g.ui.blocking() && !(this.inInterior && this.inInterior.peaceful)) {
-      if (def.type === 'melee') { this.heading = this.camYaw; this.tryFire(this.pos, this.aimDir); }
+      if (this.animalBlock(def)) { /* [C8] hayvana saldırı yok: tetik çalışmaz */ }
+      else if (def.type === 'melee') { this.heading = this.camYaw; this.tryFire(this.pos, this.aimDir); }
       else {
         if (!this.aiming) { this.heading = this.camYaw; this.aimYaw = 0; }
         tmp.set(this.pos.x, this.pos.y + 1.45 - (this.crouch ? 0.32 : 0), this.pos.z);
@@ -311,6 +312,16 @@ export class Player extends Actor {
     }
     this.model.animate(dt, this.animState());
     this.syncModel();
+  }
+
+  // [C8] nişan/yumruk menzilinde hayvan varsa tetiği kilitle ve uyar
+  animalBlock(def) {
+    const An = this.game.animals;
+    if (!An || !An.warnHarm || this.inInterior) return false;
+    const a = def.type === 'melee' ? An.animalInFront(this.pos.x, this.pos.z, this.camYaw) : this.aimAnimal;
+    if (!a) return false;
+    An.warnHarm(a);
+    return true;
   }
 
   computeAim() {
@@ -328,6 +339,15 @@ export class Player extends Actor {
     const xh = g.combat.rayTargets && g.combat.rayTargets(o, this.aimDir, t, this); // [savaş] helikopter vb.
     if (xh) t = xh.t;
     this.aimOnTarget = !!xh;
+    // [C8] nişan bir sokak hayvanında mı (engelden ve hedeften önce)
+    const An = g.animals;
+    let tA = t;
+    const c0 = (this.camDistNow || 0) + 0.5;
+    if (An && tA < c0) { // kamera ile oyuncu arasındaki engel: ışını oyuncunun önünden yeniden at
+      const d = this.aimDir, w = g.physics.raycast(o.x + d.x * c0, o.y + d.y * c0, o.z + d.z * c0, d.x, d.y, d.z, range);
+      tA = c0 + (w ? w.t : range);
+    }
+    this.aimAnimal = An && An.rayAnimal && !this.inInterior ? An.rayAnimal(o, this.aimDir, tA + 0.3) : null;
     // kamera ile oyuncu arasındaki engelleri atla
     t = Math.max(t, (this.camDistNow || 0) + 0.5);
     this.aimPoint = (this.aimPoint || new THREE.Vector3()).copy(o).addScaledVector(this.aimDir, t);
@@ -355,7 +375,7 @@ export class Player extends Actor {
     if (def.oneHand && input.mouse.right) {
       this.aiming = true;
       const wantFire = def.auto ? input.mouse.left : input.mouse.leftPressed;
-      if (wantFire) {
+      if (wantFire && !this.animalBlock(def)) {
         tmp.set(v.pos.x, v.pos.y + 1.3, v.pos.z);
         tmp2.copy(this.aimPoint).sub(tmp).normalize();
         this.tryFire(tmp, tmp2);

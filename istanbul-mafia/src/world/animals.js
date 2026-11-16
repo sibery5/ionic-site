@@ -7,6 +7,14 @@ import { audio } from '../core/audio.js';
 import { isLand } from './map.js';
 
 const r = new RNG(2024);
+// [C8] farkındalık cümleleri (uyarı alt yazısı ve sevme ipucu)
+const AWARE = [
+  'Sokak hayvanları bu şehrin en eski sakinleri.',
+  'Onlar konuşamaz; sesleri sen ol.',
+  'Bir kap su, bir kap mama hayat kurtarır.',
+  'Kapının önüne koyduğun bir kap su, yazın bir canı yaşatır.',
+  'Mama kabını boş bırakma; bu sokak onların da evi.',
+];
 
 // ---------------- sokak kedileri ve köpekleri ----------------
 // Gövde/baş birleştirilmiş geometri (az çizim çağrısı), iki parçalı bacaklar (diz/bilek bükülür), üç parçalı
@@ -193,6 +201,8 @@ export class Animals {
     a.follow = a.dog ? 50 + Math.random() * 30 : 8 + Math.random() * 6;
     if (a.dog) audio.bark(a.x, a.z); else audio.meow(a.x, a.z);
     this.game.ui.bark({ pos: { x: a.x, y: -1.5, z: a.z } }, r.pick(PET_LINES[a.dog ? 'dog' : 'cat']));
+    this.petN = (this.petN || 0) + 1;
+    if (this.petN % 3 === 1 && this.game.ui.notify) this.game.ui.notify('İpucu: ' + AWARE[2 + ((this.petN / 3) | 0) % 3], 'info'); // [C8] mama/su farkındalığı
   }
   // silah sesi / patlama: kediler hep, köpeklerin çoğu kaçar
   onNoise(x, z, radius) {
@@ -203,7 +213,7 @@ export class Animals {
       this.scare(a, x, z, 3 + Math.random() * 3);
     }
   }
-  // [mekanik tepki] mermi hayvanın yanından geçti / sıyırdı: ateş yönünden uzağa kaçar; sıyrılan inler, kanar, topallar
+  // [C8] mermi hayvanın yanından geçti: hiçbir mermi hayvana zarar vermez (kan/topallama yok); yalnız ateş yönünden uzağa kaçar.
   onBullet(o, dir, t) {
     for (const L of [this.cats, this.dogs]) for (const a of L) {
       const lx = a.x - o.x, ly = 0.35 - o.y, lz = a.z - o.z;
@@ -211,14 +221,53 @@ export class Animals {
       if (s < 0 || s > t + 0.5) continue;
       const cx = lx - dir.x * s, cy = ly - dir.y * s, cz = lz - dir.z * s, d = Math.sqrt(cx * cx + cy * cy + cz * cz);
       if (d > 3) continue;
-      if (d < (a.dog ? 0.32 : 0.22)) {
-        a.hurtT = 25;
-        if (!this.game.combat.voice || this.game.combat.voice()) audio.yelp(a.x, a.z, a.dog);
-        const gp = this.game.particles;
-        if (gp && gp.blood) gp.blood({ x: a.x, y: 0.35, z: a.z }, 3, null, 0.005);
-      }
-      // ateş eden yönden uzağa (merminin gidiş yönüne değil, yana ve geriye)
       this.scare(a, o.x, o.z, 3 + Math.random() * 3);
+    }
+  }
+  // [C8] nişan ışını bir hayvana değiyor mu (engelden önce, maxT içinde). Bellek ayırmaz.
+  rayAnimal(o, dir, maxT) {
+    let best = null, bt = maxT;
+    for (const L of [this.cats, this.dogs]) for (const a of L) {
+      const lx = a.x - o.x, ly = (a.dog ? 0.38 : 0.24) - o.y, lz = a.z - o.z;
+      const s = lx * dir.x + ly * dir.y + lz * dir.z;
+      if (s < 0 || s > bt) continue;
+      const cx = lx - dir.x * s, cy = ly - dir.y * s, cz = lz - dir.z * s;
+      const rr = a.dog ? 0.55 : 0.42; // cömert yarıçap: kıl payı da sayılır
+      if (cx * cx + cy * cy + cz * cz < rr * rr) { bt = s; best = a; }
+    }
+    return best;
+  }
+  // [C8] yakın dövüş menzilinde (önünde) hayvan var mı
+  animalInFront(x, z, heading, r = 1.9) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    for (const L of [this.cats, this.dogs]) for (const a of L) {
+      const dx = a.x - x, dz = a.z - z, d = Math.hypot(dx, dz);
+      if (d < r && (d < 0.5 || (dx * fx + dz * fz) / d > 0.2)) return a;
+    }
+    return null;
+  }
+  // [C8] tetik engeli: büyük uyarı (2,6 sn). Tekrar tetiklenebilir ama en çok 1,2 sn'de bir yenilenir (spam yok).
+  warnHarm(a) {
+    this.warnN = (this.warnN || 0) + 1;
+    if (a) this.scare(a, this.game.player.pos.x, this.game.player.pos.z, 2.5);
+    const now = performance.now();
+    if (this.warnAt && now - this.warnAt < 1200) return;
+    this.warnAt = now;
+    this.warnShown = (this.warnShown || 0) + 1;
+    const ui = this.game.ui;
+    if (ui && ui.bigMessage) ui.bigMessage('GERÇEKTEN MASUM BİR HAYVANA ZARAR MI VERECEKSİN?', AWARE[(this.warnShown - 1) % AWARE.length], 'red', 2.6);
+  }
+  // [C8] son çare: araç gövdesine 2,2 m'den yakın hayvan yana sıçrar (hiçbir araç hayvanı ezmez)
+  dodge(a, vehs) {
+    for (let i = 0; i < vehs.length; i++) {
+      const v = vehs[i]; if (v.speed < 1) continue;
+      const dx = a.x - v.pos.x, dz = a.z - v.pos.z, d = Math.hypot(dx, dz);
+      if (d > 2.2) continue;
+      const sx = -v.vz / v.speed, sz = v.vx / v.speed, side = dx * sx + dz * sz >= 0 ? 1 : -1, k = 2.4 - d;
+      const nx = a.x + sx * side * k, nz = a.z + sz * side * k;
+      if (isLand(nx, nz)) { a.x = nx; a.z = nz; }
+      this.scare(a, v.pos.x, v.pos.z, 2);
+      this.dodgeN = (this.dodgeN || 0) + 1;
     }
   }
   scare(a, x, z, t) { a.state = 'flee'; a.fleeT = t; a.follow = 0; a.heading = Math.atan2(a.x - x, a.z - z) + (Math.random() - 0.5) * 0.8; a.t = t; }
@@ -251,17 +300,19 @@ export class Animals {
     // tehlike: hızla gelen araç
     if (a.state !== 'flee') {
       for (let i = 0; i < vehs.length; i += 1) {
-        const v = vehs[i]; if (v.speed < 4) continue;
+        const v = vehs[i]; if (v.speed < 1.5) continue;
         const dx = a.x - v.pos.x, dz = a.z - v.pos.z;
-        if (Math.abs(dx) > 9 || Math.abs(dz) > 9) continue;
+        const R = 6 + v.speed * 0.8; // [C8] hızlı araçtan daha erken kaçar
+        if (Math.abs(dx) > R || Math.abs(dz) > R) continue;
         const ahead = (dx * v.vx + dz * v.vz) / (v.speed * (Math.hypot(dx, dz) || 1));
-        if (ahead > 0.5) { const sx = -v.vz, sz = v.vx, side = dx * sx + dz * sz > 0 ? 1 : -1; this.scare(a, a.x - sx * side, a.z - sz * side, 1.5); break; }
+        if (ahead > 0.3) { const sx = -v.vz, sz = v.vx, side = dx * sx + dz * sz > 0 ? 1 : -1; this.scare(a, a.x - sx * side, a.z - sz * side, 1.5); break; }
       }
       // koşan oyuncu kedileri ürkütür; köpekler havlar
       if (!a.dog && d < 3 && P.speed > 4.5 && a.follow <= 0) this.scare(a, p.x, p.z, 2);
       if (a.dog && d < 8 && P.speed > 4.5 && a.sound <= 0 && a.follow <= 0) { audio.bark(a.x, a.z); a.sound = 4 + Math.random() * 6; a.state = 'stand'; a.t = 1.5; a.barkAt = { x: p.x, z: p.z }; }
     }
     if (!a.dog && a.sound <= 0 && d < 10) { if (Math.random() < 0.2) audio.meow(a.x, a.z); a.sound = 8 + Math.random() * 10; }
+    this.dodge(a, vehs);
     if (a.state === 'flee') { if (a.t <= 0) { a.state = 'walk'; a.t = 2; } return; }
     // takip: oyuncunun 1.5-2.5 m arkasında
     if (a.follow > 0 && !P.vehicle && !P.inInterior && d < 30) {
@@ -279,7 +330,6 @@ export class Animals {
   }
   move(a, dt, g) {
     let target = a.state === 'walk' ? (a.dog ? 1.1 : 0.55) : a.state === 'run' ? (a.dog ? 3.2 : 2.2) : a.state === 'flee' ? (a.dog ? 6.5 : 5.5) : 0;
-    if (a.hurtT > 0) { a.hurtT -= dt; target *= 0.55; } // yaralı: topallayarak yavaş
     // hız yumuşak değişir: duruş/kalkış geçişi
     a.sp += (target - a.sp) * Math.min(1, dt * (target > a.sp ? 3 : 5));
     if (a.sp < 0.02) { a.sp = 0; }
