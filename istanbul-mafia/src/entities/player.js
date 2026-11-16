@@ -6,6 +6,7 @@ import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
 import { isLand, inBridge, WATER_Y, poolAt } from '../world/map.js'; // [villa] poolAt
 import { tryMantle, stepMantle } from './mantle.js'; // [hareket H1]
+import { deckCarry, deckStep } from './boats.js'; // [hareket H4] güverte
 import { swimVertical, swimEffects, enterWater, tryClimbOut } from './swim.js'; // [deniz]
 
 const tmp = new THREE.Vector3();
@@ -140,6 +141,7 @@ export class Player extends Actor {
 
   updateOnFoot(dt, input) {
     const g = this.game;
+    if (this.onBoat) deckCarry(this); // [hareket H4] tekneyle taşın
     // silah seçimi
     for (let k = 0; k <= 8; k++) if (input.hit('Digit' + (k + 1))) this.selectSlot(k);
     if (input.hit('KeyQ')) this.cycleWeapon(1);
@@ -263,7 +265,7 @@ export class Player extends Actor {
       }
       if (ml > 0.1) tryClimbOut(this, g, mx, mz, ml);
     }
-    if (water && !this.swimming && !this.vault && !this.scriptCtl && this.pos.y < (poolAt(this.pos.x, this.pos.z) || { y: WATER_Y }).y + 0.25) { // [villa] havuz su yüzü
+    if (water && !this.swimming && !this.vault && !this.scriptCtl && !this.onBoat && this.pos.y < (poolAt(this.pos.x, this.pos.z) || { y: WATER_Y }).y + 0.25) { // [villa] havuz su yüzü
       this.swimming = true; this.rollT = 0; this.crouch = false;
       enterWater(this, g);
     }
@@ -299,6 +301,7 @@ export class Player extends Actor {
     } else if (this.swimming) {
       g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
     }
+    if (!this.swimming && !this.vault) deckStep(this); // [hareket H4] güverte sınırı ve zemini
     if (!this.inInterior) {
       this.pos.x = clamp(this.pos.x, -995, 995); this.pos.z = clamp(this.pos.z, -995, 995);
     }

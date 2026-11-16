@@ -181,6 +181,53 @@ module.exports = async (p, out) => {
       await H.shot(p, out + '-swim.png');
     }
   }
+  // [hareket H4 + H5] tekne azami hızları; güvertede yürüme, sürüklenirken güvertede kalma, küpeşteden atlayınca suya
+  if (want('deck')) {
+    const r = await p.evaluate(() => {
+      const g = game, pl = g.player, res = { top: {} };
+      if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);
+      for (const t of ['surat', 'yat', 'megayat', 'balikci']) {
+        const v = g.boats.add(t, -300, 940, Math.PI / 2);
+        g.enterVehicle(v, true); sim(0.1);
+        let mx = 0; hold('KeyW', true);
+        sim(25, () => { v.pos.x = -300; v.pos.z = 940; v.heading = Math.PI / 2; v.yawRate = 0; mx = Math.max(mx, Math.hypot(v.vx, v.vz)); });
+        hold('KeyW', false);
+        res.top[t] = +mx.toFixed(1);
+        g.vehicles.ejectDriver(v); g.boats.remove(v); pl.onBoat = null;
+      }
+      // güverte: motor yattan kalk, tekne 10 sn sürüklenip dönerken güvertede yürü
+      const v = g.boats.add('yat', -300, 940, Math.PI / 2);
+      g.enterVehicle(v, true); sim(0.2); v.vx = 0; v.vz = 0;
+      g.vehicles.ejectDriver(v); sim(0.2);
+      res.exit = { onBoat: !!pl.onBoat, swim: !!pl.swimming, dy: +(pl.pos.y - v.pos.y).toFixed(2) };
+      let off = 0, swim = 0, maxLx = 0;
+      v.vx = 3.5; v.vz = 1.0; v.yawRate = 0.15;
+      const side = () => Math.atan2(Math.cos(v.heading), -Math.sin(v.heading)); // teknenin sol bordası yönü
+      hold('KeyW', true);
+      sim(10, (i) => {
+        pl.camYaw = i < 150 ? v.heading : side();
+        v.vx = 3.5; v.vz = 1.0; v.yawRate = 0.15; // rüzgârla sürüklenme
+        if (!pl.onBoat) off++; if (pl.swimming) swim++;
+        if (pl.onBoat) maxLx = Math.max(maxLx, Math.abs(pl.onBoat.lx));
+      });
+      res.drift = { off, swim, maxLx: +maxLx.toFixed(2), halfW: +(v.def.wid / 2).toFixed(2), moved: +Math.hypot(v.pos.x + 300, v.pos.z - 940).toFixed(1) };
+      // küpeşteden atla: bordaya doğru koşarken Space
+      v.vx = v.vz = 0; v.yawRate = 0;
+      sim(0.5, () => { pl.camYaw = side(); });
+      press('Space');
+      sim(3, () => { pl.camYaw = side(); });
+      hold('KeyW', false);
+      res.jump = { onBoat: !!pl.onBoat, swim: !!pl.swimming };
+      g.boats.remove(v); pl.onBoat = null;
+      return res;
+    });
+    console.log('deck', JSON.stringify(r));
+    const T = r.top;
+    check('H5 azami hız: sürat 24–28, motor yat 14–17, mega yat 9–11, balıkçı 5–6 m/s', T.surat >= 24 && T.surat <= 28 && T.yat >= 14 && T.yat <= 17 && T.megayat >= 9 && T.megayat <= 11 && T.balikci >= 5 && T.balikci <= 6, T);
+    check('H4 tekneden kalkınca güvertede (suya düşmez)', r.exit.onBoat && !r.exit.swim && r.exit.dy > 1, r.exit);
+    check('H4 tekne 10 sn sürüklenirken oyuncu güvertede yürür ve kalır', r.drift.off === 0 && r.drift.swim === 0 && r.drift.maxLx < r.drift.halfW && r.drift.moved > 20, r.drift);
+    check('H4 küpeşteden atlayınca suya girer', !r.jump.onBoat && r.jump.swim, r.jump);
+  }
   console.log(fail ? `SONUÇ: ${fail} hata` : 'SONUÇ: tümü geçti');
   void out;
 };
