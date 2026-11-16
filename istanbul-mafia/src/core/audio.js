@@ -62,8 +62,16 @@ export class AudioEngine {
     this.ctx = new AC();
     this.comp = this.ctx.createDynamicsCompressor();
     this.comp.threshold.value = -10; this.comp.knee.value = 8; this.comp.ratio.value = 6; this.comp.attack.value = 0.003; this.comp.release.value = 0.25;
-    this.comp.connect(this.ctx.destination);
-    this.out = this.comp; // [ses] hoparlöre giden son düğüm (ölçüm testi buradan dinler)
+    // [ses] ana karışım sınırlayıcısı: ölçüm (20 eşzamanlı atış + patlama) bu zincir yokken çıkışta +2,1 dBFS tepe ve
+    // 39 örnek > -1 dBFS verdi (kırpılma). Hızlı tepe sınırlayıcı + yumuşak tavan (-1 dBFS altı); 0,6 altı doğrusal kalır.
+    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -4; this.limiter.knee.value = 0; this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.12;
+    this.ceiling = this.ctx.createWaveShaper();
+    const cv = new Float32Array(2049);
+    for (let i = 0; i < cv.length; i++) { const x = i / 1024 - 1, a = Math.abs(x); cv[i] = a < 0.6 ? x : Math.sign(x) * (0.6 + 0.28 * Math.tanh((a - 0.6) / 0.28)); }
+    this.ceiling.curve = cv; this.ceiling.oversample = '2x';
+    this.comp.connect(this.limiter); this.limiter.connect(this.ceiling); this.ceiling.connect(this.ctx.destination);
+    this.out = this.ceiling; // hoparlöre giden son düğüm (ölçüm testi buradan dinler)
     this.master = this.ctx.createGain();
     this.master.connect(this.comp);
     this.sfx = this.ctx.createGain(); this.sfx.connect(this.master);

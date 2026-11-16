@@ -10,29 +10,31 @@
 // Çalarken: kuru ses yakın alanda baskın (ref 6 m), kuyruk çok daha yavaş söner -> uzaktaki atış "pat + yankı" olur;
 // ses hızı gecikmesi; iç mekânda oda kuyruğu, dışarıdaki atışlar duvardan boğuk gelir.
 import { BQ, rng, normalize, toBuffer, modal, burst, TAU, addEcho, fadeOut } from './dsp.js';
-import { play } from './voices.js';
+import { play, airLP } from './voices.js';
 import { addRender, addPlay } from './lab.js';
 
 // crack: şok cephesi genliği, cw: N-dalgası genişliği (ms), cf: kıvılcım süzgeci, body: [frekans, sönüm sn, genlik],
 // boom: [Hz, sönüm sn, genlik], gas: [Hz, sönüm, genlik], mech: [zaman sn, tür], len: tampon süresi,
 // tail: kuyruk sınıfı, tg: kuyruk kazancı, g: genel kazanç, range: duyulma menzili (m), ss: ses üstü çatlama
 const W = {
-  pistol: { crack: 1.0, cw: 0.35, cf: 5500, body: [2600, 0.02, 1.1], boom: [165, 0.05, 0.85], gas: [1500, 0.025, 0.3], mech: [0.011, 'slide'], len: 0.32, tail: 'light', tg: 0.42, g: 0.85, range: 280 },
-  pistol2: { crack: 1.05, cw: 0.3, cf: 6000, body: [2900, 0.018, 1.0], boom: [175, 0.045, 0.75], gas: [1700, 0.022, 0.28], mech: [0.01, 'slide'], len: 0.3, tail: 'light', tg: 0.4, g: 0.82, range: 270 },
-  revolver: { crack: 1.1, cw: 0.45, cf: 4800, body: [2100, 0.03, 1.25], boom: [128, 0.075, 1.0], gas: [1250, 0.045, 0.7], mech: [0, 'none'], len: 0.42, tail: 'heavy', tg: 0.5, g: 0.95, range: 340 },
-  magnum: { crack: 1.15, cw: 0.5, cf: 4500, body: [1900, 0.035, 1.35], boom: [110, 0.09, 1.15], gas: [1150, 0.05, 0.75], mech: [0, 'none'], len: 0.48, tail: 'heavy', tg: 0.55, g: 1.0, range: 380 },
-  smg: { crack: 0.9, cw: 0.28, cf: 6200, body: [3000, 0.016, 0.95], boom: [180, 0.04, 0.6], gas: [1800, 0.02, 0.25], mech: [0.009, 'bolt'], len: 0.26, tail: 'light', tg: 0.34, g: 0.75, range: 240 },
-  smg2: { crack: 0.85, cw: 0.25, cf: 6800, body: [3300, 0.014, 0.9], boom: [195, 0.035, 0.5], gas: [2000, 0.018, 0.22], mech: [0.008, 'bolt'], len: 0.24, tail: 'light', tg: 0.3, g: 0.7, range: 220 },
-  shotgun: { crack: 0.75, cw: 0.7, cf: 3600, body: [1500, 0.05, 1.5], boom: [88, 0.12, 1.3], gas: [900, 0.07, 0.6], mech: [0, 'none'], len: 0.6, tail: 'heavy', tg: 0.6, g: 1.05, range: 340 },
-  sawed: { crack: 0.8, cw: 0.8, cf: 3200, body: [1300, 0.06, 1.6], boom: [80, 0.14, 1.45], gas: [800, 0.08, 0.8], mech: [0, 'none'], len: 0.65, tail: 'heavy', tg: 0.62, g: 1.1, range: 310 },
-  rifle: { crack: 1.2, cw: 0.22, cf: 7000, body: [2300, 0.028, 1.2], boom: [125, 0.07, 0.9], gas: [1600, 0.03, 0.35], mech: [0.022, 'bolt'], len: 0.42, tail: 'rifle', tg: 0.55, g: 0.95, range: 420, ss: 1 },
-  ak: { crack: 1.2, cw: 0.25, cf: 6400, body: [2000, 0.03, 1.25], boom: [115, 0.075, 1.0], gas: [1400, 0.032, 0.4], mech: [0.024, 'bolt'], len: 0.42, tail: 'rifle', tg: 0.56, g: 0.95, range: 420, ss: 1 },
-  lmg: { crack: 1.2, cw: 0.24, cf: 6600, body: [2150, 0.03, 1.25], boom: [118, 0.075, 0.95], gas: [1500, 0.03, 0.35], mech: [0.02, 'belt'], len: 0.42, tail: 'rifle', tg: 0.56, g: 0.95, range: 440, ss: 1 },
-  dmr: { crack: 1.25, cw: 0.26, cf: 6600, body: [2000, 0.035, 1.3], boom: [105, 0.09, 1.1], gas: [1400, 0.035, 0.4], mech: [0.024, 'bolt'], len: 0.5, tail: 'rifle', tg: 0.62, g: 1.0, range: 500, ss: 1 },
-  sniper: { crack: 1.35, cw: 0.32, cf: 6000, body: [1700, 0.045, 1.45], boom: [80, 0.14, 1.35], gas: [1200, 0.045, 0.5], mech: [0, 'none'], len: 0.6, tail: 'heavy', tg: 0.7, g: 1.05, range: 560, ss: 1.2 },
-  rpg: { crack: 0.5, cw: 0.9, cf: 2500, body: [900, 0.08, 1.3], boom: [70, 0.16, 1.2], gas: [700, 0.12, 0.6], mech: [0, 'rocket'], len: 1.5, tail: 'launch', tg: 0.6, g: 1.0, range: 380 },
-  gl: { crack: 0.25, cw: 0.9, cf: 2500, body: [700, 0.04, 0.8], boom: [95, 0.09, 1.3], gas: [420, 0.06, 0.6], mech: [0, 'tube'], len: 0.55, tail: 'launch', tg: 0.35, g: 0.9, range: 260 },
+  pistol: { crack: 1.0, cw: 0.35, cf: 5500, body: [2600, 0.02, 1.1], boom: [165, 0.05, 0.85], gas: [1500, 0.025, 0.3], mech: [0.011, 'slide'], bf: 330, len: 0.32, tail: 'light', tg: 0.21, g: 0.85, range: 280 },
+  pistol2: { crack: 1.05, cw: 0.3, cf: 6000, body: [2900, 0.018, 1.0], boom: [175, 0.045, 0.75], gas: [1700, 0.022, 0.28], mech: [0.01, 'slide'], bf: 340, len: 0.3, tail: 'light', tg: 0.2, g: 0.82, range: 270 },
+  revolver: { crack: 1.1, cw: 0.45, cf: 4800, body: [2100, 0.03, 1.25], boom: [128, 0.075, 1.0], gas: [1250, 0.045, 0.7], mech: [0, 'none'], bf: 280, len: 0.42, tail: 'heavy', tg: 0.25, g: 0.95, range: 340 },
+  magnum: { crack: 1.15, cw: 0.5, cf: 4500, body: [1900, 0.035, 1.35], boom: [110, 0.09, 1.15], gas: [1150, 0.05, 0.75], mech: [0, 'none'], bf: 260, len: 0.48, tail: 'heavy', tg: 0.275, g: 1.0, range: 380 },
+  smg: { crack: 0.9, cw: 0.28, cf: 6200, body: [3000, 0.016, 0.95], boom: [180, 0.04, 0.6], gas: [1800, 0.02, 0.25], mech: [0.009, 'bolt'], bf: 360, len: 0.26, tail: 'light', tg: 0.17, g: 0.75, range: 240 },
+  smg2: { crack: 0.85, cw: 0.25, cf: 6800, body: [3300, 0.014, 0.9], boom: [195, 0.035, 0.5], gas: [2000, 0.018, 0.22], mech: [0.008, 'bolt'], bf: 380, len: 0.24, tail: 'light', tg: 0.15, g: 0.7, range: 220 },
+  shotgun: { crack: 0.95, cw: 0.7, cf: 3600, body: [1500, 0.05, 1.5], boom: [88, 0.12, 1.3], gas: [900, 0.07, 0.6], mech: [0, 'none'], bf: 200, len: 0.6, tail: 'heavy', tg: 0.3, g: 1.05, range: 340 },
+  sawed: { crack: 0.95, cw: 0.8, cf: 3200, body: [1300, 0.06, 1.6], boom: [80, 0.14, 1.45], gas: [800, 0.08, 0.8], mech: [0, 'none'], bf: 190, len: 0.65, tail: 'heavy', tg: 0.31, g: 1.1, range: 310 },
+  rifle: { crack: 1.2, cw: 0.22, cf: 7000, body: [2300, 0.028, 1.2], boom: [125, 0.07, 0.9], gas: [1600, 0.03, 0.35], mech: [0.022, 'bolt'], bf: 300, len: 0.42, tail: 'rifle', tg: 0.275, g: 0.95, range: 420, ss: 1 },
+  ak: { crack: 1.2, cw: 0.25, cf: 6400, body: [2000, 0.03, 1.25], boom: [115, 0.075, 1.0], gas: [1400, 0.032, 0.4], mech: [0.024, 'bolt'], bf: 280, len: 0.42, tail: 'rifle', tg: 0.28, g: 0.95, range: 420, ss: 1 },
+  lmg: { crack: 1.2, cw: 0.24, cf: 6600, body: [2150, 0.03, 1.25], boom: [118, 0.075, 0.95], gas: [1500, 0.03, 0.35], mech: [0.02, 'belt'], bf: 290, len: 0.42, tail: 'rifle', tg: 0.28, g: 0.95, range: 440, ss: 1 },
+  dmr: { crack: 1.25, cw: 0.26, cf: 6600, body: [2000, 0.035, 1.3], boom: [105, 0.09, 1.1], gas: [1400, 0.035, 0.4], mech: [0.024, 'bolt'], bf: 280, len: 0.5, tail: 'rifle', tg: 0.31, g: 1.0, range: 500, ss: 1 },
+  sniper: { crack: 1.35, cw: 0.32, cf: 6000, body: [1700, 0.045, 1.45], boom: [80, 0.14, 1.35], gas: [1200, 0.045, 0.5], mech: [0, 'none'], bf: 250, len: 0.6, tail: 'sniper', tg: 0.35, g: 1.05, range: 560, ss: 1.2 },
+  rpg: { crack: 0.5, cw: 0.9, cf: 2500, body: [900, 0.08, 1.3], boom: [70, 0.16, 1.2], gas: [700, 0.12, 0.6], mech: [0, 'rocket'], bf: 180, len: 1.5, tail: 'launch', tg: 0.3, g: 1.0, range: 380 },
+  gl: { crack: 0.25, cw: 0.9, cf: 2500, body: [700, 0.04, 0.8], boom: [95, 0.09, 1.3], gas: [420, 0.06, 0.6], mech: [0, 'tube'], bf: 220, len: 0.55, tail: 'launch', tg: 0.175, g: 0.9, range: 260 },
 };
+// [ses] susturuculu: zayıf şok cephesi, boğuk "puf" gaz, belirgin sürgü tıkı, çok kısa kuyruk (veri satırı; silah tablosu bağlanınca kullanılır)
+W.suppressed = { crack: 0.12, cw: 0.2, cf: 3500, body: [1800, 0.012, 0.5], boom: [230, 0.025, 0.3], gas: [900, 0.03, 0.9], mech: [0.008, 'slide'], bf: 450, len: 0.22, tail: 'light', tg: 0.06, g: 0.5, range: 90 };
 W.m4 = W.rifle;
 const NV = 2; // varyant sayısı (hız/kazanç oynamasıyla birlikte yeterli çeşitlilik)
 
@@ -47,9 +49,9 @@ export function synthShot(sr, P, seed) {
   const i0 = Math.floor(t0 * sr), nw = Math.max(3, Math.floor(P.cw * 0.001 * sr));
   for (let i = 0; i < nw * 2 && i0 + i < N; i++) {
     const u = i / nw;
-    d[i0 + i] += P.crack * 1.6 * (u < 1 ? 1 - u * 0.4 : -(0.6 - (u - 1) * 0.6));
+    d[i0 + i] += P.crack * 2.0 * (u < 1 ? 1 - u * 0.4 : -(0.6 - (u - 1) * 0.6));
   }
-  burst(d, sr, t0, { dur: 0.02, tau: 0.0018, f: P.cf * j(0.08), q: 0.6, type: 'hp', amp: P.crack * 1.1, R });
+  burst(d, sr, t0, { dur: 0.025, tau: 0.0024, f: P.cf * j(0.08), q: 0.6, type: 'hp', amp: P.crack * 1.5, R });
   if (P.ss) { // ses üstü mermi: ince, keskin ikinci çatlama + kısa metalik çınlama
     burst(d, sr, t0 + 0.0004, { dur: 0.01, tau: 0.0008, f: 8000, q: 0.7, type: 'hp', amp: 0.9 * P.ss, R });
     modal(d, sr, t0, [[2400 * j(0.1), 0.012, 0.25], [3900 * j(0.1), 0.008, 0.2]], 0.5 * P.ss, R);
@@ -57,13 +59,13 @@ export function synthShot(sr, P, seed) {
   // 3) gövde patlaması: süzgeç frekansı hızla kapanır
   const [bf, bt, ba] = P.body;
   {
-    const F = new BQ('lp', bf * 1.6, 0.7, sr), C = new BQ('bp', 380 * j(0.1), 0.9, sr);
+    const F = new BQ('lp', bf * 1.6, 0.7, sr), C = new BQ('bp', (P.bf || 380) * j(0.08), 1.1, sr);
     const n = Math.min(N - i0, Math.floor(bt * 9 * sr));
     for (let i = 0; i < n; i++) {
       const t = i / sr;
       if ((i & 15) === 0) F.set('lp', bf * (0.25 + 1.4 * Math.exp(-t / (bt * 1.3))), 0.7);
       const nz = R.n();
-      d[i0 + i] += F.p(nz) * ba * 1.6 * Math.exp(-t / bt) * Math.min(1, i / 8) + C.p(nz) * ba * 1.2 * Math.exp(-t / (bt * 1.6));
+      d[i0 + i] += F.p(nz) * ba * 1.6 * Math.exp(-t / bt) * Math.min(1, i / 8) + C.p(nz) * ba * 2.2 * Math.exp(-t / (bt * 2.2));
     }
   }
   // 4) gümleme: perdesi düşen sinüs
@@ -74,7 +76,7 @@ export function synthShot(sr, P, seed) {
     for (let i = 0; i < n; i++) {
       const t = i / sr;
       ph += TAU * ff * (0.55 + 0.45 * Math.exp(-t / 0.018)) / sr;
-      d[i0 + i] += Math.sin(ph) * a * Math.exp(-t / tau) * Math.min(1, t / 0.0012);
+      d[i0 + i] += Math.sin(ph) * a * 0.7 * Math.exp(-t / tau) * Math.min(1, t / 0.0012);
     }
   }
   // 5) gaz
@@ -102,16 +104,18 @@ export function synthShot(sr, P, seed) {
   normalize(d, 1);
   const k = 2.2, kn = Math.tanh(k);
   for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * k) / kn;
-  const hp = new BQ('hp', 32, 0.7, sr); hp.run(d);
+  // alt kesim: ölçümde <150 Hz payı %54-68 idi (boğuk "bom"); küçük silahta 75 Hz, ağırlarda 50 Hz
+  const hp = new BQ('hp', P.boom[0] < 100 ? 50 : 75, 0.7, sr); hp.run(d);
   fadeOut(d, Math.floor(0.03 * sr));
   return normalize(d, 0.95);
 }
 
 const TAIL_SR = 22050;
 const TAILS = {
-  light: { src: 'pistol', size: 0.8 },
+  light: { src: 'pistol', size: 0.7 }, // tabanca: kuru, kısa
   rifle: { src: 'rifle', size: 1.1 },
   heavy: { src: 'shotgun', size: 1.25 },
+  sniper: { src: 'rifle', size: 1.55 }, // keskin nişancı: en uzun yankı
   launch: { src: 'gl', size: 1.1 },
 };
 // Sokak kuyruğu: yakın cephe, karşı cephe, sokak boyunca ardışık bloklar (gittikçe koyulaşan) + yuvarlanan gürleme
@@ -126,13 +130,13 @@ export function synthTail(kind, space, seed = 21) {
     : [[0.004, 0.5, 7000], [0.007, 0.45, 6000], [0.011, 0.42, 5500], [0.015, 0.38, 5000], [0.019, 0.35, 4500], [0.024, 0.32, 4000], [0.03, 0.28, 3500], [0.037, 0.24, 3000], [0.046, 0.2, 2600], [0.058, 0.15, 2200]];
   for (const [t, g, lp] of taps) addEcho(d, dry, t * T.size * (0.92 + R() * 0.16), g * (R() < 0.5 ? 1 : 0.85), sr, lp, street ? 120 : 80);
   // dağınık gürleme
-  const lp = new BQ('lp', street ? 650 : 2400, 0.6, sr), lp2 = new BQ('lp', street ? 900 : 3000, 0.6, sr);
+  const lp = new BQ('lp', street ? 650 : 2400, 0.6, sr), lp2 = new BQ('lp', street ? 900 : 3000, 0.6, sr), hpR = new BQ('hp', 110, 0.7, sr);
   let am = 1, amT = 0;
   for (let i = 0; i < N; i++) {
     const t = i / sr;
     if (t > amT) { amT = t + 0.05 + R() * 0.12; am = 0.6 + R() * 0.6; } // yuvarlanma (gök gürültüsü gibi kabarıp söner)
     const env = Math.min(1, t / (street ? 0.05 : 0.008)) * Math.exp(-t / (street ? 0.5 * T.size : 0.13));
-    d[i] += lp2.p(lp.p(R.n())) * env * (street ? 0.9 : 0.6) * am;
+    d[i] += hpR.p(lp2.p(lp.p(R.n()))) * env * (street ? 0.9 : 0.6) * am;
   }
   if (!street) { // oda modu: alçak "bom"
     let ph = 0; for (let i = 0; i < N; i++) { const t = i / sr; ph += TAU * 92 / sr; d[i] += Math.sin(ph) * 0.35 * Math.exp(-t / 0.11) * Math.min(1, t / 0.004); }
@@ -234,7 +238,7 @@ async function renderShot(eng, kind, dist, space) {
   const dry = toBuffer(oc, synthShot(sr, P, 77)), tl = toBuffer(oc, synthTail(P.tail, space, 21), TAIL_SR);
   const ref = 6, tr = P.range * 0.3, edge = 1 - Math.pow(dist / P.range, 2);
   const s1 = oc.createBufferSource(), s2 = oc.createBufferSource(), g1 = oc.createGain(), g2 = oc.createGain(), lp = oc.createBiquadFilter();
-  s1.buffer = dry; s2.buffer = tl; lp.type = 'lowpass'; lp.frequency.value = Math.min(20000, 20000 * Math.exp(-dist / (P.range * 0.28)) + 350);
+  s1.buffer = dry; s2.buffer = tl; lp.type = 'lowpass'; lp.frequency.value = Math.min(20000, airLP(dist, P.range));
   g1.gain.value = P.g * edge / (1 + dist / ref); g2.gain.value = P.tg * P.g * edge / (1 + dist / tr);
   // test dosyası: kuru tepe ~ -3 dBFS olacak şekilde ölçekle (kuyruk üstüne eklenir)
   const norm = 0.72 / (P.g * edge / (1 + dist / ref) + 1e-6);
@@ -247,7 +251,7 @@ async function renderShot(eng, kind, dist, space) {
   if (dist > 30) normalize(ch, 0.5);
   return { chans: [ch], sr };
 }
-for (const k of ['pistol', 'revolver', 'smg', 'shotgun', 'rifle', 'ak', 'sniper', 'lmg', 'magnum', 'sawed', 'dmr', 'rpg', 'gl']) addRender('gun_' + k, (eng) => renderShot(eng, k, 5, 'street'));
+for (const k of ['pistol', 'revolver', 'smg', 'shotgun', 'rifle', 'ak', 'sniper', 'lmg', 'magnum', 'sawed', 'dmr', 'rpg', 'gl', 'suppressed']) addRender('gun_' + k, (eng) => renderShot(eng, k, 5, 'street'));
 addRender('gun_rifle_150m', (eng) => renderShot(eng, 'rifle', 150, 'street'));
 addRender('gun_pistol_80m', (eng) => renderShot(eng, 'pistol', 80, 'street'));
 addRender('gun_pistol_indoor', (eng) => renderShot(eng, 'pistol', 5, 'room'));
