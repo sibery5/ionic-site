@@ -473,13 +473,15 @@ export function deckSpot(v, a) {
   deckWorld(v, D.spot[0], D.spot[1], DW);
   a.pos.set(DW.x, deckYAt(v, D.spot[0], D.spot[1]), DW.z);
   a.vy = 0; a.vx = 0; a.vz = 0; a.grounded = true; a.swimming = false;
-  a.onBoat = { v, lx: D.spot[0], lz: D.spot[1] };
+  a.onBoat = { v, lx: D.spot[0], lz: D.spot[1], wx: DW.x, wz: DW.z };
 }
 // karenin başında: tekneyle taşı (konum yerel koordinattan yeniden kurulur)
 export function deckCarry(a) {
   const B = a.onBoat; if (!B) return;
   const v = B.v;
   if (a.vehicle || v.destroyed || !a.game.vehicles.list.includes(v)) { a.onBoat = null; return; }
+  // betik/ışınlanma ile güverteden alındıysa (son güverte konumundan uzakta) bağı bırak
+  if (B.wx !== undefined && Math.abs(a.pos.x - B.wx) + Math.abs(a.pos.z - B.wz) > 1.5) { a.onBoat = null; return; }
   deckWorld(v, B.lx, B.lz, DW); a.pos.x = DW.x; a.pos.z = DW.z;
   if (a.grounded) a.pos.y = deckYAt(v, B.lx, B.lz);
 }
@@ -493,7 +495,7 @@ export function deckStep(a) {
     for (const v of g.vehicles.list) {
       if (v.kind !== 'boat' || v.destroyed || Math.abs(v.pos.x - a.pos.x) + Math.abs(v.pos.z - a.pos.z) > v.def.len) continue;
       const l = toLocal(v, a.pos.x, a.pos.z), hw = deckHalfW(v.def, l.lz);
-      if (hw > 0 && Math.abs(l.lx) < hw) { const y = deckYAt(v, l.lx, l.lz); if (a.pos.y <= y + 0.05 && a.pos.y > y - 0.6) { B = a.onBoat = { v, lx: l.lx, lz: l.lz }; break; } }
+      if (hw > 0 && Math.abs(l.lx) < hw) { const y = deckYAt(v, l.lx, l.lz); if (a.pos.y <= y + 0.05 && a.pos.y > y - 0.6) { B = a.onBoat = { v, lx: l.lx, lz: l.lz, wx: a.pos.x, wz: a.pos.z }; break; } }
     }
     if (!B) return;
   }
@@ -516,7 +518,7 @@ export function deckStep(a) {
     }
   }
   B.lx = lx; B.lz = lz;
-  deckWorld(v, lx, lz, DW); a.pos.x = DW.x; a.pos.z = DW.z;
+  deckWorld(v, lx, lz, DW); a.pos.x = DW.x; a.pos.z = DW.z; B.wx = DW.x; B.wz = DW.z;
   const y = deckYAt(v, lx, lz);
   if (a.pos.y <= y + 0.02 && a.vy <= 0.01) { a.pos.y = y; a.vy = 0; a.grounded = true; }
   else if (a.pos.y - y < 0.05) a.grounded = true;
