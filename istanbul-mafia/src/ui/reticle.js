@@ -27,7 +27,8 @@ export class Reticle {
     const hud = !(g.settings && g.settings.hudVisible === false) && g.mode === 'playing';
     const show = hud && gun && !p.dead && !p.swimming && (p.vehicle ? p.aiming : (p.aiming || g.input.mouse.left || (p.adsK || 0) > 0.05));
     let mode = 'none';
-    if (show) mode = p.scoped ? 'scope' : wd.pellets ? 'ring' : 'cross';
+    // [C1] silaha göre: tabanca küçük artı, pompalı halka, tüfek dinamik artı, keskin nişancı dürbün dışında nokta yok
+    if (show) mode = p.scoped ? 'scope' : (wd.pellets || wd.xhair === 'ring') ? 'ring' : wd.xhair === 'scope' ? 'none' : wd.xhair === 'pistol' ? 'pistol' : 'cross';
     const S = this.state;
     S.mode = mode;
     if (mode !== 'none') {
@@ -39,20 +40,39 @@ export class Reticle {
       S.alpha = p.vehicle ? 1 : Math.max(0.55, Math.min(1, 0.55 + (p.adsK || 0)));
       S.zoom = p.zoomNow || 1;
     }
-    const key = mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10);
+    // [C1] isabet işareti solması
+    const hk = this.hitK, hd = hk === 'kill' ? 0.55 : 0.32;
+    const ha = hk ? Math.max(0, 1 - (performance.now() - this.hitAt) / 1000 / hd) : 0;
+    if (hk && ha <= 0) this.hitK = null;
+    S.hitA = hud ? ha : 0;
+    const key = Math.round(S.hitA * 12) + (hk || '') + '|' + mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10);
     if (key === this.key) return;
     this.key = key;
     this.draw(W, H);
   }
+  hit(kind) { this.hitK = kind; this.hitAt = performance.now(); this.hitN = (this.hitN || 0) + 1; this.key = ''; }
+  drawHit(x, cx, cy) {
+    const S = this.state; if (!(S.hitA > 0)) return;
+    const k = this.hitK, kill = k === 'kill', r0 = kill ? 7 : 6, r1 = kill ? 17 : 13;
+    x.globalAlpha = S.hitA; x.lineCap = 'round';
+    for (const pass of [0, 1]) {
+      x.strokeStyle = pass ? (k === 'body' ? '#ffffff' : '#ff2a1f') : 'rgba(0,0,0,0.6)';
+      x.lineWidth = (kill ? 3.6 : 2) + (pass ? 0 : 2);
+      x.beginPath();
+      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { x.moveTo(cx + sx * r0, cy + sy * r0); x.lineTo(cx + sx * r1, cy + sy * r1); }
+      x.stroke();
+    }
+    x.globalAlpha = 1;
+  }
   draw(W, H) {
     const x = this.ctx, S = this.state;
     x.clearRect(0, 0, W, H);
-    if (S.mode === 'none') return;
     const cx = Math.round(W / 2) + 0.5, cy = Math.round(H / 2) + 0.5;
-    if (S.mode === 'scope') { this.drawScope(x, W, H, cx, cy); return; }
+    if (S.mode === 'none') { this.drawHit(x, cx, cy); return; }
+    if (S.mode === 'scope') { this.drawScope(x, W, H, cx, cy); this.drawHit(x, cx, cy); return; }
     x.globalAlpha = S.alpha;
     x.lineCap = 'butt';
-    const gap = S.gap, L = 9;
+    const pistol = S.mode === 'pistol', gap = pistol ? Math.min(S.gap, 7) : S.gap, L = pistol ? 5 : 9;
     // koyu kontur + açık çizgi (her zeminde okunur)
     for (const pass of [0, 1]) {
       x.strokeStyle = pass ? S.color : 'rgba(0,0,0,0.65)';
@@ -72,6 +92,7 @@ export class Reticle {
     x.fillStyle = 'rgba(0,0,0,0.65)'; x.beginPath(); x.arc(cx, cy, 2.6, 0, Math.PI * 2); x.fill();
     x.fillStyle = S.color; x.beginPath(); x.arc(cx, cy, 1.5, 0, Math.PI * 2); x.fill();
     x.globalAlpha = 1;
+    this.drawHit(x, cx, cy);
   }
   drawScope(x, W, H, cx, cy) {
     const R = H * 0.47;

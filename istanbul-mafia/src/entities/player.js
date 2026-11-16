@@ -81,10 +81,13 @@ export class Player extends Actor {
     // fare ile kamera
     // [savaş nişan] yakınlaştırmada hassasiyet görüş açısıyla orantılı düşer (dürbünde titreme yok)
     const sens = 0.0022 * s.sensitivity * (this.zoomNow > 1.01 ? 1 / Math.pow(this.zoomNow, 0.85) : 1);
-    this.camYaw -= input.mouse.dx * sens;
-    this.camPitch += input.mouse.dy * sens * (s.invertY ? -1 : 1);
+    const dYaw = -input.mouse.dx * sens, dPitch = input.mouse.dy * sens * (s.invertY ? -1 : 1);
+    this.camYaw += dYaw;
+    this.camPitch += dPitch;
+    this.recoverRecoil(dt, dYaw, dPitch);
     this.camPitch = clamp(this.camPitch, PITCH_UP, PITCH_DOWN);
-    if (input.mouse.wheel && !input.down('ShiftLeft')) {
+    if (input.mouse.wheel && this.scoped && this.wdef.zoom2) { this.scopeLvl = this.scopeLvl ? 0 : 1; } // [C1] dürbün 2 kademe
+    else if (input.mouse.wheel && !input.down('ShiftLeft')) {
       if (!this.vehicle) this.cycleWeapon(input.mouse.wheel > 0 ? 1 : -1);
     }
     // [kanun] betikli hareket (araç gaspı vb.): kontrol kilitli, konumu betik sürer
@@ -305,13 +308,26 @@ export class Player extends Actor {
         tmp.set(this.pos.x, this.pos.y + 1.45 - (this.crouch ? 0.32 : 0), this.pos.z);
         tmp2.copy(this.aimPoint).sub(tmp).normalize();
         if (this.tryFire(tmp, tmp2)) {
-          this.camPitch -= def.dmg > 50 ? 0.02 : 0.006; this.camYaw += (Math.random() - 0.5) * 0.008;
           this.camKick = Math.min(1, (this.camKick || 0) + (def.dmg > 50 ? 0.6 : 0.25));
         }
       }
     }
     this.model.animate(dt, this.animState());
     this.syncModel();
+  }
+
+  // [C1] tepme toparlanması: ateş kesilince kamera desenin götürdüğü yerden merkeze döner (silahın recover süresinde ~%95).
+  // Oyuncunun fareyle karşıladığı kısım (aşağı çekme / ters yön) geri verilmez: aşırı düzeltme yok.
+  recoverRecoil(dt, dYaw, dPitch) {
+    if (!this.recP && !this.recY) return;
+    if (this.recP > 0 && dPitch > 0) this.recP = Math.max(0, this.recP - dPitch);
+    if (this.recY && dYaw * this.recY > 0) this.recY = Math.sign(this.recY) * Math.max(0, Math.abs(this.recY) - Math.abs(dYaw));
+    const def = this.wdef || {}, since = (this.game.combat.clock || 0) - (this.lastShotT || -9);
+    if (since < 0.09 || (def.auto && this.game.input.mouse.left && since < 0.25)) return;
+    const k = 1 - Math.exp(-dt * 3 / Math.max(0.1, def.recover || 0.35));
+    const dp = this.recP * k, dy = this.recY * k;
+    this.camPitch += dp; this.camYaw += dy; this.recP -= dp; this.recY -= dy;
+    if (Math.abs(this.recP) < 1e-5 && Math.abs(this.recY) < 1e-5) { this.recP = 0; this.recY = 0; }
   }
 
   // [C8] nişan/yumruk menzilinde hayvan varsa tetiği kilitle ve uyar
@@ -483,7 +499,7 @@ export class Player extends Actor {
       this.cSide = A > 0.001 ? wantSide : damp(this.cSide, wantSide, 10, dt);
       this.cH = damp(this.cH, wantH, 8, dt);
       this.cSh = damp(this.cSh, this.shoulder, 9, dt);
-      const zoom = this.dead ? 1 : 1 + ((W.zoom || 1.3) - 1) * Ae;
+      const zoom = this.dead ? 1 : 1 + (((W.zoom2 && this.scopeLvl ? W.zoom2 : W.zoom) || 1.3) - 1) * Ae;
       this.zoomNow = zoom;
       fov = fov / zoom;
       if (sprinting) fov += 6;

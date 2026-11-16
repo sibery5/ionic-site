@@ -87,6 +87,55 @@ export const WEAPONS = {
     recoil: 0.04, recoilH: 0.01, bloom: 0, bloomMax: 0, adsMul: 0.6, flash: 0.9, shell: false,
   },
 };
+// ---------------- [C1] silah hissi (klasik rekabetçi FPS) ----------------
+// Her silaha eklenen alanlar (mevcut satırları bozmadan, aşağıda ada göre birleştirilir):
+//  first   : ilk mermi sapma çarpanı (dururken, birikmiş bloom yokken; 0,25 = ilk mermi neredeyse tam isabet)
+//  pat     : sabit tepme deseni adı (RECOIL_PAT); seri atışta her mermi aynı yere tırmanır -> öğrenilebilir
+//  recover : toparlanma süresi (sn): ateş kesilince kamera bu sürede merkeze döner, desen baştan başlar
+//  move    : koşarken sapma cezası (m/sn başına), jump: havadayken sapma çarpanı
+//  xhair   : nişangâh: 'pistol' küçük artı, 'ring' pompalı halkası, 'dyn' yayılmayla açılan artı, 'scope' dürbün (dışında nokta yok)
+//  zoom2   : dürbün ikinci kademe (fare tekeri)
+const FEEL = {
+  pistol: { first: 0.3, pat: 'pistol', recover: 0.28, move: 0.05, jump: 2.2, xhair: 'pistol' },
+  kilic: { first: 0.3, pat: 'pistol', recover: 0.26, move: 0.05, jump: 2.2, xhair: 'pistol' },
+  revolver: { first: 0.25, pat: 'heavy', recover: 0.4, move: 0.06, jump: 2.5, xhair: 'pistol' },
+  kartal: { first: 0.25, pat: 'heavy', recover: 0.45, move: 0.07, jump: 2.8, xhair: 'pistol' },
+  uzi: { first: 0.5, pat: 'smg', recover: 0.3, move: 0.03, jump: 1.8, xhair: 'dyn' },
+  akrep: { first: 0.5, pat: 'smg', recover: 0.3, move: 0.03, jump: 1.8, xhair: 'dyn' },
+  shotgun: { first: 1, pat: 'heavy', recover: 0.45, move: 0.03, jump: 1.6, xhair: 'ring' },
+  cifte: { first: 1, pat: 'heavy', recover: 0.45, move: 0.03, jump: 1.6, xhair: 'ring' },
+  ak: { first: 0.3, pat: 'rifle', recover: 0.38, move: 0.09, jump: 3, xhair: 'dyn' },
+  m4: { first: 0.3, pat: 'rifle', recover: 0.33, move: 0.08, jump: 3, xhair: 'dyn' },
+  tufan: { first: 0.45, pat: 'lmg', recover: 0.45, move: 0.11, jump: 3.5, xhair: 'dyn' },
+  sniper: { first: 1, pat: 'heavy', recover: 0.6, move: 0.15, jump: 4, xhair: 'scope', zoom2: 10 },
+  bozkurt: { first: 0.6, pat: 'heavy', recover: 0.45, move: 0.12, jump: 3.5, xhair: 'scope', zoom2: 7 },
+  rpg: { first: 1, pat: 'heavy', recover: 0.6, move: 0.06, jump: 2, xhair: 'dyn' },
+  simsek: { first: 1, pat: 'heavy', recover: 0.5, move: 0.06, jump: 2, xhair: 'dyn' },
+};
+for (const id in FEEL) if (WEAPONS[id]) Object.assign(WEAPONS[id], FEEL[id]);
+// Sabit tepme desenleri: [dikey, yatay] çarpanları (dikey x def.recoil, yatay x def.recoilH; pozitif yatay = sağa).
+// Bir kez hesaplanır, rastgelelik yok: aynı seri her seferinde birebir aynı.
+const PAT_N = 100;
+function makePat(fn) { const a = new Float32Array(PAT_N * 2); for (let i = 0; i < PAT_N; i++) { const r = fn(i); a[i * 2] = r[0]; a[i * 2 + 1] = r[1]; } return a; }
+export const RECOIL_PAT = {
+  // tüfek: ilk 9 mermi dik tırmanır (hafif sağa), sonra sola savrulur, sonra sağa; tırmanış söner
+  rifle: makePat((i) => [i < 9 ? 1 - i * 0.04 : i < 16 ? 0.45 : 0.22, i < 6 ? 0.15 : i < 9 ? 0.4 : i < 17 ? -1.1 : i < 24 ? 1.2 : -0.9]),
+  // hafif makineli: kısa tırmanış, sonra küçük zikzak
+  smg: makePat((i) => [i < 6 ? 0.9 : 0.4, i < 4 ? 0.1 : Math.sin(i * 0.9) * 0.8]),
+  // makineli tüfek: yavaş ama uzun tırmanış, geniş salınım
+  lmg: makePat((i) => [i < 14 ? 0.8 : 0.35, Math.sin(i * 0.45) * 1.0]),
+  // tabanca: her mermi yukarı, sırayla hafif sağ/sol
+  pistol: makePat((i) => [1, [0.3, -0.2, 0.4, -0.3, 0.2, -0.4][i % 6]]),
+  // ağır tek atış: dik ve hafif sağa
+  heavy: makePat(() => [1, 0.3]),
+};
+// i. merminin kamera tepmesi (radyan) -> out.p (yukarı, pozitif), out.y (yatay)
+export function recoilStep(def, i, out) {
+  const a = RECOIL_PAT[def.pat] || RECOIL_PAT.heavy, k = Math.min(i, PAT_N - 1) * 2;
+  out.p = a[k] * (def.recoil || 0); out.y = a[k + 1] * (def.recoilH || 0);
+  return out;
+}
+
 export const WEAPON_ORDER = ['fists', 'knife', 'bat', 'pistol', 'kilic', 'revolver', 'kartal', 'uzi', 'akrep', 'shotgun', 'cifte', 'ak', 'm4', 'tufan', 'sniper', 'bozkurt', 'rpg', 'simsek', 'grenade'];
 
 // ---------------- [savaş] yüzey dokuları (kodla): fırçalanmış metal, fosfat kaplama, polimer kumlama ----------------
