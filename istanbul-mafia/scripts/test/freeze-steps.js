@@ -3,10 +3,11 @@
 //   FZ=crash | FZ=wanted | ikisi (varsayılan)
 const H = require('./harness.js');
 module.exports = async (p) => {
+  const cars = process.env.FZCARS ? JSON.parse(process.env.FZCARS) : null;
   p.setDefaultTimeout(1800000);
   await H.start(p); await H.install(p);
   const which = process.env.FZ || 'crash,wanted';
-  const r = await p.evaluate((which) => {
+  const r = await p.evaluate(([which, process_env_FZCARS]) => {
     const g = game, pl = g.player, out = {};
     g.loop = () => {}; pl.god = true;
     // ölçüm sarmalayıcısı: bir nesnenin yöntemlerine toplam süre sayacı
@@ -26,11 +27,18 @@ module.exports = async (p) => {
     const top = () => Object.entries(prof).sort((a, b) => b[1].max - a[1].max).slice(0, 8).map(([k, e]) => `${k}: max ${e.max.toFixed(1)} ms, top ${e.ms.toFixed(0)} ms, ${e.n}x`);
     const reset = () => { for (const k in prof) delete prof[k]; };
 
+    // gerçek oyunda ses ön örnekleme kuyruğu menüde boşta boşalır; testte boşta zaman yok: önce kuyruğu boşalt (yapay takılmaları ayıkla)
+    { const q = g.audio._prewarm; let n = 0; const t = performance.now(); while (q && q.length) { try { q.shift()(); } catch (e) { /* devam */ } n++; } out.prewarm = { tasks: n, ms: Math.round(performance.now() - t) }; }
     // sarmalanacaklar: araç ve savaş yolundaki ağır adaylar
     const V = g.vehicles.list[0] && Object.getPrototypeOf(g.vehicles.list[0]);
     for (const m of ['impact', 'dent', 'detach', 'setPane', 'paneHit', 'damage', 'explode', 'setDoor', 'ownGeo', 'update']) wrap(V, m, 'Vehicle.' + m);
     for (const m of ['crash', 'crashMetal', 'glassBreak', 'glassCrack', 'impact', 'shot', 'explosion']) wrap(g.audio, m, 'audio.' + m);
     for (const m of ['explosion', 'fire', 'update']) wrap(g.combat, m, 'combat.' + m);
+    for (const m of ['startPool', 'bleed']) wrap(g.combat, m, 'combat.' + m);
+    if (g.combat.glass) wrap(g.combat.glass, 'update', 'glass.update');
+    { const A = g.audio, names = new Set(); let o = A; while (o && o !== Object.prototype) { for (const k of Object.getOwnPropertyNames(o)) names.add(k); o = Object.getPrototypeOf(o); }
+      for (const k of names) { if (k === 'constructor' || k === 'ctx') continue; let v; try { v = A[k]; } catch (e) { continue; } if (typeof v === 'function') wrap(A, k, 'audio.' + k); } }
+    { const E = g.audio.engineSys || g.audio.eng || null; if (E) for (const m of Object.getOwnPropertyNames(Object.getPrototypeOf(E))) if (m !== 'constructor') wrap(E, m, 'engine.' + m); }
     if (g.combat.glass) for (const m of ['crack', 'shatter']) wrap(g.combat.glass, m, 'glass.' + m);
     for (const m of ['update', 'addPart']) wrap(g.vehicles, m, 'vehicles.' + m);
     if (g.npcs) for (const m of ['update', 'spawn', 'add', 'spawnAt']) wrap(g.npcs, m, 'npcs.' + m);
@@ -43,7 +51,7 @@ module.exports = async (p) => {
       let E = null; for (const e of g.map.edges) if (e.width >= 12 && (!E || e.len > E.len)) E = e;
       const H0 = Math.atan2(E.b.x - E.a.x, E.b.z - E.a.z);
       const C = [];
-      for (const [type, sp] of [['sedan', 14], ['sedan', 33], ['gt', 33], ['suv', 25], ['sedan', 20], ['sedan', 33]]) {
+      for (const [type, sp] of (process_env_FZCARS || [['sedan', 14], ['sedan', 33], ['gt', 33], ['suv', 25], ['sedan', 20], ['sedan', 33]])) {
         if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);
         const X = E.a.x + Math.sin(H0) * 30, Z = E.a.z + Math.cos(H0) * 30;
         const v = g.vehicles.add(type, X, Z, H0); g.enterVehicle(v, true); step(2);
@@ -68,6 +76,6 @@ module.exports = async (p) => {
       out.wanted = { ...stats(T), over100: T.filter((x) => x > 100).length, top: top(), heapMB: heap, npcs: g.npcs.list.length, army: cnt((n) => n.kind === 'soldier' || n.kind === 'army'), swat: cnt((n) => n.kind === 'swat'), cars: g.vehicles.list.length, stars: W.level };
     }
     return out;
-  }, which);
+  }, [which, cars]);
   console.log('freeze', JSON.stringify(r, null, 1));
 };

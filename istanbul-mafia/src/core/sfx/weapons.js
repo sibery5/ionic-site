@@ -197,6 +197,8 @@ export function weaponPrewarm(eng) {
   const jobs = [];
   for (const k of ['pistol', 'rifle', 'smg', 'shotgun', 'lmg', 'revolver', 'ak', 'm4', 'sniper', 'pistol2', 'smg2', 'magnum', 'sawed', 'dmr', 'rpg', 'gl']) jobs.push(() => shotBufs(eng, k));
   for (const c of Object.keys(TAILS)) { jobs.push(() => tailBuf(eng, c, 'street')); jobs.push(() => tailBuf(eng, c, 'room')); }
+  for (const m of ['pump', 'bolt', 'break']) jobs.push(() => mechBuf(eng, m)); // [donma] mekanik sesler ve vızıltılar da önceden
+  for (const cr of [false, true]) jobs.push(() => bank(eng, cr ? 'whizC' : 'whiz', () => [0, 1, 2].map((i) => toBuffer(eng.ctx, synthWhiz(eng.ctx.sampleRate, cr, 600 + i * 5 + (cr ? 1 : 0))))));
   return jobs;
 }
 

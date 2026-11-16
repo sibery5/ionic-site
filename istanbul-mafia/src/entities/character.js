@@ -195,6 +195,7 @@ function geoFor(L, lod) {
   let g = geoCache.get(k);
   if (g) { geoCache.delete(k); geoCache.set(k, g); return g; }
   g = buildCharGeometry(L, lod);
+  if (g.userData.deferred) return g; // [donma] geçici şekil: önbelleğe alınmaz, model sonra kendi şekline geçer
   geoCache.set(k, g);
   if (geoCache.size > 180) { const [ok, ov] = geoCache.entries().next().value; geoCache.delete(ok); if (!ov.userData.shared) ov.dispose(); }
   return g;
@@ -267,6 +268,7 @@ const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 // [savaş kancası] paylaşılan yara geometrisi/malzemesi (tembel), yüzüstü yatış yönü
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
+const NO_STYLE = { zone: 'torso', heavy: false };
 export const SOCK = { x: 0.028, y: 0.07, z: 0.036 }; // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
@@ -370,6 +372,7 @@ export class CharacterModel {
     }
     const lod = this.forceLod !== null ? this.forceLod : this.lod;
     const geo = geoFor(L, lod);
+    this.mhPending = !!geo.userData.deferred;
     const mat = charMaterial(L);
     if (!this.mesh) {
       this.mesh = new THREE.SkinnedMesh(geo, mat);
@@ -410,6 +413,7 @@ export class CharacterModel {
   setLod(l) {
     this.lod = l;
     this.mesh.geometry = geoFor(this.look, l);
+    this.mhPending = !!this.mesh.geometry.userData.deferred;
   }
 
   setLook(look) { this.look = { ...look }; this.build(); }
@@ -552,6 +556,11 @@ export class CharacterModel {
   // st: {speed, moveX, moveZ, aim, aimPitch, aimYaw, twoHanded, weapon, dead, swim, sit, crouch, recoil, reload,
   //      air, vy, hands_up, talk, dance, vault, roll, cower, phone, smoke, isPlayer, force}
   animate(dt, st) {
+    // [donma] geçici gövdeyle kurulduysa bütçe açılınca kendi şekline geç (aynı gövde tipi: iskelet ve bağlama aynı)
+    if (this.mhPending && this.mesh) {
+      const g = geoFor(this.look, this.forceLod !== null ? this.forceLod : this.lod);
+      if (!g.userData.deferred) { this.mesh.geometry = g; this.mhPending = false; }
+    }
     dt = Math.min(dt, 0.1);
     this.time += dt;
     const t = this.time, P = this.P, Q = this.Q, W = this.w;
@@ -1353,7 +1362,9 @@ export class CharacterModel {
   //  bleed/prone: yavaş çöküş · wall: duvara sırtını verip aşağı kayar, oturur. Stil yoksa eski genel düşüş.
   poseDeath(P, T) {
     const d = this.deathDir || { x: 0, z: -1 };
-    const S = this.deathStyle, zone = S ? S.zone : 'torso';
+    // [donma] stil atanmamış ölüm/devrilme (araç çarpması, patlama, yere düşme) S.heavy okurken hata fırlatıyor, hata her karede
+    // tekrarlandığı için çizim hiç çalışmıyor ve ekran donuyordu: varsayılan stil.
+    const S = this.deathStyle || NO_STYLE, zone = S.zone;
     if (zone === 'wall' && !this.kd) { this.poseWallSlump(P, T, d, S); return; }
     let fx = d.x, fz = d.z;
     const delay = zone === 'head' ? (S.heavy ? 0.08 : 0.24) : zone === 'leg' ? 0.42 : zone === 'bleed' || zone === 'prone' ? 0.3 : 0;

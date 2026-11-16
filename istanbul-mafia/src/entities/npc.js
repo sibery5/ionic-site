@@ -79,6 +79,17 @@ export function engageRange(def, kind) {
   return rifle ? [8, 28 * k, 45 * k] : def.range <= 70 ? [3, 12, 22] : [4, 16, 25];
 }
 
+// [donma] Tek bir karakterin hatası bütün oyunu dondurmasın: hata yakalanır, bir kez günlüğe yazılır; aynı karakter
+// art arda hata verirse sahneden kaldırılır (her karede tekrarlanan hata çizimi durdurup ekranı donduruyordu).
+const ERR_SEEN = new Set();
+function safeUpdate(mgr, n, dt, full) {
+  try { n.update(dt, full); n._errN = 0; }
+  catch (err) {
+    const k = String(err && err.message);
+    if (!ERR_SEEN.has(k)) { ERR_SEEN.add(k); console.error('[npc] güncelleme hatası:', err); }
+    if ((n._errN = (n._errN || 0) + 1) >= 3) { try { mgr.remove ? mgr.remove(n) : (n.dead = true); } catch (e) { n.dead = true; } }
+  }
+}
 export function copLook(r = lookRng) { return randomLook(r, 'police'); }
 // [karakter] üniformalar character.js'de: taktik/kamuflaj kıyafet + görünür kask ve çelik yelek (look.helmet / look.vest)
 export function swatLook(r = lookRng) { return randomLook(r, 'swat'); }
@@ -1795,12 +1806,12 @@ export class NPCManager {
         n.lodAcc += dt;
         const step = d > 100 ? 0.5 : 0.22;
         if (n.lodAcc < step) continue;
-        n.update(Math.min(n.lodAcc, 0.5), false);
+        safeUpdate(this, n, Math.min(n.lodAcc, 0.5), false);
         n.lodAcc = 0;
         continue;
       }
       n.lodAcc = 0;
-      n.update(dt, true);
+      safeUpdate(this, n, dt, true);
     }
     this.carHits();
     this.checkBumps();

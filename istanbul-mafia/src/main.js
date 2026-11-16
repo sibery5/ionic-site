@@ -6,7 +6,10 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { addPostFX } from './world/postfx.js';
 import { photoReady, setPhotoTextures } from './core/phototex.js';
-import { mhReady, setMH } from './entities/charMH.js';
+import { mhReady, setMH, setMHDefer } from './entities/charMH.js';
+import { buildCharGeometry } from './entities/charParts.js';
+import { copLook, swatLook, soldierLook, jandarmaLook } from './entities/npc.js';
+import { RNG as PRNG } from './core/util.js';
 import { propsReady } from './core/props.js';
 if (/[?&]nomh/.test(location.search)) setMH(false); // karşılaştırma/test: kodla üretilen gövdeler
 if (/[?&]nophoto/.test(location.search)) setPhotoTextures(false); // karşılaştırma/test: yalnızca prosedürel dokular
@@ -268,6 +271,12 @@ class Game {
     await step(0.96, 'Dokular yükleniyor...');
     this.photoTex = await photoReady();
     this.mhOk = await mhReady(); // gerçekçi insan gövdeleri (ilk karakter kurulmadan önce)
+    // [donma] 5★'da aynı anda gelen kolluk kuvvetinin gövdeleri yükleme ekranında birleştirilir (oyunda ~90 ms/gövde takılma)
+    if (this.mhOk) {
+      const t0 = performance.now(), r = new PRNG(5); setMHDefer(false);
+      try { for (const f of [copLook, copLook, swatLook, swatLook, soldierLook, soldierLook, jandarmaLook]) for (let i = 0; i < 2; i++) buildCharGeometry(f(r), 1); } catch (e) { console.error(e); }
+      setMHDefer(true); mark('Kolluk gövdeleri ' + Math.round(performance.now() - t0) + ' ms');
+    }
     this.propCount = await propsReady(); // hazır modeller (silahlar)
     mark('Fotoğraf dokuları');
     // ilk derleme
@@ -1024,7 +1033,8 @@ class Game {
         this.updateCreator(dt);
         this.renderer.render(this.creatorScene, this.creatorCam);
       } else if (mode === 'playing' || mode === 'dead') {
-        this.updateGame(dt, t);
+        // [donma] güncelleme hata verse de çizim sürsün (önceden hata her karede çizimi atlıyor, ekran donuyordu)
+        try { this.updateGame(dt, t); } catch (err) { this.frameErr = (this.frameErr || 0) + 1; if (this.frameErr < 4 || this.frameErr % 600 === 0) console.error(err); }
         // tam ekran opak arayüz (harita) varken 3B sahneyi çizmeye gerek yok
         if (!this.ui.coversScene() || this.needsFrame) { this.render(); drew = true; }
       } else if (mode === 'paused') {

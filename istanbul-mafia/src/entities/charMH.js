@@ -92,12 +92,20 @@ function lbs(src, n, wi, ww, M, dst) {
 }
 
 const SHAPES = new Map();
+// [donma] Yeni gövde birleştirmesi ~90 ms (5★'da aynı karede onlarca asker: saniyelerce donma). Kare bütçesi: 45 ms içinde
+// ikinci bir yeni şekil kurulmaz; bekleyen model aynı gövde tipinin son kurulan şekliyle görünür, sonra kendi şekline geçer.
+const BUILD = { t: -1e9 }, BYVAR = new Map();
+const shapeKey = (spec) => [spec.variant, spec.skin, spec.outfit, spec.shoes, spec.hair, spec.brow, spec.accKey].join('|');
+let DEFER = true;
+export function setMHDefer(on) { DEFER = on; }
+export function mhShouldDefer(spec) { return DEFER && !SHAPES.has(shapeKey(spec)) && BYVAR.has(spec.variant) && performance.now() - BUILD.t < 45; }
 // spec: { variant, skin, outfit, shoes, hair, brow, accKey }, acc: kodla üretilen aksesuar geometrisi (şapka, gözlük, yelek) ya da null
 // accMap: { head: {c:[x,y,z], r:[rx,ry,rz]}, torso: {rx, rf, rb} } — aksesuarın oturduğu kodla üretilmiş baş/gövde ölçüleri
 function shape(spec, acc, accMap) {
-  const key = [spec.variant, spec.skin, spec.outfit, spec.shoes, spec.hair, spec.brow, spec.accKey].join('|');
+  const key = shapeKey(spec);
   let S = SHAPES.get(key);
   if (S) return S;
+  if (spec.defer) return SHAPES.get(BYVAR.get(spec.variant));
   const V = variant(spec.variant), body = part('@body');
   const names = [spec.outfit, spec.shoes, spec.hair, 'Low-Poly', spec.brow, 'eyelashes02'].filter((n) => n && HEAD.parts[n]);
   const parts = names.map(part);
@@ -198,7 +206,7 @@ function shape(spec, acc, accMap) {
     attrs: { position: BA(pos, 3), normal: BA(nrm, 3), uv: BA(uv, 2), matp: BA(matp, 3), skinIndex: BA(si, 4), skinWeight: BA(sw, 4, true) },
     index: idx.map((a) => BA(N > 65535 ? new Uint32Array(a) : new Uint16Array(a), 1)),
   };
-  SHAPES.set(key, S);
+  SHAPES.set(key, S); BYVAR.set(spec.variant, key); BUILD.t = performance.now();
   return S;
 }
 
@@ -225,7 +233,7 @@ export function mhGeometry(spec, lod, acc, accMap) {
   g.setIndex(S.index[Math.min(2, Math.max(0, lod))]);
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 2.0);
   g.boundingBox = new THREE.Box3(new THREE.Vector3(-1.2, -0.2, -1.2), new THREE.Vector3(1.2, 2.2, 1.2));
-  g.userData = { verts: N, tris: S.tris[Math.min(2, Math.max(0, lod))], shared: true };
+  g.userData = { verts: N, tris: S.tris[Math.min(2, Math.max(0, lod))], shared: true, deferred: !!spec.defer };
   return g;
 }
 const WHITE = [1, 1, 1];

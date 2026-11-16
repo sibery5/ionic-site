@@ -89,13 +89,19 @@ function loops(kind) {
   return L;
 }
 
+// [donma] Motor döngüleri sınıf başına ilk binişte ana iş parçacığında sentezleniyordu (88–124 ms takılma, ölçüm freeze-steps).
+// Boşta ön örnekleme kuyruğuna sınıf başına bir görev: oyun anında hazır olur.
+export function enginePrewarm(ctx) { return Object.keys(ENGINE_SYN).map((k) => () => { const L = loops(k); if (ctx && L.ctx !== ctx) { L.ctx = ctx; L.ab = L.data.flat().map((d) => toBuffer(ctx, d, SR)); } }); }
+
 // Çalan banka: 8 döngü kaynağı sürekli çalar, kazançlar ve hızlar devirle güncellenir (karede ayırma yok)
 export function makeEngineBank(ctx, kind) {
   const S = ENGINE_SYN[kind]; if (!S) return null;
   const L = loops(kind), out = ctx.createGain(), srcs = [], gains = [];
   out.gain.value = 3.6 * S.lvl; // ölçümle eski osilatör motorunun RMS düzeyine eşitlendi
+  const AB = L.ab && L.ctx === ctx ? L.ab : (L.ctx = ctx, L.ab = L.data.flat().map((d) => toBuffer(ctx, d, SR))); // [donma] tamponlar bir kez
+  let bi = 0;
   for (const pair of L.data) for (const d of pair) {
-    const s = ctx.createBufferSource(); s.buffer = toBuffer(ctx, d, SR); s.loop = true;
+    void d; const s = ctx.createBufferSource(); s.buffer = AB[bi++]; s.loop = true;
     const g = ctx.createGain(); g.gain.value = 0;
     s.connect(g); g.connect(out); s.start(0, Math.random() * 0.3);
     srcs.push(s); gains.push(g);

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { RNG } from '../core/util.js';
 import { TILE, TILE_SIZE, headDims, headUV, EYE_UV, LABEL_UV, gearLabel } from './charTex.js';
-import { mhVariant, mhGeometry, mhHead } from './charMH.js';
+import { mhVariant, mhGeometry, mhHead, mhShouldDefer } from './charMH.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -494,6 +494,7 @@ export function buildCharGeometry(L, lod = 0, accOnly = false) {
     const spec = mhSpec(L, R, top, pants, shoes, hat);
     const need = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings;
     spec.accKey = need ? accKeyOf(L, hat) : '';
+    if (mhShouldDefer(spec)) { spec.defer = true; return mhGeometry(spec, lod, null, null); } // [donma] bu kare bütçe doldu
     let acc = null, accMap = null;
     if (need) {
       acc = buildCharGeometry({ ...L, ...ACC_OFF, noMH: true, beard: 'none' }, 1, true);

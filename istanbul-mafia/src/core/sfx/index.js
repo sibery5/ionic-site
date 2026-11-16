@@ -9,6 +9,7 @@ import { speak, prerenderLines, MEGA_LINES, HELI_LINES } from './announce.js';
 import { gunshot, weaponPrewarm, whiz, dryFire } from './weapons.js';
 import * as WD from './world.js';
 import { uiSound, uiPrewarm } from './ui.js';
+import { enginePrewarm } from './engine.js';
 import { installMusic } from '../music.js';
 import { makeLab } from './lab.js';
 
@@ -27,8 +28,8 @@ export function installSfx(AudioEngine) {
       this.setSpace('street');
       // boşta önceden örnekleme: ilk silah sesi / anons oyun sırasında takılma yaratmasın
       this._prewarm = [
-        () => sirenBuffer(this, 'wail', 'police'),
-        () => sirenBuffer(this, 'yelp', 'police'),
+        // [donma] bütün siren türleri (her biri ~200 ms sentez): 5★'da yeni tür ilk kez gelince oyun takılıyordu
+        ...[['wail', 'police'], ['yelp', 'police'], ['phaser', 'police'], ['hilo', 'ambulance'], ['awail', 'ambulance'], ['jwail', 'jandarma'], ['jyelp', 'jandarma']].map(([m, h]) => () => sirenBuffer(this, m, h)),
         () => prerenderLines(this, MEGA_LINES.slice(0, 3), 'mega'),
         () => prerenderLines(this, MEGA_LINES.slice(3, 6), 'mega'),
         () => prerenderLines(this, HELI_LINES.slice(0, 2), 'heli'),
@@ -36,6 +37,7 @@ export function installSfx(AudioEngine) {
       this._prewarm.unshift(...uiPrewarm(this));
       this._prewarm.push(...weaponPrewarm(this), ...WD.worldPrewarm(this));
       if (this.glassPrewarm) this._prewarm.push(...this.glassPrewarm()); // [B1] cam/et bankaları
+      this._prewarm.push(...enginePrewarm(this.ctx)); // [donma] motor döngü bankaları
       this._prewarmStep();
       // bekçi: oyun güncellemesi durunca (menü/duraklatma) sirenleri sustur
       setInterval(() => { if (this.ctx && this.ctx.currentTime - this.lastUpdate > 0.5) stopAllSirens(this); }, 500);

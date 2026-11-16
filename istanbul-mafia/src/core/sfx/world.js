@@ -454,6 +454,12 @@ export function worldPrewarm(eng) {
     () => bank(eng, 'imp:metal', 3, (i) => synthImpact(eng.ctx.sampleRate, 'metal', 300 + i * 13 + 5)),
     () => bank(eng, 'shell', 3, (i) => synthShell(eng.ctx.sampleRate, false, 500 + i * 3)),
     () => bank(eng, 'exp', 2, (i) => synthExplosion(SR2, 50 + i * 11, false), SR2),
+    // [donma] oyun anında ilk kez sentezlenip takılma yapanlar (ölçüm freeze-steps: büyük patlama ~200 ms)
+    () => bank(eng, 'expB', 2, (i) => synthExplosion(SR2, 50 + i * 11 + 7, true), SR2),
+    () => bank(eng, 'rico', 3, (i) => synthRicochet(eng.ctx.sampleRate, 400 + i * 9)),
+    ...['dirt', 'wood'].map((s) => () => bank(eng, 'imp:' + s, 3, (i) => synthImpact(eng.ctx.sampleRate, s, 300 + i * 13 + s.length))),
+    () => bank(eng, 'shellP', 3, (i) => synthShell(eng.ctx.sampleRate, true, 500 + i * 3 + 1)),
+    ...['stone', 'grass', 'dirt', 'wood', 'metal', 'water'].map((s) => () => bank(eng, 'step:' + s, 4, (i) => synthStep(SR2, s, 700 + i * 17 + s.length), SR2)),
   ];
 }
 
