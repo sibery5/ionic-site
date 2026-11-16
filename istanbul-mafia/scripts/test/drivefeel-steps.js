@@ -27,7 +27,7 @@ module.exports = async (p) => {
     const kmh = (v) => Math.hypot(v.vx, v.vz) * 3.6;
     const setV = (v, sp) => { v.vx = Math.sin(H0) * sp; v.vz = Math.cos(H0) * sp; v.fs = sp; };
     const pin = (v) => { const l = (v.pos.x - X) * Math.cos(H0) - (v.pos.z - Z) * Math.sin(H0); v.pos.x -= l * Math.cos(H0); v.pos.z += l * Math.sin(H0); };
-    for (const type of ['sedan', 'gt', 'bus']) {
+    for (const type of ['sedan', 'gt', 'motor', 'bus']) {
       if (!g.vehicles.list || !window.game) break;
       let v;
       try { v = fresh(type); } catch (e) { R[type] = 'yok: ' + e.message; continue; }
@@ -37,9 +37,9 @@ module.exports = async (p) => {
       o.t100 = +t.toFixed(2);
       // 100'den fren
       let pitchMin = 0; hold('KeyW', false); hold('KeyS', true);
-      const x0 = v.pos.x, z0 = v.pos.z; t = 0; while (v.fs > 0.5 && t < 15) { step(1); t += 1 / 30; v.heading = H0; v.yawRate = 0; pitchMin = Math.max(pitchMin, Math.abs(v.pitch)); }
+      const x0 = v.pos.x, z0 = v.pos.z; t = 0; let bdev = 0; while (v.fs > 0.5 && t < 15) { step(1); t += 1 / 30; bdev = Math.max(bdev, Math.abs((v.pos.x - x0) * Math.cos(H0) - (v.pos.z - z0) * Math.sin(H0))); pitchMin = Math.max(pitchMin, Math.abs(v.pitch)); }
       hold('KeyS', false);
-      o.brake100 = +Math.hypot(v.pos.x - x0, v.pos.z - z0).toFixed(1); o.brakeT = +t.toFixed(2); o.dive = +pitchMin.toFixed(3);
+      o.brake100 = +Math.hypot(v.pos.x - x0, v.pos.z - z0).toFixed(1); o.brakeT = +t.toFixed(2); o.dive = +pitchMin.toFixed(3); o.brakeDev = +bdev.toFixed(2);
       // düşük hız dönüş: 10 m/s, tam direksiyon -> yarıçap
       v = fresh(type); setV(v, 10);
       const keep = (s) => () => { const d = s - v.fs; hold('KeyW', d > 0.3); hold('KeyS', false); };
@@ -60,6 +60,11 @@ module.exports = async (p) => {
       hold('Space', false); hold('KeyA', false);
       let rec = 0; while (Math.abs(v.ls) > 1 && rec < 5) { step(1); rec += 1 / 30; }
       o.hbSlip = +slipMax.toFixed(1); o.hbRecover = +rec.toFixed(2); o.hbSpeed = +kmh(v).toFixed(0);
+      // [A2] ABS: 90 km/s'de fren + tam direksiyon 1 sn -> dönüş açısı ve azami kayma (savrulma yok, dönüş var)
+      v = fresh(type); setV(v, 25); hold('KeyS', true); hold('KeyA', true); let am = 0;
+      step(30, () => { am = Math.max(am, Math.atan2(Math.abs(v.ls), Math.max(1, Math.abs(v.fs))) * 57.3); });
+      hold('KeyS', false); hold('KeyA', false);
+      o.absSlip = +am.toFixed(1); o.absTurn = +(Math.abs(((v.heading - H0 + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) * 57.3).toFixed(0);
       R[type] = o;
     }
     if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);

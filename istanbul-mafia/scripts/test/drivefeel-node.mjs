@@ -9,7 +9,7 @@ import { CARS } from '../../src/game/economy.js';
 
 const src = fs.readFileSync(new URL('../../src/entities/vehicles.js', import.meta.url), 'utf8');
 const PHYS = Function('return ' + src.match(/const PHYS = (\{[\s\S]*?\n\});/)[1])();
-const DT = 1 / 30, D = 57.2958;
+const DT = 1 / (+process.env.FPS || 30), D = 57.2958;
 const I = { throttle: 0, steer: 0, hb: false, canDrive: true, offRoad: false, fs: 0, ls: 0, max: 1, wet: 1 };
 
 function mk(type) {
@@ -34,6 +34,7 @@ function step(v, thr, st, hb) {
   driveDynamics(v, DT, I);
   v.x += v.vx * DT; v.z += v.vz * DT;
 }
+const N = (s) => Math.round(s / DT);
 const kmh = (v) => Math.hypot(v.vx, v.vz) * 3.6;
 const slip = (v) => Math.atan2(Math.abs(v.ls), Math.max(1, Math.abs(v.fs))) * D;
 const at = (v, s) => { v.heading = 0; v.vx = 0; v.vz = s; v.x = v.z = 0; v.yawRate = v.steerAng = v.spin = 0; v.ls = 0; v.fs = s; v.brakeP = 0; v.lt = 0; v.hbRec = 1;
@@ -51,7 +52,7 @@ function measure(type) {
   // ani tam direksiyon 1 sn (gaz korunur)
   for (const k of [60, 90]) {
     at(v, k / 3.6); let sm = 0, turn = 0;
-    for (let i = 0; i < 30; i++) { step(v, hold(v, k / 3.6), 1, false); sm = Math.max(sm, slip(v)); }
+    for (let i = 0; i < N(1); i++) { step(v, hold(v, k / 3.6), 1, false); sm = Math.max(sm, slip(v)); }
     turn = Math.abs(v.heading) * D;
     o['slip' + k] = +sm.toFixed(1); o['spin' + k] = sm > 45; o['turn' + k] = +turn.toFixed(0); o['latG' + k] = +(Math.abs(v.fs * v.yawRate) / 9.81).toFixed(2);
   }
@@ -59,12 +60,12 @@ function measure(type) {
   let best = 0, bestSlip = 0;
   for (let s = 8; s <= 40; s += 0.5) {
     at(v, s); let st = 0, sm = 0, ok = true;
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < N(6); i++) {
       const sp = Math.hypot(v.vx, v.vz), want = sp / 50;
       // yol eğriliği = hız vektörünün dönme hızı; ölçüm için yaw + kayma değişimi yerine konumdan
       st = Math.max(-1, Math.min(1, st + (want - v.yawRate) * 0.6));
       step(v, hold(v, s), st, false);
-      if (i > 120) sm = Math.max(sm, slip(v));
+      if (i > N(4)) sm = Math.max(sm, slip(v));
     }
     // son 2 sn'de hız ve yaw hedefte mi
     const sp = Math.hypot(v.vx, v.vz), R = sp / Math.max(1e-3, Math.abs(v.yawRate));
@@ -74,16 +75,25 @@ function measure(type) {
   o.r50kmh = +(best * 3.6).toFixed(0); o.r50slip = +bestSlip.toFixed(1); o.r50g = +((best * best) / 50 / 9.81).toFixed(2);
   // el freni drift: 72 km/s, sola tam + el freni 0,8 sn; sonra el freni bırak, gaz yarım, direksiyon düz
   at(v, 20); let hm = 0;
-  for (let i = 0; i < 24; i++) { step(v, 0.3, 1, true); hm = Math.max(hm, slip(v)); }
+  for (let i = 0; i < N(0.8); i++) { step(v, 0.3, 1, true); hm = Math.max(hm, slip(v)); }
   let rec = 0; while (slip(v) > 5 && rec < 5) { step(v, 0.5, 0, false); rec += DT; hm = Math.max(hm, slip(v)); }
   o.hbSlip = +hm.toFixed(0); o.hbRec = +rec.toFixed(2); o.hbKmh = +kmh(v).toFixed(0);
   // ABS: 90 km/s'de fren + tam direksiyon 1 sn
   at(v, 25); let am = 0;
-  for (let i = 0; i < 30; i++) { step(v, -1, 1, false); am = Math.max(am, slip(v)); }
+  for (let i = 0; i < N(1); i++) { step(v, -1, 1, false); am = Math.max(am, slip(v)); }
   o.absTurn = +(Math.abs(v.heading) * D).toFixed(0); o.absSlip = +am.toFixed(1); o.absKmh = +kmh(v).toFixed(0);
   // direksiyon: 60 km/s'de tam açının %90'ına varış
   at(v, 60 / 3.6); t = 0; const m = v.P.steer / (1 + (v.fs * v.fs) / 520); while (Math.abs(v.steerAng) < 0.9 * m && t < 3) { step(v, hold(v, 60 / 3.6), 1, false); t += DT; }
   o.steer90 = +t.toFixed(2);
+  // gaz kesince (vites boşta değil): 100'den 1 sn sonra hız kaybı (km/s) — "buz" hissinin boylamsal ölçüsü
+  at(v, 100 / 3.6); for (let i = 0; i < N(1); i++) step(v, 0, 0, false); o.coast1s = +(100 - kmh(v)).toFixed(1);
+  // virajda fren: 50 m virajda 70 km/s'de dengeli dönüşte tam fren + direksiyon tutulur; azami kayma ve yol (yarıçap) sapması
+  { at(v, 70 / 3.6); let st = 0, sm = 0;
+    for (let i = 0; i < N(3); i++) { const sp = Math.hypot(v.vx, v.vz); st = Math.max(-1, Math.min(1, st + (sp / 50 - v.yawRate) * 0.6)); step(v, hold(v, 70 / 3.6), st, false); }
+    for (let i = 0; i < N(1.5); i++) { step(v, -1, st, false); sm = Math.max(sm, slip(v)); }
+    o.cbSlip = +sm.toFixed(1); o.cbKmh = +kmh(v).toFixed(0); }
+  // slalom: 80 km/s'de 0,6 sn'de bir sol/sağ tam direksiyon, 3 sn; azami kayma
+  { at(v, 80 / 3.6); let sm = 0; for (let i = 0; i < N(3); i++) { step(v, hold(v, 80 / 3.6), Math.floor(i * DT / 0.6) % 2 ? -1 : 1, false); sm = Math.max(sm, slip(v)); } o.slalom = +sm.toFixed(1); }
   return o;
 }
 const types = process.argv.slice(2).length ? process.argv.slice(2) : ['sedan', 'gt', 'suv', 'motor', 'bus'];

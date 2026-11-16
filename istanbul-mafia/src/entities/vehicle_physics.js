@@ -348,7 +348,9 @@ export function driveDynamics(v, dt, I) {
       fs += a * dt;
     }
   } else if (throttle < 0) {
-    if (fs > 0.5) fs -= Math.min(fs, (v.brakeDecel + Math.min(1.5, sp * 0.04)) * v.brakeP * dt);
+    // [A2] ABS: direksiyon kırıkken fren gücünün bir kısmı yanal tutuşa bırakılır (sürtünme çemberi) -> fren + dönüş birlikte
+    const absK = 1 - 0.3 * Math.min(1, Math.abs(v.steerAng) / Math.max(0.05, P.steer / (1 + (fs * fs) / 520)));
+    if (fs > 0.5) fs -= Math.min(fs, (v.brakeDecel + Math.min(1.5, sp * 0.04)) * v.brakeP * absK * dt);
     else if (fs > -max * 0.3) fs += def.accel * 0.35 * throttle * dt;
   } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (0.7 + sp * 0.012 + (offRoad ? 1.5 : 0)) * dt); // motor freni + yuvarlanma
   if (throttle >= 0) v.brakeP *= Math.exp(-dt * 16);
@@ -360,11 +362,13 @@ export function driveDynamics(v, dt, I) {
   v.lt = (v.lt || 0) + (lAcc - (v.lt || 0)) * Math.min(1, dt * 8);
   const front = clamp(1 - 0.28 * v.lt, 0.75, 1.3), rear = clamp(1 + 0.18 * v.lt, 0.8, 1.2);
   // el freni sonrası tutunma kademeli döner (ani "yapışma" ile savrulma yok)
-  v.hbRec = hb && sp > 3 ? 0 : Math.min(1, (v.hbRec ?? 1) + dt * 2.2);
+  v.hbRec = hb && sp > 3 ? 0 : Math.min(1, (v.hbRec ?? 1) + dt * 3.5); // [A2] 2.2 -> 3.5: drift sonrası ~0,3 sn'de tutunur
   // yanal tutunma eğrisi: tepe kaymaya kadar tam, kayarken ~%82 (kontrol edilebilir kayma)
   const slipPk = 1.4 + sp * 0.035, als = Math.abs(ls);
   const curve = als <= slipPk ? 1 : 0.82 + 0.18 * Math.exp(-(als - slipPk) / 2.5);
-  let mu = muRoad * curve * (hb && sp > 3 ? 0.32 : 0.32 + 0.68 * v.hbRec) * rear;
+  // [A2] yanal tutuş bütçesi: frende ön/arka ortalaması (arka yükü azalınca kuyruk hafif oynar ama savrulmaz)
+  const axle = 0.5 * (front + rear);
+  let mu = muRoad * curve * (hb && sp > 3 ? 0.32 : 0.32 + 0.68 * v.hbRec) * axle;
   if (P.rwd && throttle > 0.5 && v.gear <= 1 && als > 2) mu *= 0.8; // güçlü arkadan itiş: gazla kuyruk kayar
   const dls = clamp(-ls * P.cs * dt, -mu * dt, mu * dt);
   ls += dls;
@@ -378,12 +382,14 @@ export function driveDynamics(v, dt, I) {
     const steerMax = P.steer / (1 + (fs * fs) / 520);
     const tgtA = steer * steerMax;
     const engaging = Math.abs(tgtA) > Math.abs(v.steerAng) && Math.sign(tgtA || 1) === Math.sign(v.steerAng || tgtA || 1);
-    const tau = engaging ? 0.13 + sp * 0.006 : 0.07;
+    const tau = engaging ? 0.09 + sp * 0.004 : 0.06; // [A2] 0.13+0.006v -> 0.09+0.004v (klavyede daha çevik)
     v.steerAng += (tgtA - v.steerAng) * Math.min(1, dt / tau);
     const wb = v.T ? v.T.wheelbase || def.len * 0.6 : def.len * 0.6;
     wT = (fs * Math.tan(v.steerAng)) / wb;
     // ön lastik sınırı: frende daha keskin, gazda hafif önden kayma
-    const wMax = (muRoad * curve * front * 1.05) / Math.max(3, sp);
+    // [A2] KÖK NEDEN: eski sınır ön lastik (front x 1.05) üzerinden, yanal hızı silen bütçe arka (rear) üzerindendi;
+    // frende 1.3 / 0.8 = %71 fazla dönüş üretiliyor, fazlası yanal kaymaya birikiyordu (virajda fren = buz). Artık aynı bütçe.
+    const wMax = (mu * 0.97) / Math.max(3, sp);
     if (!hb || sp < 3) wT = clamp(wT, -wMax, wMax);
     else {
       // el freni kayması: kuyruk dışa açılır, direksiyon yönünde dönüş artar (sınırlı)
@@ -392,13 +398,15 @@ export function driveDynamics(v, dt, I) {
       wT = clamp(wT * 1.3 + Math.sign(v.steerAng) * Math.min(0.5, sp * 0.025), -1.6, 1.6) * clamp(1 - (slipA - 0.45) / 0.3, 0, 1);
     }
   }
+  // [A2] kayarken arka lastik kuyruğu hız yönüne geri çeker (geri getirme momenti): el freni bırakılınca ~1 sn'de toparlar
+  if (!hb && fs > 2 && P.steer !== 0) { const ex = ls - clamp(ls, -slipPk, slipPk); wT -= clamp(ex / Math.max(4, fs), -0.7, 0.7) * 2.6 * v.hbRec; }
   // yaw tepkisi: düşük hızda çevik, yüksek hızda sönümlü (savrulmaz)
   const yk = hb ? 5 : clamp(10 - sp * 0.15, 4.5, 10);
   v.yawRate += (wT - v.yawRate) * Math.min(1, dt * yk);
   // [çarpışma] darbe kaynaklı ek açısal hız (vehicle_physics.js), lastik sürtünmesiyle söner
   const spin = v.spin || 0;
   v.heading += (v.yawRate + spin) * dt;
-  if (spin) { v.spin = spin * Math.exp(-dt * (hb || v.destroyed ? 1.4 : 2.6)); if (Math.abs(v.spin) < 0.005) v.spin = 0; }
+  if (spin) { v.spin = spin * Math.exp(-dt * (hb || v.destroyed ? 1.4 : 4.5)); if (Math.abs(v.spin) < 0.005) v.spin = 0; }
   v.vx = fx * fs + rx * ls;
   v.vz = fz * fs + rz * ls;
   v.fs = fs; v.ls = ls;
