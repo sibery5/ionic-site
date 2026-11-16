@@ -2599,6 +2599,7 @@ export class VehicleManager {
     d.model.root.visible = true;
     if (d.isPlayer && v.kind !== 'car') d.vy = 0;
     if (this.game.physics && v.kind === 'car') this.game.physics.resolveCircle(d.pos, 0.35, 0);
+    if (v.kind === 'boat' && d.isPlayer && this.game.boats && this.game.boats.deckSpot) this.game.boats.deckSpot(v, d); // [hareket] tekneden kalkınca güvertede kal
     if (d.isPlayer) this.game.onPlayerExitVehicle && this.game.onPlayerExitVehicle(v);
   }
 

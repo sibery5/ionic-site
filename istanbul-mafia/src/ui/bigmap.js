@@ -171,7 +171,9 @@ function drawMap(g, ctx, v, now) {
   }
   // görev ve ödül avı işaretçileri
   const strong = now < (g.missions.blinkUntil || 0);
+  let story = false;
   for (const mk of g.missions.markers) {
+    if (mk.story) story = true;
     let x = mk.x, z = mk.z;
     if (mk.actor) { if (mk.actor.dead) continue; x = mk.actor.pos.x; z = mk.actor.pos.z; }
     if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
@@ -182,10 +184,18 @@ function drawMap(g, ctx, v, now) {
       ctx.strokeStyle = col; ctx.globalAlpha = (1 - ph) * (strong ? 1 : 0.7); ctx.lineWidth = strong ? 5 : 3;
       ctx.beginPath(); ctx.arc(X, Y, 14 + ph * (strong ? 34 : 24), 0, 6.3); ctx.stroke(); ctx.globalAlpha = 1;
     }
+    if (mk.areaOnly) continue;
     if (mk.giver) ctx.drawImage(iconBitmap('pin_reis', '#d4af37', 48), X - 19, Y - 19, 38, 38);
     else if (mk.icon) ctx.drawImage(iconBitmap(mk.icon, col, 48), X - 17, Y - 17, 34, 34);
     else { ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, 11, 0, 6.3); ctx.fill(); ctx.stroke(); }
     if (mk.label) label(mk.label, X, Y - 26, 15, col, { font: 'system-ui, sans-serif' });
+  }
+  // adımın işaretçisi yoksa aktif görevin hedefi GPS noktasından gösterilir (hedef haritadan hiç kaybolmaz)
+  if (!story && g.missions.active && g.gpsTarget) {
+    const X = tx(g.gpsTarget.x), Y = tz(g.gpsTarget.z), ph = (now % 1000) / 1000;
+    ctx.strokeStyle = '#ffcc00'; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(X, Y, 14 + ph * 30, 0, 6.3); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffcc00'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, 11, 0, 6.3); ctx.fill(); ctx.stroke();
   }
   for (const vh of g.vehicles.list) if (vh.owned && !vh.destroyed) ctx.drawImage(iconBitmap('car', '#6ab8ff', 48), tx(vh.pos.x) - 12, tz(vh.pos.z) - 12, 24, 24);
   if (g.waypoint) {

@@ -1022,6 +1022,8 @@ export class CharacterModel {
       if (!this.weaponMesh) { setJ(P, J.shR, -0.6 * s1, 0, 0.4 * s1); setJ(P, J.elR, -0.5, 0, 0); }
       addJ(P, J.spine, 0.3 * s1, 0, -0.2 * s1); addJ(P, J.hips, 0, 0, -0.25 * s1); addJ(P, J.chest, 0.15 * s1, 0.2 * s1, 0);
       lock = 0; ikW = 0;
+      const mh = this.mantleHang || 0; // [hareket] duvara tutunma: kollar başın üstünde kenarda
+      if (mh > 0) { setJ(P, J.shL, -2.75 * mh, 0, 0.12 * mh); setJ(P, J.shR, -2.75 * mh, 0, -0.12 * mh); setJ(P, J.elL, -0.35 * mh, 0, 0); setJ(P, J.elR, -0.35 * mh, 0, 0); }
     }
     let rollW = 0;
     if (st.roll > 0) {

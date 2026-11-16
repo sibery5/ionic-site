@@ -5,6 +5,8 @@ import { Actor } from './actor.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
 import { isLand, inBridge, WATER_Y, poolAt } from '../world/map.js'; // [villa] poolAt
+import { tryMantle, stepMantle } from './mantle.js'; // [hareket H1]
+import { deckCarry, deckStep } from './boats.js'; // [hareket H4] güverte
 import { swimVertical, swimEffects, enterWater, tryClimbOut } from './swim.js'; // [deniz]
 
 const tmp = new THREE.Vector3();
@@ -21,6 +23,9 @@ const angleWrap = (a) => angleDiff(0, a);
 // yörüngede alçalır; daha yukarı bakışta kamera başın arkasında kalıp yalnız bakış açısı döner (yere gömülmez).
 const PITCH_UP = -1.45, PITCH_DOWN = 1.2, POS_UP = -0.42;
 const _look = new THREE.Vector3();
+// [hareket M6] near düzlemi köşeleri (sağ, yukarı işaretleri): kameranın kesit dikdörtgeni duvara girmesin
+const NEAR_CORNERS = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
+const CAM_PUSH = new THREE.Vector3();
 
 export class Player extends Actor {
   constructor(game, look) {
@@ -97,6 +102,8 @@ export class Player extends Actor {
     this.updateCamera(dt);
   }
 
+  mantle(dx, dz) { return tryMantle(this, dx, dz); }
+
   // Alçak engel (korkuluk, bank, çöp kutusu; 0.42-1.25 m) üzerinden atlama ya da üstüne tırmanma
   tryVault(dx, dz, allowWater) {
     const g = this.game, p = this.pos;
@@ -134,6 +141,7 @@ export class Player extends Actor {
 
   updateOnFoot(dt, input) {
     const g = this.game;
+    if (this.onBoat) deckCarry(this); // [hareket H4] tekneyle taşın
     // silah seçimi
     for (let k = 0; k <= 8; k++) if (input.hit('Digit' + (k + 1))) this.selectSlot(k);
     if (input.hit('KeyQ')) this.cycleWeapon(1);
@@ -174,7 +182,8 @@ export class Player extends Actor {
     if (this.landSlow > 0) { this.landSlow -= dt; speed *= 0.55; }
     // bacağından yaralı: topallar, koşusu yavaşlar
     if (this.limp > 0) speed *= 1 - (sprint ? 0.45 : 0.3) * this.limp;
-    if (this.vault) {
+    if (this.vault && this.vault.mantle) stepMantle(this, this.vault, dt); // [hareket H1] duvara tutunup aşma
+    else if (this.vault) {
       const V = this.vault;
       V.t += dt;
       const u = Math.min(1, V.t / V.dur), e = u * u * (3 - 2 * u);
@@ -244,6 +253,8 @@ export class Player extends Actor {
     if (!busy && this.grounded && !this.swimming && ml > 0 && this.speed > 2.5 && (sprint || input.hit('Space'))) {
       if (this.tryVault(mx, mz, input.hit('Space'))) input.pressed.delete('Space');
     }
+    // [hareket H1] Space ile önündeki 1,3–2,6 m duvara tutunup aş (duruyorken de; yön: hareket ya da bakış)
+    if (!this.vault && !busy && !this.swimming && this.grounded && input.hit('Space') && this.mantle(ml > 0 ? mx : Math.sin(this.heading), ml > 0 ? mz : Math.cos(this.heading))) input.pressed.delete('Space');
 
     // [deniz] yüzme: suya giriş (düşerek), su çizgisi (dalgayı izler), kulaç efektleri, kıyıya çıkış (merdiven / alçak kenar)
     const water = g.physics.inWater(this.pos.x, this.pos.z);
@@ -254,7 +265,7 @@ export class Player extends Actor {
       }
       if (ml > 0.1) tryClimbOut(this, g, mx, mz, ml);
     }
-    if (water && !this.swimming && !this.vault && !this.scriptCtl && this.pos.y < (poolAt(this.pos.x, this.pos.z) || { y: WATER_Y }).y + 0.25) { // [villa] havuz su yüzü
+    if (water && !this.swimming && !this.vault && !this.scriptCtl && !this.onBoat && this.pos.y < (poolAt(this.pos.x, this.pos.z) || { y: WATER_Y }).y + 0.25) { // [villa] havuz su yüzü
       this.swimming = true; this.rollT = 0; this.crouch = false;
       enterWater(this, g);
     }
@@ -290,6 +301,7 @@ export class Player extends Actor {
     } else if (this.swimming) {
       g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
     }
+    if (!this.swimming && !this.vault) deckStep(this); // [hareket H4] güverte sınırı ve zemini
     if (!this.inInterior) {
       this.pos.x = clamp(this.pos.x, -995, 995); this.pos.z = clamp(this.pos.z, -995, 995);
     }
@@ -528,7 +540,15 @@ export class Player extends Actor {
       this.camBob = damp(this.camBob || 0, this.grounded && !this.swimming ? (this.model.bobY || 0) : 0, 12, dt);
       target.y += this.camBob * 0.4 * (1 - Ae);
       if (this.camDip > 0) { target.y -= this.camDip; this.camDip = Math.max(0, this.camDip - dt * 1.2); }
-      const side = this.cSide * this.cSh;
+      let side = this.cSide * this.cSh;
+      // [hareket M6] omuz kayması duvara girmesin: yana ışın, near düzlemi yarı genişliği kadar pay; sönümlü
+      const hwN = (cam.near * Math.tan(cam.fov * Math.PI / 360) * 1.35 + 0.05) * cam.aspect + 0.07;
+      if (Math.abs(side) > 0.01) {
+        const sg = side > 0 ? 1 : -1, hs = g.physics.raycastShared(target.x, target.y, target.z, rx * sg, 0, rz * sg, Math.abs(side) + hwN);
+        if (hs && typeof hs.box !== 'string') side = sg * Math.max(0, Math.min(Math.abs(side), hs.t - hwN));
+      }
+      this.sideCol = this.sideCol === undefined ? side : Math.abs(side) < Math.abs(this.sideCol) ? damp(this.sideCol, side, 30, dt) : damp(this.sideCol, side, 5, dt);
+      side = Math.abs(this.sideCol) < Math.abs(side) || Math.sign(this.sideCol) === Math.sign(side) ? this.sideCol : side;
       target.x += rx * side; target.z += rz * side;
       target.y += 0.25 * upK; // dik yukarı bakışta başın biraz üstünden
       const back = tmp2.set(-fx * Math.cos(pitch), Math.sin(pitch), -fz * Math.cos(pitch));
@@ -539,11 +559,33 @@ export class Player extends Actor {
         const hit = g.physics.raycast(target.x + rx * ox, target.y + oy, target.z + rz * ox, back.x, back.y, back.z, want0 + 0.3);
         if (hit) free = Math.min(free, Math.max(0.35, hit.t - 0.3));
       }
+      // [hareket M6] near düzlemi köşeleri: hedeften her köşeye ışın; köşe duvarın arkasındaysa bomu kısalt.
+      // Tek merkez ışını yan duvarı (dar sokak) görmez; köşe ışınları kesit dikdörtgenini de korur.
+      const ux = back.y * rz, uy = back.z * rx - back.x * rz, uz = -back.y * rx; // yukarı = sağ × ileri (ileri = -back)
+      const hh = cam.near * Math.tan(cam.fov * Math.PI / 360) * 1.35 + 0.05, hw = hh * cam.aspect + 0.03;
+      for (let k = 0; k < 4; k++) {
+        const sx = NEAR_CORNERS[k][0] * hw, sy = NEAR_CORNERS[k][1] * hh;
+        const ox = back.x * free + rx * sx + ux * sy, oy = back.y * free + uy * sy, oz = back.z * free + rz * sx + uz * sy;
+        const L = Math.hypot(ox, oy, oz) || 1;
+        const hit = g.physics.raycastShared(target.x, target.y, target.z, ox / L, oy / L, oz / L, L);
+        if (hit && hit.t < L && typeof hit.box !== 'string') free = Math.min(free, Math.max(0.2, free * (hit.t - 0.06) / L));
+      }
       this.cCol = free < this.cCol ? damp(this.cCol, free, 30, dt) : damp(this.cCol, free, 4, dt);
       this.cCol = Math.min(this.cCol, free + 0.15);
-      const d = Math.max(0.35, Math.min(want0, this.cCol));
+      const d = Math.max(0.2, Math.min(want0, this.cCol));
       this.camDistNow = d;
       this.camPos.set(target.x + back.x * d, target.y + back.y * d, target.z + back.z * d);
+      // yan/üst duvar çok yakınsa (hedefin kendisi duvara yaslı) kamerayı duvar normalinden it: dört eksen ışını, sönümlü
+      let pxx = 0, pyy = 0, pzz = 0;
+      for (let k = 0; k < 4; k++) {
+        const sgn = k & 1 ? -1 : 1, lat = k < 2;
+        const dx = lat ? rx * sgn : ux * sgn, dy = lat ? 0 : uy * sgn, dz = lat ? rz * sgn : uz * sgn, reach = (lat ? hw : hh) + 0.04;
+        const hit = g.physics.raycastShared(this.camPos.x - dx * 0.02, this.camPos.y - dy * 0.02, this.camPos.z - dz * 0.02, dx, dy, dz, reach + 0.02);
+        if (hit && typeof hit.box !== 'string') { const pen = reach + 0.02 - hit.t; pxx -= dx * pen; pyy -= dy * pen; pzz -= dz * pen; }
+      }
+      const pk = 1 - Math.exp(-(Math.abs(pxx) + Math.abs(pyy) + Math.abs(pzz) > Math.abs(CAM_PUSH.x) + Math.abs(CAM_PUSH.y) + Math.abs(CAM_PUSH.z) ? 40 : 8) * dt);
+      CAM_PUSH.x += (pxx - CAM_PUSH.x) * pk; CAM_PUSH.y += (pyy - CAM_PUSH.y) * pk; CAM_PUSH.z += (pzz - CAM_PUSH.z) * pk;
+      this.camPos.add(CAM_PUSH);
       this.camInit = true;
       cam.position.copy(this.camPos);
       cam.position.y = Math.max(cam.position.y, (this.inInterior ? 0.3 : this.swimming ? WATER_Y + 0.4 : 0.3));

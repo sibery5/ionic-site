@@ -192,6 +192,12 @@ module.exports = async (p, out) => {
     const L = B.live;
     const r = { mk, live: !!L, guards: L && L.guards.length };
     if (!L) return r;
+    // D4: 60 m içinde tepede ok + ekran oku/mesafe; bölge dairesi işaretçisi; 60 m dışında ok yok
+    sim(0.1); const A = B.arrow, tp0 = L.target.vehicle ? L.target.vehicle.pos : L.target.pos;
+    r.arrow = !!A && A.visible && A.position.y - tp0.y > 2 && Math.hypot(A.position.x - tp0.x, A.position.z - tp0.z) < 0.5;
+    r.edge = !!B.edgeEl && B.edgeEl.style.display === 'block' && /\d+ m/.test(B.edgeEl.textContent);
+    r.area = game.missions.markers.some((m) => m.areaOnly && m.area);
+    const pp = game.player.pos.clone(); game.player.pos.set(tp0.x + 85, 0, tp0.z); sim(0.1); r.far = !A.visible && B.edgeEl.style.display === 'none'; game.player.pos.copy(pp); sim(0.1);
     for (const n of L.guards) n.takeDamage(999, game.player, 'bullet');
     const t = L.target; t.takeDamage(t.maxHp * 0.75, game.player, 'bullet'); sim(0.5);
     r.surr = t.state === 'surrender';
@@ -203,6 +209,7 @@ module.exports = async (p, out) => {
     return r;
   });
   check(bt.mk && bt.live && bt.guards >= 1, 'Ödül avı: işaret + hedef ve korumalar ' + JSON.stringify(bt));
+  check(bt.arrow && bt.edge && bt.area && bt.far, `Ödül avı oku: tepede ${bt.arrow}, ekran/mesafe ${bt.edge}, bölge dairesi ${bt.area}, 85 m'de gizli ${bt.far}`);
   check(bt.surr && bt.paid >= 90000 && bt.status === 'caught', 'Aranan teslim oldu, ödül alındı');
 
   // ---------------- 6) Kapkaç ----------------

@@ -12,11 +12,11 @@ import { buildYacht, buildFishingBoat } from '../world/ships_yachts.js';
 
 // Mağaza kaydı (fiyat, istatistik, kurucu)
 export const BOAT_TYPES = {
-  surat: { name: 'Sürat Teknesi', price: 120000, maxSpeed: 32, accel: 9, len: 6.6, wid: 2.3, hei: 1.6, hp: 900, turn: 1.3, colors: ['#e8e8e8', '#c81010', '#111111', '#1d3d8e'], style: 'speedboat', draft: 0.25 },
-  balikci: { name: 'Balıkçı Teknesi', price: 25000, maxSpeed: 11, accel: 3, len: 8, wid: 2.8, hei: 3.2, hp: 1200, turn: 0.8, colors: ['#2a6ab0', '#e8e8e8', '#2d7a4a'], style: 'fishing', draft: 0.5 },
-  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 17, accel: 2.8, len: 16, wid: 4.6, hei: 5.9, hp: 3000, turn: 0.5, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.95 },
+  surat: { name: 'Sürat Teknesi', price: 120000, maxSpeed: 26, accel: 9, len: 6.6, wid: 2.3, hei: 1.6, hp: 900, turn: 1.3, colors: ['#e8e8e8', '#c81010', '#111111', '#1d3d8e'], style: 'speedboat', draft: 0.25 },
+  balikci: { name: 'Balıkçı Teknesi', price: 25000, maxSpeed: 5.6, accel: 2.4, len: 8, wid: 2.8, hei: 3.2, hp: 1200, turn: 0.8, colors: ['#2a6ab0', '#e8e8e8', '#2d7a4a'], style: 'fishing', draft: 0.5 },
+  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 15.5, accel: 3.4, len: 16, wid: 4.6, hei: 5.9, hp: 3000, turn: 0.5, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.95 },
   // [deniz] 28 m mega yat: ağır, yavaş ivmelenir, geç döner (büyük atalet), geniş dönüş dairesi
-  megayat: { name: 'Mega Yat', price: 9500000, maxSpeed: 13, accel: 1.3, len: 28, wid: 6.6, hei: 10.6, hp: 6000, turn: 0.28, colors: ['#f4f4f4', '#1a2430', '#7d8a96'], style: 'megayacht', draft: 1.5 },
+  megayat: { name: 'Mega Yat', price: 9500000, maxSpeed: 10, accel: 1.9, len: 28, wid: 6.6, hei: 10.6, hp: 6000, turn: 0.28, colors: ['#f4f4f4', '#1a2430', '#7d8a96'], style: 'megayacht', draft: 1.5 },
 };
 
 // ---------------- Köpük izi (örneklemeli, toplamalı) ----------------
@@ -258,7 +258,9 @@ export class Boat extends Vehicle {
     let fs = this.vx * fx + this.vz * fz, ls = this.vx * -fz + this.vz * fx;
     const fs0 = fs;
     fs += d.accel * thr * (thr < 0 ? 0.45 : 1) * dt;
-    fs -= fs * Math.abs(fs) * (d.accel / (d.maxSpeed * d.maxSpeed)) * dt + fs * 0.12 * dt;
+    // [hareket H5] su direnci: tam gazda kararlı hız tam olarak maxSpeed (doğrusal 0,12 + karesel pay)
+    const qd = d._qd || (d._qd = Math.max(0.0008, (d.accel - 0.12 * d.maxSpeed) / (d.maxSpeed * d.maxSpeed)));
+    fs -= fs * Math.abs(fs) * qd * dt + fs * 0.12 * dt;
     // [deniz] kütle: büyük tekne yanlamasına daha çok kayar, dümene geç cevap verir (dönüş ataleti)
     const heavy = clamp(10 / d.len, 0.3, 1);
     ls *= Math.exp(-2.6 * (0.5 + 0.5 * heavy) * dt);
@@ -403,6 +405,7 @@ export class BoatManager {
     return v;
   }
   remove(v) { this.game.vehicles.remove(v); }
+  deckSpot(v, a) { deckSpot(v, a); } // [hareket H4]
   nearestEnterable(x, z, maxD = 3) {
     let best = null, bd = maxD;
     for (const v of this.game.vehicles.list) {
@@ -437,6 +440,88 @@ export class BoatManager {
     collideBoats(B, this.game);
     this.wakes.update(dt);
   }
+}
+
+
+// ---------------- [hareket H4] Güverte: teknenin yerel koordinatında yürünebilir platform ----------------
+// h: güverte yüzeyi (su hattı kökünden), bow/stern: güverte genişlik profili, obs: üst yapı engelleri [x yarı, z0, z1],
+// spot: dümenden kalkınca durulan nokta. Oyuncu güvertedeyken tekneyle taşınır; küpeşteden ancak zıplayarak suya iner.
+const DECKS = {
+  speedboat: (L, B) => ({ h: 0.55, bow: 0.42, stern: 0.92, obs: [], spot: [0, -L * 0.28] }),
+  fishing: (L, B) => ({ h: 1.0, bow: 0.34, stern: 0.72, obs: [[0.78, -L * 0.18 - 0.82, -L * 0.18 + 0.82]], spot: [0, L * 0.04] }),
+  yacht: (L, B) => ({ h: 1.5, bow: 0.36, stern: 0.94, obs: [[B * 0.39, -L * 0.26 - 0.6, L * 0.1 + 1.4]], spot: [0, -L * 0.33] }),
+  megayacht: (L, B) => ({ h: 2.3, bow: 0.3, stern: 0.94, obs: [[B * 0.4, -L * 0.3 - 0.6, L * 0.12 + 1.4]], spot: [0, -L * 0.36] }),
+};
+export function deckOf(d) { return d._deck || (d._deck = DECKS[d.style](d.len, d.wid)); }
+// güverte yarı genişliği (yerel z'de); güverte dışı → 0
+export function deckHalfW(d, lz) {
+  const D = deckOf(d), L = d.len, u = (lz + L / 2) / L;
+  if (u < 0.03 || u > 0.97) return 0;
+  let w;
+  if (u > 1 - D.bow) { const t = (u - (1 - D.bow)) / D.bow; w = Math.sqrt(Math.max(0, 1 - t * t)) * 0.98 + 0.02; } else w = D.stern + (1 - D.stern) * Math.min(1, u / 0.25);
+  return (d.wid / 2) * w * 0.94;
+}
+const DK = { lx: 0, lz: 0 };
+function toLocal(v, x, z) { const fx = Math.sin(v.heading), fz = Math.cos(v.heading), dx = x - v.pos.x, dz = z - v.pos.z; DK.lz = dx * fx + dz * fz; DK.lx = dx * fz - dz * fx; return DK; }
+// yerel → dünya (lx: sol +; heading yönü +z)
+function deckWorld(v, lx, lz, out) { const fx = Math.sin(v.heading), fz = Math.cos(v.heading); out.x = v.pos.x + fx * lz + fz * lx; out.z = v.pos.z + fz * lz - fx * lx; return out; }
+export function deckYAt(v, lx, lz) { const D = deckOf(v.def); return v.pos.y + D.h * Math.cos(v.pitch || 0) - lz * Math.sin(v.pitch || 0) + lx * Math.sin(v.roll || 0); }
+const DW = { x: 0, z: 0 };
+// dümenden kalkış: güvertede durma noktasına
+export function deckSpot(v, a) {
+  const D = deckOf(v.def);
+  deckWorld(v, D.spot[0], D.spot[1], DW);
+  a.pos.set(DW.x, deckYAt(v, D.spot[0], D.spot[1]), DW.z);
+  a.vy = 0; a.vx = 0; a.vz = 0; a.grounded = true; a.swimming = false;
+  a.onBoat = { v, lx: D.spot[0], lz: D.spot[1], wx: DW.x, wz: DW.z };
+}
+// karenin başında: tekneyle taşı (konum yerel koordinattan yeniden kurulur)
+export function deckCarry(a) {
+  const B = a.onBoat; if (!B) return;
+  const v = B.v;
+  if (a.vehicle || v.destroyed || !a.game.vehicles.list.includes(v)) { a.onBoat = null; return; }
+  // betik/ışınlanma ile güverteden alındıysa (son güverte konumundan uzakta) bağı bırak
+  if (B.wx !== undefined && Math.abs(a.pos.x - B.wx) + Math.abs(a.pos.z - B.wz) > 1.5) { a.onBoat = null; return; }
+  deckWorld(v, B.lx, B.lz, DW); a.pos.x = DW.x; a.pos.z = DW.z;
+  if (a.grounded) a.pos.y = deckYAt(v, B.lx, B.lz);
+}
+// hareketten sonra: güverte sınırı + üst yapı engeli; zemine otur; havadaysa küpeşteden aşınca bırak
+export function deckStep(a) {
+  const g = a.game, r = a.radius || 0.35;
+  let B = a.onBoat;
+  if (!B) {
+    // iskeleden/havadan güverteye düşme
+    if (a.grounded || a.vy > 0.5) return;
+    for (const v of g.vehicles.list) {
+      if (v.kind !== 'boat' || v.destroyed || Math.abs(v.pos.x - a.pos.x) + Math.abs(v.pos.z - a.pos.z) > v.def.len) continue;
+      const l = toLocal(v, a.pos.x, a.pos.z), hw = deckHalfW(v.def, l.lz);
+      if (hw > 0 && Math.abs(l.lx) < hw) { const y = deckYAt(v, l.lx, l.lz); if (a.pos.y <= y + 0.05 && a.pos.y > y - 0.6) { B = a.onBoat = { v, lx: l.lx, lz: l.lz, wx: a.pos.x, wz: a.pos.z }; break; } }
+    }
+    if (!B) return;
+  }
+  const v = B.v, d = v.def, D = deckOf(d);
+  const l = toLocal(v, a.pos.x, a.pos.z);
+  let lx = l.lx, lz = l.lz;
+  // havada (zıplama): küpeşteyi aşan bırakılır (suya); yerde güverte sınırında tutulur
+  const air = a.vy > 0.5 || a.pos.y > deckYAt(v, lx, lz) + 0.08;
+  const L2 = d.len / 2 - 0.35;
+  let hw = deckHalfW(d, clamp(lz, -L2, L2)) - r;
+  if (air && (Math.abs(lx) > hw + 0.02 || Math.abs(lz) > L2 + 0.02)) { a.onBoat = null; return; }
+  lz = clamp(lz, -L2, L2); hw = Math.max(0.05, deckHalfW(d, lz) - r);
+  lx = clamp(lx, -hw, hw);
+  for (const o of D.obs) {
+    const ox = o[0] + r, z0 = o[1] - r, z1 = o[2] + r;
+    if (Math.abs(lx) < ox && lz > z0 && lz < z1) {
+      const px = ox - Math.abs(lx), pz0 = lz - z0, pz1 = z1 - lz;
+      if (px < pz0 && px < pz1) lx = Math.sign(lx || 1) * ox; else if (pz0 < pz1) lz = z0; else lz = z1;
+      lx = clamp(lx, -hw, hw);
+    }
+  }
+  B.lx = lx; B.lz = lz;
+  deckWorld(v, lx, lz, DW); a.pos.x = DW.x; a.pos.z = DW.z; B.wx = DW.x; B.wz = DW.z;
+  const y = deckYAt(v, lx, lz);
+  if (a.pos.y <= y + 0.02 && a.vy <= 0.01) { a.pos.y = y; a.vy = 0; a.grounded = true; }
+  else if (a.pos.y - y < 0.05) a.grounded = true;
 }
 
 // Kıyıya en yakın su noktası (mağaza teslimatı için): verilen noktadan dışa doğru tarar
