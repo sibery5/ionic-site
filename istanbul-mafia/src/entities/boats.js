@@ -11,12 +11,13 @@ import { makeCanvas } from '../core/textures.js';
 import { buildYacht, buildFishingBoat } from '../world/ships_yachts.js';
 
 // Mağaza kaydı (fiyat, istatistik, kurucu)
+// [A2] azami hızlar +%15 (sahibin isteği): 26/5.6/15.5/10 -> 29.9/6.4/17.8/11.5 m/s
 export const BOAT_TYPES = {
-  surat: { name: 'Sürat Teknesi', price: 120000, maxSpeed: 26, accel: 9, len: 6.6, wid: 2.3, hei: 1.6, hp: 900, turn: 1.3, colors: ['#e8e8e8', '#c81010', '#111111', '#1d3d8e'], style: 'speedboat', draft: 0.25 },
-  balikci: { name: 'Balıkçı Teknesi', price: 25000, maxSpeed: 5.6, accel: 2.4, len: 8, wid: 2.8, hei: 3.2, hp: 1200, turn: 0.8, colors: ['#2a6ab0', '#e8e8e8', '#2d7a4a'], style: 'fishing', draft: 0.5 },
-  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 15.5, accel: 3.4, len: 16, wid: 4.6, hei: 5.9, hp: 3000, turn: 0.5, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.95 },
+  surat: { name: 'Sürat Teknesi', price: 120000, maxSpeed: 29.9, accel: 9, len: 6.6, wid: 2.3, hei: 1.6, hp: 900, turn: 1.3, colors: ['#e8e8e8', '#c81010', '#111111', '#1d3d8e'], style: 'speedboat', draft: 0.25 },
+  balikci: { name: 'Balıkçı Teknesi', price: 25000, maxSpeed: 6.4, accel: 2.4, len: 8, wid: 2.8, hei: 3.2, hp: 1200, turn: 0.8, colors: ['#2a6ab0', '#e8e8e8', '#2d7a4a'], style: 'fishing', draft: 0.5 },
+  yat: { name: 'Lüks Yat', price: 1200000, maxSpeed: 17.8, accel: 3.4, len: 16, wid: 4.6, hei: 5.9, hp: 3000, turn: 0.5, colors: ['#f4f4f4', '#1a1a1a'], style: 'yacht', draft: 0.95 },
   // [deniz] 28 m mega yat: ağır, yavaş ivmelenir, geç döner (büyük atalet), geniş dönüş dairesi
-  megayat: { name: 'Mega Yat', price: 9500000, maxSpeed: 10, accel: 1.9, len: 28, wid: 6.6, hei: 10.6, hp: 6000, turn: 0.28, colors: ['#f4f4f4', '#1a2430', '#7d8a96'], style: 'megayacht', draft: 1.5 },
+  megayat: { name: 'Mega Yat', price: 9500000, maxSpeed: 11.5, accel: 1.9, len: 28, wid: 6.6, hei: 10.6, hp: 6000, turn: 0.28, colors: ['#f4f4f4', '#1a2430', '#7d8a96'], style: 'megayacht', draft: 1.5 },
 };
 
 // ---------------- Köpük izi (örneklemeli, toplamalı) ----------------

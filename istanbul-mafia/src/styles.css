@@ -378,6 +378,9 @@ table.trade .cheap { color: var(--good); } table.trade .dear { color: var(--red2
 .speedo b { font: 700 54px var(--display); font-variant-numeric: tabular-nums; }
 .speedo span { font-size: 14px; color: #b8ab90; margin-left: 6px; }
 .speedo small { display: block; color: var(--gold); font: 600 12px var(--display); letter-spacing: 0.18em; }
+.speedo > b, .speedo > span { display: none; } /* [A2] yuvarlak gösterge (speedo.js) sayıyı kendisi çiziyor */
+.speedo .carhp { width: 150px; margin: 6px 30px 4px auto; }
+.speedo small { margin-right: 4px; }
 .carhp { width: 160px; height: 5px; background: rgba(0,0,0,0.6); margin: 4px 0 4px auto; overflow: hidden; } .carhp i { display: block; height: 100%; width: 100%; transform-origin: left; background: linear-gradient(90deg, var(--red), var(--good)); }
 .stamina { position: fixed; left: 28px; bottom: 6px; width: 220px; height: 4px; background: rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s; overflow: hidden; }
 .stamina.show { opacity: 1; } .stamina i { display: block; height: 100%; width: 100%; transform-origin: left; background: #f2c200; }

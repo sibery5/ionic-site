@@ -9,7 +9,8 @@ import { clamp, angleDiff, rng, RNG } from '../core/util.js';
 import { makeCanvas, signTexture } from '../core/textures.js';
 import { audio } from '../core/audio.js';
 // Çarpışma ve trafik YZ'si ayrı modüllerde (model kodundan bağımsız):
-import { integrateVehicle, collideAllVehicles } from './vehicle_physics.js';
+import { integrateVehicle, collideAllVehicles, driveDynamics } from './vehicle_physics.js';
+const _drvIn = { throttle: 0, steer: 0, hb: false, canDrive: false, offRoad: false, fs: 0, ls: 0, max: 1, wet: 1 };
 import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
 import { Debris } from '../world/debris.js';
 import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
@@ -1004,6 +1005,16 @@ function buildGenericBody(B, S) {
 // [araç] Binek ön/arka yüz: farlar, stoplar, tamponlar ve ızgara gövde çevresine (planBand) sarılır; kutu tamponlar köşede
 // gövdeden taşıyordu, farlar düz yüzde küçük kutulardı. Far: camlı mercek + iki projektör + altında gündüz farı şeridi,
 // köşede sinyal. Stop: köşeye sarılan kırmızı bölme + geri vites ve sinyal bölmeleri. Tampon: gövde renginde, altta koyu hava girişi.
+// [A2] bal peteği ızgara: altıgen hücreler (6 kenarlı silindir), satırlar yarım hücre kaydırılır. Koyu metal, B.d.
+function honeycomb(B, w, y0, y1, z, r, tag) {
+  const dx = r * 1.85, dy = r * 1.6, rows = Math.max(1, Math.floor((y1 - y0) / dy)), cols = Math.max(2, Math.floor(w / dx));
+  const g = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols - (j & 1); i++) {
+    const c = cyl(r * 0.78, r * 0.78, 0.016, 6, 'z', (i - (cols - 1) / 2 + (j & 1) * 0.5) * dx, y0 + (j + 0.5) * ((y1 - y0) / rows), z);
+    g.push(c);
+  }
+  if (g.length) B.d(mergeGeometries(g), 0x2c2d30, tag);
+}
 function buildFrontRearCar(B, S) {
   const P = planOutline(S), { zF, zR, Rc } = P, { cl, W } = S;
   const yTop = (z) => topYAt(S.top, z);
@@ -1011,7 +1022,7 @@ function buildFrontRearCar(B, S) {
   const old = S.lights === 'old', rugged = S.st === 'jeep' || S.st === 'offroad', sport = S.st === 'sport' || S.st === 'coupe' || S.st === 'cabrio';
   const hwF = S.hw(yF - 0.1, zF - Rc), hwR = S.hw(yRr - 0.1, zR + Rc);
   const archF = S.arches[0] + S.archR + 0.03, archR = S.arches[S.arches.length - 1] - S.archR - 0.03;
-  const lampH = sport ? 0.09 : rugged ? 0.16 : 0.12;
+  const lampH = sport ? 0.07 : rugged ? 0.16 : S.st === 'suv' ? 0.1 : 0.12; // [A2] spor/SUV: ince far
   const yL1 = yF - 0.03, yL0 = yL1 - lampH;
   // --- farlar ---
   if (old) {
@@ -1027,6 +1038,8 @@ function buildFrontRearCar(B, S) {
       B.d(planBand(S, sel, yL0 - 0.008, yL1 + 0.008, 0.004, 0.004, s, 4), 0x16191c);
       B.l(planBand(S, sel, yL0, yL1, 0.008, 0.006, s, 4), 0x737e88, 0xfff4e0, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * 0.96, yL0 - 0.016, yL0 - 0.004, 0.012, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
+      // [A2] ince LED gündüz şeridi (far üst kenarı): spor/SUV/sedan ön yüzleri ayırt edilir
+      if (sport || S.st === 'suv' || S.st === 'sedan' || S.st === 'police') B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * (sport ? 0.98 : 0.9), yL1 - 0.012, yL1 - 0.003, 0.013, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && z < zF - Rc * 0.55, yL0 + 0.01, yL1 - 0.01, 0.012, 0.004, s, 2), 0xd08a20, 0xff8a10, s > 0 ? 3 : 4);
       for (const k of [0.5, 0.7]) {
         const x = s * hwF * k, y = (yL0 + yL1) / 2, z = zF + 0.01;
@@ -1035,14 +1048,24 @@ function buildFrontRearCar(B, S) {
       }
     }
   }
+  // [A2] alçak burunlu spor: ön yüz çok kısa (far tampona gömülüyordu) -> kaput eğimine ince, uzun far yuvaları + LED çizgi
+  if (sport && !old) for (const s of [1, -1]) {
+    const x = s * hwF * 0.64, zA = zF - 0.05, zB = zF - 0.24, yA = yTop(zA) + 0.004, yB = yTop(zB) + 0.004;
+    B.d(beam(x, yA, zA, x, yB, zB, 0.02, 0.3, false), 0x0d0f11);
+    B.l(beam(x - s * 0.02, yA + 0.006, zA - 0.02, x - s * 0.02, yB + 0.006, zB + 0.04, 0.02, 0.2, false), 0x3a4248, 0xfff4e0, 0);
+    B.l(beam(x - s * 0.13, yA + 0.012, zA - 0.01, x + s * 0.12, yB + 0.012, zB + 0.01, 0.014, 0.02, false), 0xf4f8ff, 0xffffff, 0);
+  }
   // --- ızgara (farların arası) ---
   const gTop = old || rugged ? yL1 : yL1 - 0.01, gBot = rugged ? yL0 - 0.2 : yL0 - (sport ? 0.04 : 0.08);
   const gx = old || rugged ? hwF * 0.52 : hwF * 0.38;
   B.d(planBand(S, (x, z) => x < gx && z > zF - 0.02, gBot, gTop, 0.006, 0.004, 0, 3), 0x0b0b0c);
   const gw = gx * 2 - 0.06;
   if (S.grille === 'jeep') for (let i = -3; i <= 3; i++) B.d(bx(0.035, (gTop - gBot) * 0.85, 0.03, i * gw / 7.5, (gTop + gBot) / 2, zF + 0.014), S.solidColor || 0x2a2a2a);
-  else if (!sport) for (let i = 0; i < 4; i++) B.c(bx(gw, 0.008, 0.012, 0, gBot + (gTop - gBot) * (0.2 + i * 0.2), zF + 0.016));
-  else for (let i = 0; i < 9; i++) for (let k = 0; k < 2; k++) B.d(bx(0.012, (gTop - gBot) * 0.8, 0.012, (i - 4) * gw / 9 + k * 0.03, (gTop + gBot) / 2, zF + 0.014), 0x2a2a2c);
+  else if (sport) honeycomb(B, gw, gBot + 0.01, gTop - 0.01, zF + 0.012, 0.024);
+  // [A2] sedan: krom dikey çubuk; SUV: kalın üç yatay krom; hatch/estate: ince yatay + orta çizgi
+  else if (S.st === 'sedan' || S.st === 'police' || S.st === 'taxi') { const n = Math.max(7, Math.round(gw / 0.055)); for (let i = 0; i < n; i++) B.c(bx(0.009, (gTop - gBot) * 0.82, 0.014, (i - (n - 1) / 2) * gw / n, (gTop + gBot) / 2, zF + 0.016)); B.c(bx(gw, 0.012, 0.016, 0, gTop - 0.012, zF + 0.017)); }
+  else if (S.st === 'suv') for (let i = 0; i < 3; i++) B.c(bx(gw, 0.028, 0.02, 0, gBot + (gTop - gBot) * (0.22 + i * 0.28), zF + 0.017));
+  else for (let i = 0; i < 4; i++) B.c(bx(gw, 0.008, 0.012, 0, gBot + (gTop - gBot) * (0.2 + i * 0.2), zF + 0.016));
   if (!rugged) B.c(cyl(0.04, 0.04, 0.016, 16, 'z', 0, (gTop + gBot) / 2, zF + 0.022));
   // --- ön tampon ---
   const bTop = gBot - 0.015, bSel = (x, z) => z > archF;
@@ -1053,6 +1076,16 @@ function buildFrontRearCar(B, S) {
   const intake = planBand(S, (x, z) => (sport ? x > hwF * 0.36 && x < hwF * 0.86 : x < hwF * 0.7) && z > zF - Rc * 0.6, cl + 0.03, sport ? bTop - 0.03 : iTop, 0.045, 0, 0, 2);
   B.d(intake, 0x0a0a0a, 'bumperF');
   if (!old && !rugged) for (const s of [1, -1]) B.d(rbx(0.16, 0.06, 0.03, 0.02, s * hwF * 0.8, cl + 0.1, zF + 0.035), 0x101010, 'bumperF');
+  if (sport) {
+    // [A2] orta alt hava girişi (bal peteği) + ön splitter
+    const iw = hwF * 0.62, iy0 = cl + 0.05, iy1 = Math.min(bTop - 0.03, cl + 0.15);
+    B.d(planBand(S, (x, z) => x < iw / 2 + 0.02 && z > zF - 0.06, iy0 - 0.01, iy1 + 0.01, 0.04, 0, 0, 1), 0x070707, 'bumperF');
+    honeycomb(B, iw, iy0, iy1, S.frontZ ? Math.min(zF, S.frontZ((iy0 + iy1) / 2)) - 0.005 : zF - 0.02, 0.02, 'bumperF');
+    B.d(bx(hwF * 1.7, 0.018, 0.08, 0, cl - 0.005, zF - 0.01), 0x0a0a0a, 'bumperF');
+    // yan hava girişleri: arka çamurluk önünde, kapı arkasında
+    const za = S.arches[S.arches.length - 1] + S.archR + 0.22, ya = cl + 0.3, xa = S.hw(ya, za);
+    for (const s of [1, -1]) B.d(bx(0.02, 0.1, 0.3, s * (xa + 0.004), ya, za), 0x060606);
+  }
   // --- stoplar ---
   const tH = old ? 0.12 : 0.13, yT1 = yRr - 0.035, yT0 = yT1 - tH;
   for (const s of [1, -1]) {
@@ -1066,6 +1099,8 @@ function buildFrontRearCar(B, S) {
   const bumpR = planBand(S, (x, z) => z < archR, cl - 0.01, rTop, 0.016, 0.022, 0, 6);
   if (S.bumper === 'chrome') B.c(bumpR, 'bumperR'); else if (S.bumper === 'dark') B.d(bumpR, 0x1a1a1a, 'bumperR'); else B.p(bumpR, 'bumperR');
   B.d(planBand(S, (x, z) => x < hwR * 0.75 && z < zR + 0.02, cl + 0.01, cl + 0.09, 0.045, 0, 0, 1), 0x0c0c0c, 'bumperR');
+  // [A2] spor difüzör kanatçıkları
+  if (sport) for (let i = -3; i <= 3; i++) B.d(bx(0.012, 0.085, 0.16, i * hwR * 0.2, cl + 0.045, zR + 0.04), 0x181818, 'bumperR');
   const ex = sport ? [-0.62, -0.5, 0.5, 0.62] : [-0.62];
   for (const k of ex) { B.c(cyl(0.04, 0.042, 0.12, 14, 'z', k * hwR, cl + 0.06, zR - 0.02)); B.d(cyl(0.03, 0.03, 0.01, 12, 'z', k * hwR, cl + 0.06, zR - 0.081), 0x050505); }
   // üçüncü stop
@@ -1132,6 +1167,27 @@ function buildFrontRear(B, S) {
   else if (S.grille !== 'sport') for (let i = 0; i < 3; i++) B.c(bx(gw * 0.94, 0.012, 0.02, 0, gy - gh * 0.3 + i * gh * 0.3, zG + 0.012));
   if (S.grille !== 'jeep' && S.grille !== 'bus') B.c(cyl(0.045, 0.045, 0.02, 14, 'z', 0, gy, zG + 0.02));
   if (S.st === 'sport') { B.d(bx(W * 0.8, 0.03, 0.2, 0, cl + 0.03, zFb + 0.02), 0x0a0a0a); B.d(bx(W * 0.6, 0.12, 0.12, 0, cl + 0.08, zRb - 0.02), 0x0a0a0a); }
+  // [A2] otobüs: hat tabelası (kehribar LED), LED far şeritleri, siyah ön panel; arka: dikey LED stop, motor panjuru
+  if (S.st === 'bus') {
+    const yS = S.H - 0.24, zS = S.frontZ(yS), hwS = S.hw(yS, zS - 0.05);
+    B.d(bx(hwS * 1.7, 0.26, 0.03, 0, yS, zS + 0.004), 0x050505);
+    B.l(bx(hwS * 1.3, 0.1, 0.02, 0, yS, zS + 0.02), 0xffa020, 0xffb030, 0);
+    const yP = cl + 0.5, zP = S.frontZ(yP), hwP = S.hw(yP, zP - 0.05);
+    B.d(bx(hwP * 1.15, 0.3, 0.02, 0, yP, zP + 0.004), 0x0a0a0a);
+    for (const s of [1, -1]) B.l(bx(0.42, 0.022, 0.02, s * (hwF - 0.35), yH + 0.1, zF + 0.012), 0xf4f8ff, 0xffffff, 0);
+    const yR = cl + 1.05, zRr = S.rearZ(yR), hwRr = S.hw(yR, zRr + 0.05);
+    for (const s of [1, -1]) B.l(bx(0.07, 1.0, 0.03, s * (hwRr - 0.07), yR, zRr - 0.004), 0x5a0808, 0xff1a0a, 1);
+    for (let i = 0; i < 6; i++) B.d(bx(hwRr * 1.2, 0.025, 0.03, 0, cl + 0.42 + i * 0.07, S.rearZ(cl + 0.5) - 0.006), 0x101010);
+  }
+  // [A2] kamyon: krom yatay ızgara, güneşlik, basamaklar
+  if (S.st === 'truck') {
+    const y0 = cl + 0.3, y1 = cl + 1.05, zT = S.frontZ((y0 + y1) / 2), hwT = S.hw((y0 + y1) / 2, zT - 0.05);
+    B.d(bx(hwT * 1.1, y1 - y0, 0.02, 0, (y0 + y1) / 2, zT + 0.004), 0x0b0b0b);
+    for (let i = 0; i < 7; i++) B.c(bx(hwT * 1.1, 0.03, 0.03, 0, y0 + 0.05 + i * (y1 - y0 - 0.1) / 6, zT + 0.016));
+    const yV = S.H - 0.08, zV = S.frontZ(yV - 0.3);
+    B.d(bx(hwT * 1.8, 0.035, 0.16, 0, yV, zV + 0.03), 0x151515);
+    for (const s of [1, -1]) B.d(bx(0.05, 0.04, 0.3, s * (W / 2 - 0.02), cl + 0.05, zT - 0.4), 0x2a2a2a);
+  }
   // egzoz
   const ex = S.st === 'sport' ? [-0.25, -0.15, 0.15, 0.25] : [-0.45 * W / 1.8];
   for (const x of ex) B.c(cyl(0.035, 0.035, 0.2, 10, 'z', x, cl + 0.06, zRb + 0.02));
@@ -1677,6 +1733,8 @@ const PHYS = {
   bike: { grip: 9, cs: 10, steer: 0.8, gears: 1, rev: 0, soft: 0.5, snd: 'bike', horn: 'bell' },
   tank: { grip: 30, cs: 20, steer: 0, gears: 3, rev: 0.5, soft: 0.3, snd: 'tank', horn: 'truck', offroad: true },
 };
+// [A2] egzoz alevi atan motor sesi sınıfları -> audio.exhaustPops türü
+const FLAME_SND = { sport: 'sport', v8: 'v8', moto: 'moto', car: 'sport', small: 'sport' };
 const rnd = (k = 1) => (Math.random() * 2 - 1) * k;
 
 // birleşik geometriden etiket aralığını ayrı geometri olarak kopyala
@@ -2096,6 +2154,26 @@ export class Vehicle {
   }
 
   // ortak: yangın/duman/enkaz
+  // [A2] egzoz alevi: havuzlu parçacıklar (fireSys + add), kare içinde ayırma yok. flameT > 0 iken her karede 1-2 parçacık.
+  updateExhaustFlame(dt) {
+    if (!(this.flameT > 0)) return;
+    this.flameT -= dt;
+    const pt = this.game.particles;
+    if (!pt || !pt.fireSys || this.destroyed) { this.flameT = 0; return; }
+    const d = this.def, h = this.heading, fx = Math.sin(h), fz = Math.cos(h), cx = Math.cos(h), cz = -Math.sin(h);
+    const moto = this.kind === 'car' && this.mesh.userData.moto;
+    const back = moto ? 0.7 : d.len / 2 + 0.06, y = this.pos.y + (moto ? 0.56 : (d.cl || 0.15) + 0.06);
+    const k = this.flameK || 1, twin = !moto && (this.P.snd === 'sport' || this.P.snd === 'v8');
+    for (let s = 0; s < (twin ? 2 : 1); s++) {
+      const ox = moto ? -0.18 : twin ? (s ? 0.28 : -0.28) * d.wid : -0.31 * d.wid; // model: ±0.56 hwR (spor), -0.62 hwR
+      const x = this.pos.x - fx * back + cx * ox, z = this.pos.z - fz * back + cz * ox;
+      const sp = 5 + Math.random() * 4;
+      // sıcak mavi-beyaz çekirdek + turuncu dil (arkaya doğru, aracın hızını taşır)
+      pt.add.emit(x, y, z, this.vx - fx * sp, 0.2, this.vz - fz * sp, 0.06, 0.16 * k, 0.6, 0.75, 1.6, 1);
+      const j = pt.fireSys.emit(x, y, z, this.vx - fx * sp * 0.8, 0.3, this.vz - fz * sp * 0.8, 0.09 + Math.random() * 0.05, (0.22 + Math.random() * 0.12) * k, 1.6, 0.9, 0.5, 1, 0.8, 0);
+      if (j >= 0 && pt.fireSys.spin) pt.fireSys.spin[j] = rnd(4);
+    }
+  }
   updateFire(dt) {
     const g = this.game, f = this.fwd, L = this.def.len;
     if (this.burnT > 0 && !this.destroyed) {
@@ -2270,6 +2348,7 @@ export class Vehicle {
     const phys = g.physics;
     const def = this.def, P = this.P, ud = this.mesh.userData;
     this.updateFire(dt);
+    this.updateExhaustFlame(dt);
 
     const c = this.controls;
     const canDrive = !this.destroyed && this.sinking <= 0 && (this.driver || this.ai);
@@ -2305,6 +2384,8 @@ export class Vehicle {
       const a = g.audio || audio;
       if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
       if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
+      // [A2] egzoz alevi: vites yükseltmede (gazdayken) ve düşürmede kısa alev + patlama
+      if (FLAME_SND[P.snd] && (this.gear < g0 ? fs > 6 : throttle > 0.5 && this.rpm > 0.6)) { this.flameT = 0.16; this.flameK = this.gear > g0 ? 1 : 0.7; if (a.exhaustPops) a.exhaustPops(FLAME_SND[P.snd], 0.6); }
       // [B1] vites küçültmede devir eşleme gazı (blip): devir anında yükselir
       if (this.gear < g0 && fs > 3) this.rpm = Math.min(1.05, this.rpm + 0.22);
     }
@@ -2317,90 +2398,18 @@ export class Vehicle {
       if (P.turbo && a.turbo) a.turbo(0.6); // turbo boşaltma "pışşt"
       // [B1] egzoz patlamaları: spor/V8/motosiklet sınıfı gaz kesince
       if ((P.snd === 'sport' || P.snd === 'v8' || P.snd === 'moto') && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(P.snd, Math.min(1, this.rpm));
+      if (FLAME_SND[P.snd]) { this.flameT = 0.22; this.flameK = 0.85; } // [A2] gaz kesince yüksek devirde alev
     }
     // [B1] devir sınırlayıcı: vites sonunda tam gazda devir titrer (son vites hariç)
     if (throttle > 0.8 && this.gear === nG - 1 && sp > max * 0.97) rpmT = Math.min(rpmT, 0.97);
     else if (throttle > 0.8 && this.rpm > 0.96 && this.shiftT <= 0) rpmT = 0.9 + 0.08 * ((this._lim = !this._lim) ? 1 : 0);
     this._thrPrev = throttle;
     this.rpm += (rpmT - this.rpm) * Math.min(1, dt * (this.shiftT > 0 ? 18 : 8));
-    // ===== [B1 sürüş hissi] boylamsal: vites/devir tork eğrisi, çekiş sınırı, kademeli fren, ağırlık aktarımı =====
-    const terrain = offRoad && !P.offroad ? 0.8 : 1;
-    const heavy = def.len > 6 || (def.mass || 0) > 6000;
-    const wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
-    const muGrip = P.grip * wet * (offRoad ? (P.offroad ? 0.92 : 0.78) : 1);
-    const muRoad = muGrip * 0.8; // yanal: binek ~1.05 g, spor ~1.35 g
-    // fren basıncı ~0.1 sn'de oluşur (ani duvar etkisi yok); ABS'li ~1.1 g, ağır araç daha zayıf
-    const brakeWant = throttle < 0 && fs > 0.5 ? -throttle : 0;
-    // 1.5 (oyuncu: "frenler tutmuyor"): basınç ~0,05 sn'de dolar; binek ~1,5 g, spor ~1,6 g, ağır araç ~0,85 g.
-    // 100 km/s'den duruş ~35 m'den ~26 m'ye iner (gerçekçi sınırın biraz üstü, oyun hissi için).
-    this.brakeP = (this.brakeP || 0) + (brakeWant - (this.brakeP || 0)) * Math.min(1, dt * (brakeWant > (this.brakeP || 0) ? 20 : 16));
-    this.brakeDecel = Math.min(muGrip * 1.15, heavy ? 8.5 : 16);
-    if (throttle > 0) {
-      if (fs < -0.5) fs += this.brakeDecel * throttle * dt; // geri giderken ileri gaz = fren
-      else {
-        // vites çarpanı (1. vites güçlü, son vites zayıf) x devir tork eğrisi (orta devirde tepe) x hava direnci
-        const gm = 1.3 - 0.6 * (this.gear / Math.max(1, nG - 1));
-        const tq = 0.72 + 0.4 * Math.sin(Math.PI * clamp(this.rpm, 0.15, 1));
-        let a = def.accel * 0.5 * gm * tq * terrain * throttle * Math.max(0, 1 - (fs / max) ** 2);
-        if (this.shiftT > 0) a *= 0.08; // vites geçişinde gaz kesilir (duyulur ve hissedilir)
-        a = Math.min(a, muGrip * (P.rwd ? 0.8 : 0.72)); // çekiş sınırı (patinaj)
-        fs += a * dt;
-      }
-    } else if (throttle < 0) {
-      if (fs > 0.5) fs -= Math.min(fs, (this.brakeDecel + Math.min(1.5, sp * 0.04)) * this.brakeP * dt);
-      else if (fs > -max * 0.3) fs += def.accel * 0.35 * throttle * dt;
-    } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (0.7 + sp * 0.012 + (offRoad ? 1.5 : 0)) * dt); // motor freni + yuvarlanma
-    if (throttle >= 0) this.brakeP *= Math.exp(-dt * 16);
-    // el freni: arka tekerlekler kilitlenir -> ~0.45 g yavaşlama (eskiden aracı olduğu yerde durduruyordu)
-    if (hb) fs -= Math.sign(fs) * Math.min(Math.abs(fs), (canDrive ? 3.2 : 7.5) * dt);
-    fs -= fs * Math.abs(fs) * 0.0008 * dt;
-    // ağırlık aktarımı (yumuşatılmış boylamsal ivme, g): fren -> ön lastik yükü artar (dönüşe girer), gaz -> arka
-    const lAcc = clamp((fs - fs0) / Math.max(dt, 1e-3) / 9.81, -1.2, 1.2);
-    this.lt = (this.lt || 0) + (lAcc - (this.lt || 0)) * Math.min(1, dt * 8);
-    const front = clamp(1 - 0.28 * this.lt, 0.75, 1.3), rear = clamp(1 + 0.18 * this.lt, 0.8, 1.2);
-    // el freni sonrası tutunma kademeli döner (ani "yapışma" ile savrulma yok)
-    this.hbRec = hb && sp > 3 ? 0 : Math.min(1, (this.hbRec ?? 1) + dt * 2.2);
-    // yanal tutunma eğrisi: tepe kaymaya kadar tam, kayarken ~%82 (kontrol edilebilir kayma)
-    const slipPk = 1.4 + sp * 0.035, als = Math.abs(ls);
-    const curve = als <= slipPk ? 1 : 0.82 + 0.18 * Math.exp(-(als - slipPk) / 2.5);
-    let mu = muRoad * curve * (hb && sp > 3 ? 0.32 : 0.32 + 0.68 * this.hbRec) * rear;
-    if (P.rwd && throttle > 0.5 && this.gear <= 1 && als > 2) mu *= 0.8; // güçlü arkadan itiş: gazla kuyruk kayar
-    const dls = clamp(-ls * P.cs * dt, -mu * dt, mu * dt);
-    ls += dls;
-    // direksiyon: hıza göre kilit açısı ve yumuşatma (düşük hızda nazik, yüksek hızda sakin), merkeze dönüş hızlı
-    let wT;
-    if (P.steer === 0) {
-      // palet: yerinde dönebilir
-      this.steerAng = steer;
-      wT = steer * 0.8 * (fs < -0.3 ? -1 : 1) / (1 + sp / 25);
-    } else {
-      const steerMax = P.steer / (1 + (fs * fs) / 520);
-      const tgtA = steer * steerMax;
-      const engaging = Math.abs(tgtA) > Math.abs(this.steerAng) && Math.sign(tgtA || 1) === Math.sign(this.steerAng || tgtA || 1);
-      const tau = engaging ? 0.13 + sp * 0.006 : 0.07;
-      this.steerAng += (tgtA - this.steerAng) * Math.min(1, dt / tau);
-      const wb = this.T ? this.T.wheelbase || def.len * 0.6 : def.len * 0.6;
-      wT = (fs * Math.tan(this.steerAng)) / wb;
-      // ön lastik sınırı: frende daha keskin, gazda hafif önden kayma
-      const wMax = (muRoad * curve * front * 1.05) / Math.max(3, sp);
-      if (!hb || sp < 3) wT = clamp(wT, -wMax, wMax);
-      else {
-        // el freni kayması: kuyruk dışa açılır, direksiyon yönünde dönüş artar (sınırlı)
-        // kayma açısı ~40°'yi aşınca dönüş kendini sınırlar (tam tur atıp durmak yerine tutulabilir drift)
-        const slipA = Math.atan2(als, Math.max(1, Math.abs(fs)));
-        wT = clamp(wT * 1.3 + Math.sign(this.steerAng) * Math.min(0.5, sp * 0.025), -1.6, 1.6) * clamp(1 - (slipA - 0.45) / 0.3, 0, 1);
-      }
-    }
-    // yaw tepkisi: düşük hızda çevik, yüksek hızda sönümlü (savrulmaz)
-    const yk = hb ? 5 : clamp(10 - sp * 0.15, 4.5, 10);
-    this.yawRate += (wT - this.yawRate) * Math.min(1, dt * yk);
-    // [çarpışma] darbe kaynaklı ek açısal hız (vehicle_physics.js), lastik sürtünmesiyle söner
-    const spin = this.spin || 0;
-    this.heading += (this.yawRate + spin) * dt;
-    if (spin) { this.spin = spin * Math.exp(-dt * (hb || this.destroyed ? 1.4 : 2.6)); if (Math.abs(this.spin) < 0.005) this.spin = 0; }
-    this.vx = fx * fs + rx * ls;
-    this.vz = fz * fs + rz * ls;
-    this.fs = fs; this.ls = ls;
+    // [A2] boylamsal + yanal dinamik vehicle_physics.js driveDynamics içinde (node testiyle ölçülebilir)
+    const DI = _drvIn; DI.throttle = throttle; DI.steer = steer; DI.hb = hb; DI.canDrive = canDrive; DI.offRoad = offRoad;
+    DI.fs = fs; DI.ls = ls; DI.max = max; DI.wet = g.env && g.env.rainAmount ? 1 - g.env.rainAmount * 0.18 : 1;
+    driveDynamics(this, dt, DI);
+    fs = this.fs; ls = this.ls;
     // ağırlık transferi: fren → burun dalar, viraj → gövde dışa yatar (yay-sönüm hedefi)
     const longAcc = (fs - fs0) / Math.max(dt, 1e-3), latAcc = fs * this.yawRate;
     const soft = P.soft;
@@ -2679,7 +2688,8 @@ export class VehicleManager {
     const x = s.x - fz * side * (e.width / 2 - 1.0), z = s.z + fx * side * (e.width / 2 - 1.0);
     for (const v of this.list) if (Math.abs(v.pos.x - x) < 7 && Math.abs(v.pos.z - z) < 7) return null;
     const r = Math.random();
-    const t = r < 0.22 ? 'kartal' : r < 0.36 ? 'hatch' : r < 0.44 ? 'hatch3' : r < 0.53 ? 'sedan' : r < 0.6 ? 'estate' : r < 0.68 ? 'suv' : r < 0.73 ? 'offroad' : r < 0.78 ? 'coupe' : r < 0.82 ? 'cabrio' : r < 0.88 ? 'motor' : r < 0.91 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
+    // [A2] spor oranı %13 -> %17
+    const t = r < 0.19 ? 'kartal' : r < 0.32 ? 'hatch' : r < 0.40 ? 'hatch3' : r < 0.49 ? 'sedan' : r < 0.56 ? 'estate' : r < 0.64 ? 'suv' : r < 0.69 ? 'offroad' : r < 0.75 ? 'coupe' : r < 0.80 ? 'cabrio' : r < 0.86 ? 'motor' : r < 0.89 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
     // sağdan akan trafikte park: aracın sağ tarafı kaldırıma, yüzü trafik yönüne
     const hd = Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI);
     // [dünya] park yeri doğrulaması: bina/lamba/ağaç/eşya ile çakışan ya da kavşağa taşan yer reddedilir
@@ -2760,16 +2770,17 @@ export class VehicleManager {
     }
     this.parkTick(dt, px, pz, parkedCount);
     // [B1 trafik] yoğunluk ayarı (trafficDensity: düşük 0.5, orta 1, yüksek 1.25, ultra 1.5) x uyarlamalı ölçek x saat.
-    // Orta: 30 seyir + 18 park (eski 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
+    // Orta: 42 seyir + 36 park (A2; önce 30 + 18, daha önce 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
     const dens = g.density ? g.density('traffic') : 1;
-    const maxTraffic = Math.round(30 * dens * this.densityFactor());
-    const maxParked = Math.round(18 * Math.max(0.5, dens));
+    // [A2] sahibin isteği: orta ayarda seyir 30 -> 42 (+%40), park 18 -> 36 (x2)
+    const maxTraffic = Math.round(42 * dens * this.densityFactor());
+    const maxParked = Math.round(36 * Math.max(0.5, dens));
     this.maxParked = maxParked;
     if (this.spawnT <= 0 && !p.inInterior) {
       this.spawnT = trafficCount < maxTraffic * 0.6 ? 0.25 : 0.4;
       if (trafficCount < maxTraffic) this.spawnTraffic(px, pz);
       // park yeri doğrulaması (bina/eşya/kavşak, city.parkSpotBad) sık reddeder: tur başına iki deneme
-      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7) this.spawnParked(px, pz);
+      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7 && !this.spawnParked(px, pz)) this.spawnParked(px, pz);
     }
     const night = g.env ? g.env.nightFactor : 0;
     headPoolMat().opacity = Math.min(0.55, night * 0.6);
@@ -2840,7 +2851,8 @@ function pickTrafficType(game) {
   const r = rng.next();
   const night = game && game.env ? game.env.nightFactor > 0.5 : false;
   if (r < (night ? 0.36 : 0.24)) return 'taksi';
-  const T = [[0.38, 'kartal'], [0.47, 'hatch'], [0.53, 'hatch3'], [0.6, 'sedan'], [0.64, 'estate'], [0.7, 'dolmus'], [0.74, 'suv'], [0.76, 'offroad'], [0.79, 'bus'], [0.83, 'motor'], [0.845, 'bisiklet'], [0.88, 'kamyon'], [0.9, 'gt'], [0.92, 'coupe'], [0.935, 'cabrio'], [0.955, 'ambulans'], [0.975, 'police'], [1, 'polsuv']];
+  // [A2] spor (gt/coupe/cabrio) oranı %5,5 -> %8
+  const T = [[0.32, 'kartal'], [0.41, 'hatch'], [0.47, 'hatch3'], [0.55, 'sedan'], [0.59, 'estate'], [0.65, 'dolmus'], [0.7, 'suv'], [0.72, 'offroad'], [0.75, 'bus'], [0.79, 'motor'], [0.805, 'bisiklet'], [0.84, 'kamyon'], [0.87, 'gt'], [0.9, 'coupe'], [0.92, 'cabrio'], [0.94, 'ambulans'], [0.965, 'police'], [1, 'polsuv']];
   for (const [p, t] of T) if (r < p) return t;
   return 'kartal';
 }

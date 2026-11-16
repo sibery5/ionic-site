@@ -269,8 +269,8 @@ module.exports = async (p, out) => {
     });
     console.log('4 trafik/protokol:', JSON.stringify(r));
     check(r.green.paid === 0, '4a Yeşilde geçiş: ceza yok');
-    check(r.red.paid === 1500 && r.red.lvl === 0, '4b Kırmızıda geçiş: ₺1.500 ceza, aranma yok (lvl=' + r.red.lvl + ')');
-    check(/Kırmızı ışık ihlali/.test(r.toastText) && /1\.500|1500/.test(r.toastText), '4c Telefon bildirimi: "' + r.toastText.slice(0, 60) + '"');
+    check(r.red.paid === 750 && r.red.lvl === 0, '4b Kırmızıda geçiş: ₺750 ceza, aranma yok (lvl=' + r.red.lvl + ')');
+    check(/Kırmızı ışık ihlali/.test(r.toastText) && /750/.test(r.toastText), '4c Telefon bildirimi: "' + r.toastText.slice(0, 60) + '"');
     check(r.st === 'arrest' && r.d1 < r.d0 && r.teslim, '4d Yaya polis suçu gördü, "Teslim ol!" deyip koştu (' + r.d0 + '→' + r.d1 + ' m)');
     check(r.cuffing > 0.3 && !r.shotAt, '4e Silahsız şüpheliye ateş yok, kelepçe (' + r.cuffing + ')');
   }
