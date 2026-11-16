@@ -488,9 +488,19 @@ module.exports = async (p, out) => {
       // durmuş araçta F: kapı açılır, sürücü çekilir, oturulur
       side(); sim(0.05);
       press('KeyF');
-      let tIn = -1, doorMax = 0, driver = null, drvDown = false, lock = false;
+      let tIn = -1, doorMax = 0, driver = null, drvDown = false, lock = false, hitF = 0, segF = 0, tEnd = -1, minGap = 9;
+      const seg = {};
       sim(3, (i) => {
         if (pl.scriptCtl) lock = true;
+        // [hareket H2] oyuncu kapsülü ile kapı paneli (menteşe → arka kenar, 5 cm kalınlık) kesişmesin
+        if (CJ.seq && CJ.doorSegment(seg)) {
+          segF++;
+          const ex = seg.x1 - seg.x0, ez = seg.z1 - seg.z0, l2 = ex * ex + ez * ez || 1;
+          const u = Math.max(0, Math.min(1, ((pl.pos.x - seg.x0) * ex + (pl.pos.z - seg.z0) * ez) / l2));
+          const dd = Math.hypot(pl.pos.x - seg.x0 - ex * u, pl.pos.z - seg.z0 - ez * u) - pl.radius - 0.05;
+          minGap = Math.min(minGap, dd); if (dd < 0) hitF++;
+        }
+        if (tEnd < 0 && lock && !CJ.seq) tEnd = i / 30;
         const D = v._doors && (v._doors.doorL0 || v._doors.doorR0); if (D) doorMax = Math.max(doorMax, D.ang);
         if (CJ.seq && CJ.seq.driver) driver = CJ.seq.driver;
         if (driver && driver.kdT > 0) drvDown = true;
@@ -510,7 +520,7 @@ module.exports = async (p, out) => {
       const fr = R.at(45, 2.5); pl.pos.set(fr.x, 0, fr.z);
       sim(4);
       const frontStop = v2.speed < 1 && L.d(v2.pos, pl.pos) > 2;
-      return { sp0: +sp0.toFixed(1), inMoving, blocked: CJ.stats.blockedMoving, stopped, stopT: +stopT.toFixed(2), aimStops: CJ.stats.aimStops, tIn: +tIn.toFixed(2), lock, doorMax: +doorMax.toFixed(2), doorClosed, drvDown, drvOutside, crime, frontStop };
+      return { hitF, segF, tEnd: +tEnd.toFixed(2), minGap: +minGap.toFixed(2), sp0: +sp0.toFixed(1), inMoving, blocked: CJ.stats.blockedMoving, stopped, stopT: +stopT.toFixed(2), aimStops: CJ.stats.aimStops, tIn: +tIn.toFixed(2), lock, doorMax: +doorMax.toFixed(2), doorClosed, drvDown, drvOutside, crime, frontStop };
     });
     console.log('8 gasp:', JSON.stringify(r));
     check(r.sp0 > 3 && !r.inMoving && r.blocked >= 1, '8a Hareket eden araca F: ışınlanma yok (' + r.sp0 + ' m/s)');
@@ -520,6 +530,7 @@ module.exports = async (p, out) => {
     check(r.doorMax > 0.9 && r.doorClosed, '8e Kapı açıldı ve kapandı (' + r.doorMax + ' rad)');
     check(r.drvDown && r.drvOutside, '8f Sürücü dışarı çekilip yere düştü');
     check(r.crime, '8g Gasp suç olarak işlendi');
+    check(r.segF > 20 && r.hitF === 0 && r.tEnd > 0 && r.tEnd <= 2.2, `8h Oyuncu kapının süpürdüğü yayın dışında: kesişen kare ${r.hitF}/${r.segF}, en yakın ${r.minGap} m, süre ${r.tEnd} sn`);
   }
 
   // ---------------- 9) ev sahibi ----------------

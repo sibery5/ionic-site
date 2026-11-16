@@ -35,34 +35,54 @@ export class Carjack {
     const seat = (v.seats && v.seats[0]) || { x: v.def.wid * 0.22, y: 0.5, z: 0 };
     const s = seat.x >= 0 ? 1 : -1; // yerel +x = aracın sol tarafı (sürücü)
     const f = v.fwd, lx = f.z, lz = -f.x; // yerel +x yönünün dünya karşılığı
-    const off = v.def.wid / 2 + 0.55;
-    const door = { x: v.pos.x + lx * s * off + f.x * seat.z, z: v.pos.z + lz * s * off + f.z * seat.z };
-    const seatW = { x: v.pos.x + lx * seat.x + f.x * seat.z, z: v.pos.z + lz * seat.x + f.z * seat.z };
-    const drop = { x: door.x + lx * s * 1.3 - f.x * 0.9, z: door.z + lz * s * 1.3 - f.z * 0.9 };
+    const tag = s > 0 ? 'doorL0' : 'doorR0';
+    // [hareket H2] kapı geometrisi: menteşe önde (z1), arka kenar z0. Oyuncu kapının süpürdüğü yayın DIŞINDA,
+    // arka kenarın gerisinde (B direği yanında) durur; kapı ondan uzağa, öne-dışa açılır.
+    const T = v.T, dd = T && T.doors && T.doors.find((d) => d.tag === tag);
+    const hwAt = (z) => (dd && T.S && T.S.hw ? T.S.hw((dd.y0 + dd.y1) / 2, z) : v.def.wid / 2);
+    const z0 = dd ? dd.z0 : seat.z - 0.55, z1 = dd ? dd.z1 : seat.z + 0.55, hw0 = hwAt(z0), hwH = hwAt(z1);
+    const r = p.radius || 0.35;
+    const W = (ax, az) => ({ x: v.pos.x + lx * ax + f.x * az, z: v.pos.z + lz * ax + f.z * az });
+    const door = W(s * (hw0 + r + 0.06), z0 - r - 0.12); // B direği yanı
+    const gap = W(s * (hw0 + 0.1), z0 + 0.38); // kapı boşluğu (açık kapı ile B direği arası)
+    const seatW = W(seat.x, seat.z);
+    const drop = W(s * (hw0 + 1.35), z0 + 0.1); // sürücü boşluktan dışarı-geriye, oyuncunun önünden düşer
     // araç tamamen durur ve gasp boyunca kıpırdamaz
     v.ai.jackStop = 0; v.ai.frozen = true;
     v.vx *= 0.2; v.vz *= 0.2;
-    this.seq = { v, t: 0, s, lx, lz, door, seatW, drop, sx: p.pos.x, sz: p.pos.z, tag: s > 0 ? 'doorL0' : 'doorR0', hasDoor: true, driver: null };
+    this.seq = { v, t: 0, s, lx, lz, door, gap, seatW, drop, sx: p.pos.x, sz: p.pos.z, tag, hasDoor: true, driver: null,
+      geo: { hx: s * hwH, hz: z1, L: z1 - z0, s }, faceIn: Math.atan2(gap.x - door.x, gap.z - door.z) };
     p.scriptCtl = (dt) => this.drivePlayer(dt);
     p.crouch = false; p.speed = 0;
+  }
+  // kapı paneli (dünya): menteşe ve arka kenar; test ve çakışma denetimi için [hareket]
+  doorSegment(out) {
+    const S = this.seq; if (!S) return null;
+    const v = S.v, G = S.geo, D = v._doors && v._doors[S.tag], a = D ? D.ang : 0, f = v.fwd;
+    const ax = G.hx + G.s * G.L * Math.sin(a), az = G.hz - G.L * Math.cos(a);
+    out.x0 = v.pos.x + S.lx * G.hx + f.x * G.hz; out.z0 = v.pos.z + S.lz * G.hx + f.z * G.hz;
+    out.x1 = v.pos.x + S.lx * ax + f.x * az; out.z1 = v.pos.z + S.lz * ax + f.z * az;
+    return out;
   }
 
   drivePlayer(dt) {
     const S = this.seq, p = this.g.player;
     if (!S) { p.scriptCtl = null; return; }
     const t = S.t;
-    let x, z, face = Math.atan2(-S.lx * S.s, -S.lz * S.s); // kapıya dönük (araca bakar)
+    let x, z, face = S.faceIn; // kapı boşluğuna dönük
     if (t < T_APPROACH) {
       const u = ease(t / T_APPROACH);
       x = S.sx + (S.door.x - S.sx) * u; z = S.sz + (S.door.z - S.sz) * u;
-      if (Math.hypot(S.door.x - S.sx, S.door.z - S.sz) > 0.3) face = Math.atan2(S.door.x - S.sx, S.door.z - S.sz);
+      if (Math.hypot(S.door.x - S.sx, S.door.z - S.sz) > 0.3 && u < 0.8) face = Math.atan2(S.door.x - S.sx, S.door.z - S.sz);
       p.speed = Math.hypot(S.door.x - S.sx, S.door.z - S.sz) / T_APPROACH;
     } else if (t < T_PULL) {
       x = S.door.x; z = S.door.z; p.speed = 0;
     } else {
-      const u = ease((t - T_PULL) / (T_ENTER - T_PULL));
-      x = S.door.x + (S.seatW.x - S.door.x) * u; z = S.door.z + (S.seatW.z - S.door.z) * u;
-      face = S.v.heading; p.speed = 1.2;
+      // B direğinden kapı boşluğuna, oradan koltuğa kay
+      const u = (t - T_PULL) / (T_ENTER - T_PULL);
+      if (u < 0.45) { const e = ease(u / 0.45); x = S.door.x + (S.gap.x - S.door.x) * e; z = S.door.z + (S.gap.z - S.door.z) * e; }
+      else { const e = ease((u - 0.45) / 0.55); x = S.gap.x + (S.seatW.x - S.gap.x) * e; z = S.gap.z + (S.seatW.z - S.gap.z) * e; face = S.v.heading; }
+      p.speed = 1.2;
     }
     p.pos.x = x; p.pos.z = z;
     p.heading += Math.atan2(Math.sin(face - p.heading), Math.cos(face - p.heading)) * Math.min(1, dt * 14);
