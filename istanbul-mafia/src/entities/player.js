@@ -21,6 +21,9 @@ const angleWrap = (a) => angleDiff(0, a);
 // yörüngede alçalır; daha yukarı bakışta kamera başın arkasında kalıp yalnız bakış açısı döner (yere gömülmez).
 const PITCH_UP = -1.45, PITCH_DOWN = 1.2, POS_UP = -0.42;
 const _look = new THREE.Vector3();
+// [hareket M6] near düzlemi köşeleri (sağ, yukarı işaretleri): kameranın kesit dikdörtgeni duvara girmesin
+const NEAR_CORNERS = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
+const CAM_PUSH = new THREE.Vector3();
 
 export class Player extends Actor {
   constructor(game, look) {
@@ -539,11 +542,33 @@ export class Player extends Actor {
         const hit = g.physics.raycast(target.x + rx * ox, target.y + oy, target.z + rz * ox, back.x, back.y, back.z, want0 + 0.3);
         if (hit) free = Math.min(free, Math.max(0.35, hit.t - 0.3));
       }
+      // [hareket M6] near düzlemi köşeleri: hedeften her köşeye ışın; köşe duvarın arkasındaysa bomu kısalt.
+      // Tek merkez ışını yan duvarı (dar sokak) görmez; köşe ışınları kesit dikdörtgenini de korur.
+      const ux = -back.y * rz, uy = back.z * rx - back.x * rz, uz = back.y * rx; // yukarı = sağ × ileri (ileri = -back)
+      const hh = cam.near * Math.tan(cam.fov * Math.PI / 360) * 1.35 + 0.05, hw = hh * cam.aspect + 0.03;
+      for (let k = 0; k < 4; k++) {
+        const sx = NEAR_CORNERS[k][0] * hw, sy = NEAR_CORNERS[k][1] * hh;
+        const ox = back.x * free + rx * sx + ux * sy, oy = back.y * free + uy * sy, oz = back.z * free + rz * sx + uz * sy;
+        const L = Math.hypot(ox, oy, oz) || 1;
+        const hit = g.physics.raycastShared(target.x, target.y, target.z, ox / L, oy / L, oz / L, L);
+        if (hit && hit.t < L && typeof hit.box !== 'string') free = Math.min(free, Math.max(0.2, free * (hit.t - 0.06) / L));
+      }
       this.cCol = free < this.cCol ? damp(this.cCol, free, 30, dt) : damp(this.cCol, free, 4, dt);
       this.cCol = Math.min(this.cCol, free + 0.15);
-      const d = Math.max(0.35, Math.min(want0, this.cCol));
+      const d = Math.max(0.2, Math.min(want0, this.cCol));
       this.camDistNow = d;
       this.camPos.set(target.x + back.x * d, target.y + back.y * d, target.z + back.z * d);
+      // yan/üst duvar çok yakınsa (hedefin kendisi duvara yaslı) kamerayı duvar normalinden it: dört eksen ışını, sönümlü
+      let pxx = 0, pyy = 0, pzz = 0;
+      for (let k = 0; k < 4; k++) {
+        const sgn = k & 1 ? -1 : 1, lat = k < 2;
+        const dx = lat ? rx * sgn : ux * sgn, dy = lat ? 0 : uy * sgn, dz = lat ? rz * sgn : uz * sgn, reach = (lat ? hw : hh) + 0.04;
+        const hit = g.physics.raycastShared(this.camPos.x - dx * 0.02, this.camPos.y - dy * 0.02, this.camPos.z - dz * 0.02, dx, dy, dz, reach + 0.02);
+        if (hit && typeof hit.box !== 'string') { const pen = reach + 0.02 - hit.t; pxx -= dx * pen; pyy -= dy * pen; pzz -= dz * pen; }
+      }
+      const pk = 1 - Math.exp(-(Math.abs(pxx) + Math.abs(pyy) + Math.abs(pzz) > Math.abs(CAM_PUSH.x) + Math.abs(CAM_PUSH.y) + Math.abs(CAM_PUSH.z) ? 40 : 8) * dt);
+      CAM_PUSH.x += (pxx - CAM_PUSH.x) * pk; CAM_PUSH.y += (pyy - CAM_PUSH.y) * pk; CAM_PUSH.z += (pzz - CAM_PUSH.z) * pk;
+      this.camPos.add(CAM_PUSH);
       this.camInit = true;
       cam.position.copy(this.camPos);
       cam.position.y = Math.max(cam.position.y, (this.inInterior ? 0.3 : this.swimming ? WATER_Y + 0.4 : 0.3));
