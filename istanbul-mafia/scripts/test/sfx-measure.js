@@ -62,8 +62,16 @@ function measure({ x, sr }) {
 const files = fs.readdirSync(dir).filter((f) => f.endsWith('.wav') && f.includes(flt)).sort();
 const res = {};
 for (const f of files) res[f.replace('.wav', '')] = measure(readWav(path.join(dir, f)));
+// motor: ateşleme temel frekansı (özilinti, 18-420 Hz) seçili anlarda -> devirle izleniyor mu?
+function f0At({ x, sr }, t) {
+  const n = Math.floor(0.12 * sr), s0 = Math.floor(t * sr) - n / 2, a = x.subarray(Math.max(0, s0), Math.max(0, s0) + n);
+  let best = 0, bl = 0; const r0 = a.reduce((q, v) => q + v * v, 0) + 1e-12;
+  for (let L = Math.floor(sr / 420); L <= Math.floor(sr / 18); L++) { let q = 0; for (let i = 0; i + L < a.length; i++) q += a[i] * a[i + L]; q /= r0 * (a.length - L) / a.length; if (q > best * 1.04) { best = q; bl = L; } }
+  return bl ? Math.round(sr / bl) : 0;
+}
+for (const f of files.filter((f) => f.startsWith('engine_'))) res[f.replace('.wav', '')].f0 = [0.5, 2.2, 3.3, 4.6, 6.8].map((t) => f0At(readWav(path.join(dir, f)), t));
 const cmp = opt('--cmp') ? JSON.parse(fs.readFileSync(opt('--cmp'), 'utf8')) : null;
-const row = (n, m) => `${n.padEnd(24)} tepe ${String(m.peak).padStart(5)} rms ${String(m.rms).padStart(6)} süre ${m.dur.toFixed(2).padStart(5)} k30 ${(m.d30 ?? 0).toFixed(2).padStart(5)} atk ${String(m.atk).padStart(6)}ms mrk ${String(m.cent).padStart(5)}Hz bant ${m.bands.map((b) => String(b).padStart(2)).join('/')} kuyruk ${m.tail}%`;
+const row = (n, m) => `${n.padEnd(24)} tepe ${String(m.peak).padStart(5)} rms ${String(m.rms).padStart(6)} süre ${m.dur.toFixed(2).padStart(5)} k30 ${(m.d30 ?? 0).toFixed(2).padStart(5)} atk ${String(m.atk).padStart(6)}ms mrk ${String(m.cent).padStart(5)}Hz bant ${m.bands.map((b) => String(b).padStart(2)).join('/')} kuyruk ${m.tail}%${m.f0 ? ' f0@0.5/2.2/3.3/4.6/6.8s ' + m.f0.join('/') : ''}`;
 for (const [n, m] of Object.entries(res)) {
   console.log(row(n, m));
   if (cmp && cmp[n]) console.log('  önce'.padEnd(24) + row('', cmp[n]).slice(24));

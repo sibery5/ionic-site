@@ -6,6 +6,7 @@
 
 import { installSfx } from './sfx/index.js';
 import { addRender } from './sfx/lab.js';
+import { ENGINE_SYN, makeEngineBank } from './sfx/engine.js';
 
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
 // trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
@@ -406,7 +407,7 @@ export class AudioEngine {
     if (!on && this.engineNode) {
       const n = this.engineNode; this.engineNode = null;
       n.g.gain.setTargetAtTime(0, c.currentTime, 0.05);
-      setTimeout(() => { for (const s of n.stop) { try { s.stop(); } catch (e) { /* zaten durdu */ } } }, 300);
+      setTimeout(() => { for (const s of n.stop) { try { s.stop(); } catch (e) { /* zaten durdu */ } } if (n.bank) n.bank.stop(); }, 300);
       for (const l of ['gravel', 'roadwind', 'water', 'freewheel']) this.loopGain(l, 0, 0.1);
       return;
     }
@@ -421,6 +422,15 @@ export class AudioEngine {
     this.rpmPrev = rpm;
     const r = clamp(rpm, 0, 1.4);
     const K = ENGINE_KINDS[o.kind] || ENGINE_KINDS.car;
+    // [ses] kara/deniz araçları: ateşleme darbesi bankası (sfx/engine.js); osilatör yolu yalnız helikopter/jet/bisiklet için kalır.
+    // Sınıf değişince (başka araca binildi) banka yeniden kurulur: kare içinde değil, binişte bir kez.
+    const kind = o.kind || 'car';
+    if (n.bankKind !== kind) {
+      if (n.bank) { const b = n.bank; b.out.gain.setTargetAtTime(0, t, 0.03); setTimeout(() => b.stop(), 200); }
+      n.bank = ENGINE_SYN[kind] ? makeEngineBank(c, kind) : null; n.bankKind = kind;
+      if (n.bank) n.bank.out.connect(n.g);
+    }
+    if (n.bank) n.bank.set(rpm, load, t);
     const S = (p, v, tc = 0.05) => tgt(p, v, t, tc);
     const base = K.base + r * K.span;
     S(n.o1.frequency, base); S(n.o2.frequency, base * K.h2); S(n.o3.frequency, base * 2); S(n.o4.frequency, base * 0.25);
@@ -429,7 +439,7 @@ export class AudioEngine {
     S(n.g2.gain, K.sq, 0.2);
     S(n.g3.gain, (0.12 + load * 0.3) * K.bright, 0.1);
     S(n.f.frequency, K.lp + r * K.lpSpan + load * 900, 0.06);
-    S(n.mg.gain, K.motor, 0.1);
+    S(n.mg.gain, n.bank ? 0 : K.motor, 0.1);
     // uğultu katmanı: rotor çırpması / jet gürlemesi / dalga
     const sp = o.speed || 0;
     if (o.kind === 'heli') {
