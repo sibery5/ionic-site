@@ -77,8 +77,12 @@ module.exports = async (p, out) => {
     const sw = pl.swimming, y = +pl.pos.y.toFixed(2);
     pl.camYaw = Math.PI / 2; pl.heading = Math.PI / 2; hold('KeyW', true); sim(2); hold('KeyW', false);
     const sw2 = pl.swimming, x2 = +pl.pos.x.toFixed(1);
-    return { deckY, sw, y, sw2, x2 };
-  }, (r) => r.deckY > 1.4 && r.sw && Math.abs(r.y - 1.45) < 0.3);
+    // [villa] havuzdan çıkış: kenara doğru yüz -> kenardan çık, güvertede yürü
+    let out = false, t = 0; pl.camYaw = Math.PI; pl.heading = Math.PI; hold('KeyW', true);
+    for (; t < 12 && !out; t += 0.25) { sim(0.25); out = !pl.swimming && !pl.vault && !g.physics.inWater(pl.pos.x, pl.pos.z) && pl.pos.y > 1.3; }
+    hold('KeyW', false); sim(0.5);
+    return { deckY, sw, y, sw2, x2, out, outT: t, end: [+pl.pos.x.toFixed(1), +pl.pos.y.toFixed(2), +pl.pos.z.toFixed(1)], swEnd: pl.swimming };
+  }, (r) => r.deckY > 1.4 && r.sw && Math.abs(r.y - 1.45) < 0.3 && r.out && !r.swEnd);
 
   // 5) eve gir, yatakta uyu = kayıt, çık
   await T('yatakta kayıt', () => {

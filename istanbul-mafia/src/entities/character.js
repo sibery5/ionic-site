@@ -8,7 +8,7 @@
 //   vuruş tepkisi, yönlü ölüm düşüşü ve yere yerleşme (kemik bazlı kısıt gevşetme).
 import * as THREE from 'three';
 import { buildWeaponModel, WEAPONS } from '../game/weapons.js';
-import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM, gearFit } from './charParts.js';
+import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, mhPendingReady, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM, gearFit } from './charParts.js';
 export { BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM };
 import { charMaterial, charDepthMaterial } from './charTex.js';
 
@@ -557,7 +557,7 @@ export class CharacterModel {
   //      air, vy, hands_up, talk, dance, vault, roll, cower, phone, smoke, isPlayer, force}
   animate(dt, st) {
     // [donma] geçici gövdeyle kurulduysa bütçe açılınca kendi şekline geç (aynı gövde tipi: iskelet ve bağlama aynı)
-    if (this.mhPending && this.mesh) {
+    if (this.mhPending && this.mesh && mhPendingReady(this.look)) {
       const g = geoFor(this.look, this.forceLod !== null ? this.forceLod : this.lod);
       if (!g.userData.deferred) { this.mesh.geometry = g; this.mhPending = false; }
     }

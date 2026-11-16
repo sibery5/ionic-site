@@ -211,7 +211,16 @@ function shape(spec, acc, accMap) {
 }
 
 // spec.colors: yuva -> doğrusal [r,g,b] (0 ten çarpanı, 1 üst, 2 alt, 3 gömlek, 4 ayakkabı, 5 saç)
+const DEFG = new Map(); // [donma] geçici şekil geometrileri: gövde tipi + düzey başına bir tane (model başına üretmek ekran kartı belleğini sızdırıyordu)
 export function mhGeometry(spec, lod, acc, accMap) {
+  if (spec.defer) {
+    const k = BYVAR.get(spec.variant) + '|' + lod; let g = DEFG.get(k);
+    if (!g) { g = mhGeometryRaw(spec, lod, acc, accMap); DEFG.set(k, g); }
+    return g;
+  }
+  return mhGeometryRaw(spec, lod, acc, accMap);
+}
+function mhGeometryRaw(spec, lod, acc, accMap) {
   const S = shape(spec, acc, accMap), N = S.N, col = new Float32Array(N * 3), C = spec.colors, BK = BEARD[spec.beard];
   for (let i = 0; i < N; i++) {
     const s = S.slot[i];

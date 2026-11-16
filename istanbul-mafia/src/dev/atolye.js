@@ -31,8 +31,9 @@ const holding = (wid, st) => () => {
 };
 // [kapı] açık kapı denetimi: gövdede kapı boşluğu olmalı, ikinci (hayalet) kapı olmamalı
 const doorOpen = (type) => () => { const g = buildCarModel(type, '#b02020'); const fake = { T: getTemplate(type), kind: 'car', mesh: g, detached: new Set(), windows: [], _own: {}, game: { audio: null } };
-  Object.setPrototypeOf(fake, Vehicle.prototype); fake.setDoor('doorL0', 1.1); return g; };
+  Object.setPrototypeOf(fake, Vehicle.prototype); fake.setDoor('doorL0', 1.1); g.userData.__fake = fake; return g; };
 CAT['kapi:sedan'] = doorOpen('sedan');
+CAT['kapi:kapandi'] = () => { const g = doorOpen('sedan')(); const v = g.userData.__fake; if (v) v.setDoor('doorL0', 0); return g; };
 CAT['tutus:tabanca'] = holding('pistol', { aim: true });
 CAT['tutus:ak'] = holding('ak', { aim: true, twoHanded: true });
 CAT['tutus:ak-bosta'] = holding('ak', { twoHanded: true });

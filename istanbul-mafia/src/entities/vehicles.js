@@ -609,6 +609,8 @@ function doorPanel(S, s, z0, z1, y0, y1, off = 0.007) {
     if (s > 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  // [kapı] panel dışa bakmalı: normal yanın dışına (s yönüne) bakmıyorsa sarımı çevir (içe bakan panel kapalıyken görünmüyordu)
+  if (g.attributes.normal.getX(0) * s < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
   return g;
 }
 
@@ -1898,6 +1900,11 @@ export class Vehicle {
           const own = this.ownGeo(kind); if (!own) continue;
           const sub = extractRange(own, r); collapseRange(own, r); sub.translate(-hx, 0, -hz);
           grp.add(new THREE.Mesh(sub, kind === 'paint' ? ud.bodyMesh.material : kind === 'dark' ? darkMat : chromeMat));
+          if (kind === 'paint') { // [kapı] iç yüz: koyu kapı döşemesi (açık kapıya içeriden/arkadan bakınca panel görünmez değil)
+            const inner = new THREE.BufferGeometry(); inner.setAttribute('position', sub.attributes.position); inner.setAttribute('normal', sub.attributes.normal);
+            const ix = sub.index.array.slice(); for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; }
+            inner.setIndex(new THREE.BufferAttribute(ix, 1)); grp.add(new THREE.Mesh(colorize(inner, 0x2a2624), darkMat));
+          }
           any = true;
         }
       }

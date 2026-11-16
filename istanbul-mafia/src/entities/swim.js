@@ -81,7 +81,18 @@ export function tryClimbOut(p, g, mx, mz, ml) {
     if (d < bd) { bd = d; best = l; }
   }
   if (best) { startClimb(p, g, 'ladder', best); return true; }
-  if (poolAt(p.pos.x, p.pos.z)) return false; // [villa] havuzdan kenara yüzerek basamakla çıkılır (havuz tabanına "tırmanma" yok)
+  // [villa] havuz: kenara doğru yüzünce kenardan çıkılır (önceden havuzdan hiç çıkılamıyordu: kenar deniz seviyesine göre aranıyordu)
+  const pool = poolAt(p.pos.x, p.pos.z);
+  if (pool) {
+    const ax = p.pos.x + mx * 0.75, az = p.pos.z + mz * 0.75;
+    if (poolAt(ax, az)) return false; // kenar henüz önde değil
+    const ex = p.pos.x + mx * 1.2, ez = p.pos.z + mz * 1.2;
+    let top = g.physics.groundAt(ex, ez);
+    for (const b of g.physics.active.query(ex - 0.3, ez - 0.3, ex + 0.3, ez + 0.3, [])) if (b.y1 > pool.y - 0.6 && b.y1 < pool.y + 1.2 && b.y1 > top) top = b.y1;
+    if (!(top > pool.y - 0.8 && top < pool.y + 1.2)) top = pool.y + 0.1;
+    startClimb(p, g, 'ledge', { x: p.pos.x + mx * 0.35, z: p.pos.z + mz * 0.35, nx: -mx, nz: -mz, top, ex, ez });
+    return true;
+  }
   // 2) alçak kenar: önde kara / yürünebilir yüzey, en çok 2.7 m yukarıda, üstü boş
   const ax = p.pos.x + mx * 0.75, az = p.pos.z + mz * 0.75;
   let top = null;

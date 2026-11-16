@@ -487,6 +487,16 @@ function accKeyOf(L, hat) {
   return [hat, L.hatColor, L.glasses && (L.glassesStyle || 1), L.glassesColor, L.vest, L.vestColor, L.vestLabel, L.helmet, L.visor, L.earrings, L.earringColor, L.camo].join(',');
 }
 
+// [donma] bekleyen (geçici şekilli) model kendi şekline geçebilir mi? Geometri üretmeden yalnız bütçeyi sorar
+// (her karede geometri üretip atmak hem bellek hem ekran kartı tamponu sızdırıyordu).
+export function mhPendingReady(L) {
+  const R = rigFor(L); if (!R.mh) return true;
+  const top = topKind(L), pants = pantsKind(L), shoes = shoeKind(L), hat = hatKind(L);
+  const spec = mhSpec(L, R, top, pants, shoes, hat);
+  spec.accKey = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings ? accKeyOf(L, hat) : '';
+  return !mhShouldDefer(spec);
+}
+
 export function buildCharGeometry(L, lod = 0, accOnly = false) {
   const R = rigFor(L);
   if (R.mh && !accOnly) {
