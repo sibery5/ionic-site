@@ -415,6 +415,9 @@ export class Combat {
       g.particles.sparks(hp, 5, _w2);
       if (loud) audio.impactMetal(hp.x, hp.z);
       if (helmetOff) knockHelmetOff(target, dir, g.activeScene(), this.loose);
+      // [vurulma tepkisi] kaska isabet: baş savrulur, geri sendeler, kısa sersemleme (önceden yerinde kalıyordu)
+      if (!target.dead && !target.isPlayer) { target.knock = { x: dir.x * 1.6, z: dir.z * 1.6, t: 0.25 }; target.stunT = Math.max(target.stunT || 0, 0.6); }
+      if (!target.dead && target.model && target.model.hit) target.model.hit(dir.x, dir.z, 1.2);
       if (dealt > 0 && target.dead) this.fleshFx(target, hp, dir, 1.2, false, false);
     } else if (blocked === 'vest' && plate && pen <= 0.01) {
       // plaka durdurdu: kumaş/seramik tozu, tok darbe; kan yok
@@ -578,6 +581,8 @@ export class Combat {
     if (target.dead) return;
     const strongZ = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
     if (M.hitZone) M.hitZone(zone, side, strongZ, dir.x, dir.z);
+    // [vurulma tepkisi] ölçümde gövde irkilmesi zayıftı (omurga ~2°): merminin yönünde ek itki -> gövde ~8-12° sarsılır
+    if (M.hit) M.hit(dir.x, dir.z, (zone === 'torso' ? 1.9 : zone === 'arm' ? 1.1 : 0.8) * Math.min(1.4, strongZ) * (target.isPlayer ? 0.6 : 1));
     if (zone === 'arm') {
       // kol yarası: nişan titrer, isabet düşer (oyuncuda saçılma artar)
       target.armHurt = Math.min(1, (target.armHurt || 0) + 0.5);
