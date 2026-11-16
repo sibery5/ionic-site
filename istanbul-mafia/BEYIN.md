@@ -182,3 +182,13 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
 - **Aynı anda tek ekip, o da en sonda test çalıştırır.** İki test tarayıcısı aynı anda çalışınca bellek sınırı tarayıcıyı öldürüyor ("Target crashed"); bu bir kod hatası değil, yeniden tek başına çalıştır.
 - **Görüntü yakalama:** kareyi çizdiğin görevde `toDataURL` ile oku; sonradan alınan ekran görüntüsü oyun döngüsünün karesini verir.
 - **Sadeleştirme dikişte bozar:** uv dikişli ağlarda sadeleştirme yırtık ve leke üretir; az sayıda görünen nesnede (silah) ağı tam bırak.
+
+### 1.11 dersleri (donma avı)
+- **"Ekran tamamen donuyor" önce bir istisna olabilir.** Ana döngü yeni kareyi istiyor ama güncelleme her karede aynı hatayı fırlatınca
+  çizim hiç çalışmıyor. Teşhis: donma senaryosunu `freeze-steps.js` ile koştur; test hatayla kesiliyorsa kök neden odur.
+  Kalıcı ağ: varlık başına korumalı güncelleme + güncelleme hata verse de çizim.
+- **Ölçümü sarmalayıcıyla yap:** alt sistem yöntemlerini süre sayacıyla sarmalamak (freeze-steps `wrap`) en pahalı kareyi adıyla verir; tahmin gerekmez.
+- **Testte boşta zaman yok:** `requestIdleCallback` kuyrukları test döngüsünde hiç boşalmaz; gerçek oyunu taklit için ölçümden önce kuyruğu boşalt,
+  yoksa yapay takılmalar (cam sesi gibi) gerçek sanılır.
+- **Ben de kuralı çiğnedim:** toplu test sürerken atölye tarayıcısını çalıştırdım, iki test bellekten çöktü. Toplu test sürerken tarayıcı açma.
+- **Eski gövdeyle aynı pozu görüntüle (A/B):** silah tutuşu sorununda eski/yeni gövde ve eski/yeni silah ayrı ayrı denenince sebep iki adımda ayrıştı.
