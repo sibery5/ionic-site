@@ -1213,7 +1213,7 @@ function lightbar(B, x, y, z, w, kindA = 0xd01010, kindB = 0x1040e0) {
 const templates = new Map();
 // Gövde stili → özel şablon kurucu (iki tekerlekliler ve askerî araçlar ayrı modüllerde; döngüsel içe aktarma
 // güvenli: kurucular yalnız ilk model isteğinde çağrılır)
-function getTemplate(type) {
+export function getTemplate(type) {
   if (templates.has(type)) return templates.get(type);
   const def = CARS[type];
   const st = def.body || def.style;
@@ -1910,6 +1910,7 @@ export class Vehicle {
         const m = new THREE.Mesh(sub, ud.glassMesh.material); m.renderOrder = 2; grp.add(m);
       }
       for (const d of ud.decalMeshes || []) if (d.tag === tag) d.m.visible = false;
+      this.cutDoorHole(dd);
       grp.position.set(hx, 0, hz);
       ud.chassis.add(grp);
       D = doors[tag] = { grp, s: dd.s, ang: 0 };
@@ -1917,6 +1918,33 @@ export class Vehicle {
     D.ang = ang;
     D.grp.rotation.y = -D.s * ang;
     return true;
+  }
+
+  // [kapı] Kapı paneli gövdenin 7 mm dışına yapışık ayrı bir kabuktur; açılınca altındaki gövde yüzeyi (kol, kapı çizgisi)
+  // yerinde kalıyor ve "hayalet kapı" gibi görünüyordu. Kapı bölgesindeki dış yüzey üçgenleri bir kez (araca özel kopyada)
+  // dejenere edilir; etiketli aralıklar (kapı, kaput, tampon) korunur ki sonraki kopmalar bozulmasın. Kapalı kapı paneli boşluğu örter.
+  // Boşluktan karşı tarafı görmemek için orta hatta ince koyu bölme (biniş noktasından uzak: karakter içinden geçmez).
+  cutDoorHole(dd) {
+    const T = this.T, S = T && T.S; if (!S || !S.hw) return;
+    const done = this._holes || (this._holes = new Set()); if (done.has(dd.tag)) return; done.add(dd.tag);
+    const e = 0.006;
+    for (const kind of ['paint', 'chrome', 'dark']) {
+      const g = this.ownGeo(kind); if (!g || !g.index) continue;
+      const p = g.attributes.position.array, ix = g.index.array, n = ix.length;
+      const tagged = new Uint8Array(n / 3); for (const r of T.tags[kind] || []) for (let t = r.i0 / 3; t < (r.i0 + r.ni) / 3; t++) tagged[t] = 1;
+      let cut = 0;
+      for (let t = 0; t < n / 3; t++) {
+        if (tagged[t]) continue;
+        const a = ix[t * 3] * 3, b = ix[t * 3 + 1] * 3, c = ix[t * 3 + 2] * 3;
+        const x = (p[a] + p[b] + p[c]) / 3, y = (p[a + 1] + p[b + 1] + p[c + 1]) / 3, z = (p[a + 2] + p[b + 2] + p[c + 2]) / 3;
+        if (x * dd.s <= 0 || z <= dd.z0 + e || z >= dd.z1 - e || y <= dd.y0 + e || y >= dd.y1 - e) continue;
+        if (Math.abs(x) < S.hw(y, z) - (kind === 'paint' ? 0.03 : 0.02)) continue;
+        ix[t * 3 + 1] = ix[t * 3]; ix[t * 3 + 2] = ix[t * 3]; cut++;
+      }
+      if (cut) g.index.needsUpdate = true;
+    }
+    const zc = (dd.z0 + dd.z1) / 2, yc = (dd.y0 + dd.y1) / 2;
+    this.mesh.userData.chassis.add(new THREE.Mesh(colorize(bx(0.02, dd.y1 - dd.y0, dd.z1 - dd.z0, 0, yc, zc), 0x141414), darkMat));
   }
 
   // Parça kopar (tampon/kaput/kapı/ayna): aralığı ayrı uçan parçaya taşı, gövdede çökert
@@ -1948,6 +1976,7 @@ export class Vehicle {
     } else if (tag.startsWith('door') && T.doors) {
       const dd = T.doors.find((x) => x.tag === tag);
       if (dd) {
+        this.cutDoorHole(dd); // [kapı] kopan kapının altındaki gövde yüzeyi de açılır, koyu kapı boşluğu görünür
         ud.chassis.add(new THREE.Mesh(colorize(doorPanel(T.S, dd.s, dd.z0, dd.z1, dd.y0, dd.y1, -0.02), 0x151515), darkMat));
         for (let i = 0; i < this.windows.length; i++) { const c = this.windows[i].p.c; if (Math.sign(c[0]) === dd.s && c[2] < dd.z1 && c[2] > dd.z0) this.setPane(i, 3); }
       }

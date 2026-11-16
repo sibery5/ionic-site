@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { CARS } from '../game/economy.js';
-import { buildCarModel } from '../entities/vehicles.js';
+import { buildCarModel, Vehicle, getTemplate } from '../entities/vehicles.js';
 import { buildAircraftModel, AIR_TYPES } from '../entities/aircraft.js';
 import { buildBoatModel, BOAT_TYPES } from '../entities/boats.js';
 import { buildWeaponModel, WEAPON_ORDER } from '../game/weapons.js';
@@ -29,6 +29,10 @@ const holding = (wid, st) => () => {
   const mr = Math.random, r = new RNG(11); Math.random = () => r.next();
   try { const m = new CharacterModel(defaultLook('m')); m.seed = 0.5; m.forceLod = 0; m.setLod(0); m.setWeapon(wid); for (let i = 0; i < 90; i++) m.animate(0.016, { speed: 0, force: true, ...st }); m.root.userData.model = m; window.__curl = m.curl.slice(); return m.root; } finally { Math.random = mr; }
 };
+// [kapı] açık kapı denetimi: gövdede kapı boşluğu olmalı, ikinci (hayalet) kapı olmamalı
+const doorOpen = (type) => () => { const g = buildCarModel(type, '#b02020'); const fake = { T: getTemplate(type), kind: 'car', mesh: g, detached: new Set(), windows: [], _own: {}, game: { audio: null } };
+  Object.setPrototypeOf(fake, Vehicle.prototype); fake.setDoor('doorL0', 1.1); return g; };
+CAT['kapi:sedan'] = doorOpen('sedan');
 CAT['tutus:tabanca'] = holding('pistol', { aim: true });
 CAT['tutus:ak'] = holding('ak', { aim: true, twoHanded: true });
 CAT['tutus:ak-bosta'] = holding('ak', { twoHanded: true });
