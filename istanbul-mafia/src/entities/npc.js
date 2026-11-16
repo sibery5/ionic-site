@@ -702,6 +702,20 @@ export class NPC extends Actor {
   fireAt(t, d) {
     const g = this.game;
     if (this.shotT > 0 || this.fireCd > 0 || this.reloadT > 0) return;
+    // [C3] megafon uyarısı süresince ateş yok; oyuncu ateş ederse uyarı biter; teslim olan oyuncuya kelepçe
+    if (this.warnUntil) {
+      const now = g.combat.clock || 0, P = g.player;
+      if (t === P && (P.lastShotT || -9) > this.warnFrom) this.warnUntil = 0;
+      else if (now < this.warnUntil) return;
+      else if (t === P && P.weapon === 'fists' && (P.speed || 0) < 1 && !P.vehicle) { this.warnUntil = 0; this.state = 'arrest'; this.target = P; return; }
+      this.warnUntil = 0;
+      const U = this.warnUnit;
+      if (U && !U.firstShotAt) {
+        U.firstShotAt = now; let n = 0, b = 0; const v = U.v;
+        for (const c of U.crew) if (!c.dead && !c.passengerOf && !c.cargoOf) { n++; const ux = v.pos.x - t.pos.x, uz = v.pos.z - t.pos.z, cx = c.pos.x - v.pos.x, cz = c.pos.z - v.pos.z; if (Math.hypot(cx, cz) < 4.5 && cx * ux + cz * uz > 0) b++; }
+        U.coverFrac = n ? b / n : 0;
+      }
+    }
     if (g.missions && g.missions.cutscene) return;
     const def = this.wdef;
     let p = this.skill;

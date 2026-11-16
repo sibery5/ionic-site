@@ -354,6 +354,27 @@ export class Wanted {
     return u.sp;
   }
   // ekip iner: koltuktan kapı tarafına, kasadan arkaya
+  // [C3] ekip aracından inen polis: önce megafonla uyarır (3,5 sn ateş yok), aracın hedefe göre arkasında siper alır.
+  // Oyuncu bu sürede ateş ederse uyarı biter; silahını indirip durursa (yumruk, kıpırdamadan) kelepçeye gelirler.
+  warnCover(u, a, tgt) {
+    const g = this.game, v = u.v, p = g.player, now = g.combat.clock || 0;
+    if (!tgt || u.type === 'swat' || a.lawArmy || a.kind === 'soldier') return;
+    if (!u.warnUntil) {
+      u.warnUntil = now + 3.5; u.warnFrom = now;
+      const lead = u.crew.find((c) => !c.dead) || a;
+      lead.barkT = 0; lead.say('Dur! Polis! Silahını bırak!');
+      if (tgt === p && g.ui.notify) g.ui.notify('Megafon: "Dur! Polis! Silahını bırak!" — silahını indir (yumruk) ve kıpırdama.', 'warn');
+      this.lastWarn = u; u.stopD = Math.hypot(v.pos.x - tgt.pos.x, v.pos.z - tgt.pos.z);
+    }
+    a.warnUntil = u.warnUntil; a.warnFrom = u.warnFrom; a.warnUnit = u;
+    // siper: aracın hedefe göre arka tarafı, ekip yan yana
+    let ux = v.pos.x - tgt.pos.x, uz = v.pos.z - tgt.pos.z; const l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l;
+    const k = u.crew.indexOf(a), lat = ((k % 3) - 1) * 1.3, back = v.def.wid ? v.def.wid * 0.5 + 0.9 : 1.9;
+    if (a.state === 'attack') {
+      a.tac = 'cover'; a.tacT = 3.5 + 2.5; a.coverRe = true;
+      a.coverPt = { x: v.pos.x + ux * back - uz * lat, z: v.pos.z + uz * back + ux * lat, low: true };
+    }
+  }
   ejectCrewMember(u, a) {
     const g = this.game, v = u.v, p = g.player;
     if (a.passengerOf === v) v.removePassenger(a);
@@ -371,6 +392,7 @@ export class Wanted {
     if (inc) { if (tgt && !tgt.dead) a.engage(tgt, 0.8); }
     else if ((this.level >= 2 && !(p.vehicle && this.level <= 2 && !p.aiming)) || a.kind === 'swat' || a.lawArmy || a.kind === 'soldier') a.engage(p, 1.1);
     else { a.state = 'arrest'; a.target = p; a.static = false; }
+    this.warnCover(u, a, tgt);
     // mevzi: aracın tehditten uzak tarafı (kapı / motor bloğu siper)
     if (a.state === 'attack' && tgt && tgt.pos) {
       const ux = v.pos.x - tgt.pos.x, uz = v.pos.z - tgt.pos.z, ul = Math.hypot(ux, uz) || 1;
@@ -446,14 +468,16 @@ export class Wanted {
       const dp = Math.hypot(v.pos.x - p.pos.x, v.pos.z - p.pos.z);
       if (u.phase === 'enroute') {
         const seenGoal = u.incident || this.seenT < 1.5;
-        const haltD = seenGoal ? (p.vehicle && !u.incident ? 0 : 40 + v.def.len * 0.5) : 18;
+        const haltD = seenGoal ? (p.vehicle && !u.incident ? 0 : (u.crept ? 13 : 14 + v.def.len * 0.5 + Math.min(12, v.speed * v.speed / 20))) : 18; // [C3] fren payıyla 12-20 m.de durur (önce ~42 m)
         // araçtaki oyuncu sıkıştırıldı: dur, ekip iner
         const boxed = !u.incident && p.vehicle && p.vehicle.speed < 1.5 && dp < 14 && v.speed < 3 && this.boxT > 1.5;
         // yolda takıldı (trafik, kalabalık) ve olay yeri yakında: araçtan inip yaya devam
         u.slowT = Math.max(0, (u.slowT || 0) + (v.speed < 2 ? dt : -dt * 2));
         if ((footTarget && (d < haltD || (d < 75 && u.slowT > 2.5))) || boxed) { u.phase = 'halt'; u.t = 0; if (v.ai) { v.ai.mode = 'halt'; } }
       } else if (u.phase === 'halt') {
-        if (v.speed < 1.2 || u.t > 4) {
+        // [C3] çok uzakta durduysa (trafik/fren payı) bir kez yavaşça yaklaşır: hedef 12-20 m
+        if (v.speed < 1.2 && !u.crept && !u.incident && !p.vehicle && dp > 22 && dp < 75 && v.ai && v.ai.mode === 'halt') { u.crept = true; u.phase = 'enroute'; u.t = 0; v.ai.mode = 'chase'; v.ai.cruise = 6; }
+        else if (v.speed < 1.2 || u.t > 4) {
           v.ai = { empty: true }; v.parked = true; v.sirenOn = true;
           u.phase = 'deploy'; u.t = 0; u.deployT = 0.15;
         }
