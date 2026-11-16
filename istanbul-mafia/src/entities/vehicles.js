@@ -1048,6 +1048,13 @@ function buildFrontRearCar(B, S) {
       }
     }
   }
+  // [A2] alçak burunlu spor: ön yüz çok kısa (far tampona gömülüyordu) -> kaput eğimine ince, uzun far yuvaları + LED çizgi
+  if (sport && !old) for (const s of [1, -1]) {
+    const x = s * hwF * 0.64, zA = zF - 0.05, zB = zF - 0.24, yA = yTop(zA) + 0.004, yB = yTop(zB) + 0.004;
+    B.d(beam(x, yA, zA, x, yB, zB, 0.02, 0.3, false), 0x0d0f11);
+    B.l(beam(x - s * 0.02, yA + 0.006, zA - 0.02, x - s * 0.02, yB + 0.006, zB + 0.04, 0.02, 0.2, false), 0x3a4248, 0xfff4e0, 0);
+    B.l(beam(x - s * 0.13, yA + 0.012, zA - 0.01, x + s * 0.12, yB + 0.012, zB + 0.01, 0.014, 0.02, false), 0xf4f8ff, 0xffffff, 0);
+  }
   // --- ızgara (farların arası) ---
   const gTop = old || rugged ? yL1 : yL1 - 0.01, gBot = rugged ? yL0 - 0.2 : yL0 - (sport ? 0.04 : 0.08);
   const gx = old || rugged ? hwF * 0.52 : hwF * 0.38;
@@ -1178,7 +1185,7 @@ function buildFrontRear(B, S) {
     B.d(bx(hwT * 1.1, y1 - y0, 0.02, 0, (y0 + y1) / 2, zT + 0.004), 0x0b0b0b);
     for (let i = 0; i < 7; i++) B.c(bx(hwT * 1.1, 0.03, 0.03, 0, y0 + 0.05 + i * (y1 - y0 - 0.1) / 6, zT + 0.016));
     const yV = S.H - 0.08, zV = S.frontZ(yV - 0.3);
-    B.d(bx(hwT * 1.9, 0.04, 0.32, 0, yV, zV + 0.1), 0x151515);
+    B.d(bx(hwT * 1.8, 0.035, 0.16, 0, yV, zV + 0.03), 0x151515);
     for (const s of [1, -1]) B.d(bx(0.05, 0.04, 0.3, s * (W / 2 - 0.02), cl + 0.05, zT - 0.4), 0x2a2a2a);
   }
   // egzoz

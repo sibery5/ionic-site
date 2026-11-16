@@ -234,8 +234,8 @@ function buildMoto(def) {
   for (const s of [1, -1]) B.p(rbx(0.04, 0.2, 0.3, 0.02, s * 0.15, 0.83, -0.08));
   // [A2] spor kaporta: yan paneller (boyalı) + koyu hava çıkışı, kuyrukta ince LED stop
   for (const s of [1, -1]) {
-    B.p(beam(s * 0.165, 0.93, 0.4, s * 0.185, 0.42, 0.16, 0.3, 0.025, false));
-    B.d(beam(s * 0.2, 0.78, 0.3, s * 0.205, 0.56, 0.2, 0.12, 0.012, false), 0x0a0a0a);
+    B.p(beam(s * 0.15, 0.94, 0.42, s * 0.17, 0.64, 0.3, 0.2, 0.02, false));
+    B.d(beam(s * 0.162, 0.86, 0.38, s * 0.176, 0.7, 0.31, 0.08, 0.01, false), 0x0a0a0a);
   }
   B.l(bx(0.2, 0.015, 0.02, 0, 0.99, -0.83), 0x5a0808, 0xff1a0a, 1);
   B.p(rbx(0.3, 0.12, 0.42, 0.05, 0, 0.3, 0.12));
