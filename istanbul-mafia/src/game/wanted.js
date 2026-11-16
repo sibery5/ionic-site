@@ -28,6 +28,7 @@ const HELI_ANNOUNCE = ['Hava biriminden uyarı! Olduğun yerde kal!', 'Helikopte
 const pickA = (a) => a[Math.floor(Math.random() * a.length)];
 const HELI_GUN = { dmg: 26, range: 160, sound: 'lmg', flash: 1.1, shell: false, type: 'gun' };
 const _down = new THREE.Vector3(0, -1, 0), _tmpv = new THREE.Vector3();
+const HB = []; // [fizik] helikopter çatı sorgusu için yeniden kullanılan dizi
 
 // [kanun] yıldıza göre sınırlar
 export const LAW_CAP = [0, 4, 7, 10, 13, 16]; // sahadaki kolluk personeli (araç içindekiler dahil)
@@ -992,6 +993,14 @@ export class Wanted {
       H.orbit += dt * (seen ? 0.22 : 0.3);
       const R = seen ? 34 : Math.min(80, 30 + this.searchR * 0.5);
       wx = tgt.x + Math.sin(H.orbit) * R; wz = tgt.z + Math.cos(H.orbit) * R; wy = Math.max(30, (tgt.y || 0) + 30);
+      // [fizik] gökdelen bölgesinde binaların içinden uçuyordu (görünmez helikopter): yörünge noktası ve şimdiki konum çevresindeki
+      // en yüksek çatının 18 m üstünde uç (sorgu 4 karede bir; sonuç saklanır)
+      if (!(H._roofT > 0)) {
+        H._roofT = 0.13; let top = 0;
+        for (const q of [[wx, wz], [H.pos.x, H.pos.z]]) for (const b of g.physics.active.query(q[0] - 22, q[1] - 22, q[0] + 22, q[1] + 22, HB)) if (b.y1 > top) top = b.y1;
+        HB.length = 0; H._roof = top;
+      } else H._roofT -= dt;
+      wy = Math.max(wy, (H._roof || 0) + 18);
     }
     // yumuşak takip (hız sınırlı)
     const dx = wx - H.pos.x, dy = wy - H.pos.y, dz = wz - H.pos.z, dl = Math.hypot(dx, dy, dz) || 1;
@@ -1017,8 +1026,12 @@ export class Wanted {
     H.cone.material.opacity = 0.015 + 0.045 * night;
     H.cone.visible = !p.inInterior;
     H.spot.position.set(H.aim.x, Math.max(0, g.physics.groundAt(H.aim.x, H.aim.z)) + 0.06, H.aim.z);
-    H.spot.material.opacity = 0.08 + 0.4 * night;
-    H.spot.visible = !p.inInterior;
+    // [fizik] görüş hattı: helikopterle ışık noktası arasında bina varsa ışık oraya ulaşmaz (ışın 4 karede bir)
+    if (!(H._losT > 0)) { H._losT = 0.13; const hit = g.physics.raycastShared(bx, by, bz, ax / al, ay / al, az / al, al - 1.5); H._los = !hit || typeof hit.box === 'string'; } else H._losT -= dt;
+    H._losK = (H._losK === undefined ? 1 : H._losK) + ((H._los ? 1 : 0) - (H._losK === undefined ? 1 : H._losK)) * Math.min(1, dt * 6);
+    H.spot.material.opacity = (0.08 + 0.4 * night) * H._losK;
+    H.cone.material.opacity *= 0.35 + 0.65 * H._losK;
+    H.spot.visible = !p.inInterior && H._losK > 0.02;
     // pervane sesi
     H.chopT -= dt;
     if (H.chopT <= 0) { H.chopT = 0.3; audio.heliChop(H.pos.x, H.pos.z, 1); }
