@@ -754,6 +754,7 @@ export class UI {
     items.push(this.navItem(num(), 'OYUN YÜKLE', '', 'Otomatik kayıt ya da kayıt yuvalarından birini yükle.', () => this.saveLoadMenu('load')));
     items.push(this.navItem(num(), 'AYARLAR', '', 'Grafik, performans, ses ve oynanış ayarları.', () => this.settingsMenu()));
     items.push(this.navItem(num(), 'KONTROLLER', '', 'Klavye ve fare tuş düzeni.', () => this.controlsMenu()));
+    items.push(this.navItem(num(), 'İNTROYU İZLE', '', 'Açılış sinematiğini yeniden izle.', () => { this.closeAll(); g.intro && g.intro.play(); })); // [ses/intro]
     items.push(this.navItem(num(), 'YAPIMCILAR', '', 'Bu şehri kimler kurdu?', () => this.credits(true)));
     items.push(this.navItem(num(), 'ÇIKIŞ', '', 'Masaüstüne dön.', () => g.quit(), 'dim'));
     const brand = `<div class="brand"><div class="brand-crest">${ICONS.logo}</div><div class="brand-kicker">BİR SUÇ DESTANI</div><h1 class="brand-title"><span>İSTANBUL</span><em>MAFYA</em></h1><p class="brand-tag">Boğaz'ın iki yakası, tek bir aile.</p></div>`;
