@@ -540,7 +540,15 @@ export class Player extends Actor {
       this.camBob = damp(this.camBob || 0, this.grounded && !this.swimming ? (this.model.bobY || 0) : 0, 12, dt);
       target.y += this.camBob * 0.4 * (1 - Ae);
       if (this.camDip > 0) { target.y -= this.camDip; this.camDip = Math.max(0, this.camDip - dt * 1.2); }
-      const side = this.cSide * this.cSh;
+      let side = this.cSide * this.cSh;
+      // [hareket M6] omuz kayması duvara girmesin: yana ışın, near düzlemi yarı genişliği kadar pay; sönümlü
+      const hwN = (cam.near * Math.tan(cam.fov * Math.PI / 360) * 1.35 + 0.05) * cam.aspect + 0.07;
+      if (Math.abs(side) > 0.01) {
+        const sg = side > 0 ? 1 : -1, hs = g.physics.raycastShared(target.x, target.y, target.z, rx * sg, 0, rz * sg, Math.abs(side) + hwN);
+        if (hs && typeof hs.box !== 'string') side = sg * Math.max(0, Math.min(Math.abs(side), hs.t - hwN));
+      }
+      this.sideCol = this.sideCol === undefined ? side : Math.abs(side) < Math.abs(this.sideCol) ? damp(this.sideCol, side, 30, dt) : damp(this.sideCol, side, 5, dt);
+      side = Math.abs(this.sideCol) < Math.abs(side) || Math.sign(this.sideCol) === Math.sign(side) ? this.sideCol : side;
       target.x += rx * side; target.z += rz * side;
       target.y += 0.25 * upK; // dik yukarı bakışta başın biraz üstünden
       const back = tmp2.set(-fx * Math.cos(pitch), Math.sin(pitch), -fz * Math.cos(pitch));

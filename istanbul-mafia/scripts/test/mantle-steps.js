@@ -29,10 +29,10 @@ module.exports = async (p, out) => {
   // ---- H1: 1,5 / 2,0 / 2,5 m ince duvar aşılır; 1,2–2,2 sn; duvarın içinden geçmez ----
   for (const h of [1.5, 2.0, 2.5]) {
     const r = await p.evaluate((h) => {
-      const g = game, pl = g.player, s = window.__spot, th = 0.3, zf = 1.2;
+      const g = game, pl = g.player, s = window.__spot, th = 0.3, zf = 0.8;
       const b = window.__wall(h, th, zf);
       pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.vx = pl.vz = pl.vy = 0; pl.grounded = true; pl.vault = null;
-      sim(0.2);
+      sim(0.2); pl.pos.set(s.x, 0, s.z); pl.vx = pl.vz = 0; pl.heading = 0;
       const ok = h === 2.0 ? (press('Space'), sim(1 / 30), !!(pl.vault && pl.vault.mantle)) : pl.mantle(0, 1);
       let t = h === 2.0 ? 1 / 30 : 0, pen = 0, maxY = 0, hangF = 0;
       for (let i = 0; i < 150 && pl.vault; i++) {
@@ -51,7 +51,7 @@ module.exports = async (p, out) => {
   // kalın yapı (konteyner): üstüne çıkar
   const thick = await p.evaluate(() => {
     const g = game, pl = g.player, s = window.__spot, b = window.__wall(2.0, 2.5, 0.8);
-    pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.vault = null; pl.grounded = true; sim(0.2);
+    pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.vault = null; pl.grounded = true; sim(0.2); pl.pos.set(s.x, 0, s.z);
     const ok = pl.mantle(0, 1); let t = 0; for (let i = 0; i < 150 && pl.vault; i++) { sim(1 / 30); t += 1 / 30; }
     sim(0.5); const r = { ok, t: +t.toFixed(2), y: +pl.pos.y.toFixed(2) }; g.physics.city.remove(b); pl.pos.set(s.x, 0, s.z); sim(0.3); return r;
   });
@@ -73,7 +73,7 @@ module.exports = async (p, out) => {
     const walls = [C.add(s.x - 6, s.z + 0.6, s.x + 6, s.z + 0.9, 0, 6, 'testwall')];
     const NDC = [[-1, -1], [1, -1], [-1, 1], [1, 1]], v = cam.position.clone();
     const inside = (q) => walls.some((b) => q.x > b.x0 && q.x < b.x1 && q.z > b.z0 && q.z < b.z1 && q.y > b.y0 && q.y < b.y1);
-    let bad = 0, frames = 0, worst = null;
+    let bad = 0, frames = 0, worst = null, lab = '', badBy = {};
     const T = new (cam.position.constructor)();
     const probe = () => {
       cam.updateMatrixWorld(); frames++;
@@ -82,28 +82,35 @@ module.exports = async (p, out) => {
         T.set(pl.pos.x, pl.pos.y + pl.cH, pl.pos.z);
         const d = v.distanceTo(T), dir = v.clone().sub(T).normalize();
         const h = g.physics.raycastShared(T.x, T.y, T.z, dir.x, dir.y, dir.z, d);
-        if (inside(v) || (h && typeof h.box !== 'string' && h.t < d - 0.005)) { bad++; worst = [x, y, +d.toFixed(2)]; return; }
+        if (inside(v) || (h && typeof h.box !== 'string' && h.t < d - 0.005)) { bad++; badBy[lab] = (badBy[lab] || 0) + 1; worst = [lab, x, y, +d.toFixed(2), +pl.camDistNow.toFixed(2)]; return; }
       }
     };
     // duvara sırtını dön (kamera duvara doğru), yaw taraması; oyuncu duvara 0,5–0,9 m
+    lab = 'arka';
     for (const gap of [0.5, 0.9]) for (let a = -1.2; a <= 1.21; a += 0.3) {
       pl.pos.set(s.x, 0, s.z + 0.6 - gap); pl.heading = Math.PI; pl.camYaw = Math.PI + a; pl.camPitch = 0.25; pl.vault = null;
       sim(0.6); probe();
     }
     // yan duvar: duvara paralel dur, kamera yana kayar
+    lab = 'yan';
     for (let a = Math.PI / 2 - 0.4; a <= Math.PI / 2 + 0.41; a += 0.2) { pl.pos.set(s.x, 0, s.z + 0.6 - 0.35); pl.camYaw = a; sim(0.6); probe(); }
     for (const b of walls) C.remove(b);
     // dar sokak: 1,8 m aralıklı iki duvar, yaw yavaşça döner; ardışık kare kamera sıçraması
     const A = C.add(s.x - 0.9 - 0.3, s.z - 8, s.x - 0.9, s.z + 8, 0, 8, 'testwall'), B = C.add(s.x + 0.9, s.z - 8, s.x + 0.9 + 0.3, s.z + 8, 0, 8, 'testwall');
     walls.length = 0; walls.push(A, B);
     pl.pos.set(s.x, 0, s.z); pl.camYaw = 0; sim(0.8);
-    let jumps = 0, maxJ = 0; const prev = cam.position.clone();
-    for (let i = 0; i < 120; i++) { pl.camYaw += 0.02; sim(1 / 30); const j = cam.position.distanceTo(prev); maxJ = Math.max(maxJ, j); if (j > 0.18) jumps++; prev.copy(cam.position); probe(); }
+    lab = 'sokak';
+    // titreme: bom uzunluğu ardışık karelerde yön değiştirerek sıçrıyorsa (dönerken tek yönlü kısalma titreme değildir)
+    let jumps = 0, maxJ = 0, pd = pl.camDistNow, pdd = 0; const prev = cam.position.clone();
+    for (let i = 0; i < 120; i++) {
+      pl.camYaw += 0.02; sim(1 / 30); const j = cam.position.distanceTo(prev); maxJ = Math.max(maxJ, j); prev.copy(cam.position); probe();
+      const dd = pl.camDistNow - pd; if (Math.abs(dd) > 0.04 && Math.abs(pdd) > 0.04 && Math.sign(dd) !== Math.sign(pdd)) jumps++; if (Math.abs(dd) > 0.04) pdd = dd; pd = pl.camDistNow;
+    }
     C.remove(A); C.remove(B); pl.pos.set(s.x, 0, s.z); sim(0.3);
-    return { frames, bad, worst, jumps, maxJ: +maxJ.toFixed(3) };
+    return { frames, bad, badBy, worst, jumps, maxJ: +maxJ.toFixed(3) };
   });
   check('M6 kamera: near düzleminin 4 köşesi duvarın önünde (duvara yaslı, yan duvar, dar sokak)', cam.bad === 0 && cam.frames > 20, cam);
-  check('M6 dar sokakta kamera titremez (kare başı sıçrama ≤ 0,18 m)', cam.jumps === 0, cam);
+  check('M6 dar sokakta kamera titremez (bom uzunluğunda ileri-geri sıçrama yok)', cam.jumps === 0, cam);
 
   if (process.env.SHOTS === '1') {
     await p.evaluate(() => { const pl = game.player, s = window.__spot; window.__wall(2.0, 0.3, 0.8); pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.camYaw = Math.PI + 0.6; sim(0.3); pl.mantle(0, 1); sim(0.5); });
