@@ -130,3 +130,5 @@ export function updateFlights(g, dt) {
     }
   }
 }
+// test/teşhis erişimi
+if (typeof window !== 'undefined') window.__hitStats = () => ({ hits: HIT_STATS.hits, ms: +HIT_STATS.ms.toFixed(2), worst: +HIT_STATS.worst.toFixed(2), part: Object.fromEntries(Object.entries(HIT_STATS.part).map(([k, v]) => [k, +v.toFixed(2)])), live: LIVE.length });
