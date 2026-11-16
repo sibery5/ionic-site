@@ -5,6 +5,7 @@
 // dinleyicinin bakış yönüne göre stereo kaydırılır.
 
 import { installSfx } from './sfx/index.js';
+import { addRender } from './sfx/lab.js';
 
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
 // trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
@@ -62,6 +63,7 @@ export class AudioEngine {
     this.comp = this.ctx.createDynamicsCompressor();
     this.comp.threshold.value = -10; this.comp.knee.value = 8; this.comp.ratio.value = 6; this.comp.attack.value = 0.003; this.comp.release.value = 0.25;
     this.comp.connect(this.ctx.destination);
+    this.out = this.comp; // [ses] hoparlöre giden son düğüm (ölçüm testi buradan dinler)
     this.master = this.ctx.createGain();
     this.master.connect(this.comp);
     this.sfx = this.ctx.createGain(); this.sfx.connect(this.master);
@@ -748,3 +750,38 @@ Object.assign(AudioEngine.prototype, {
 
 installSfx(AudioEngine); // [ses B2] sfx/ modülleri
 export const audio = new AudioEngine();
+
+// [ses] motor ölçümü: GERÇEK setEngine yolu, OfflineAudioContext + suspend ile 50 ms'de bir güncellenir.
+// Senaryo (7 sn): boşta 1 sn -> tam gazla devir yükselir -> vites (gaz kesik 0,25 sn, devir düşer) -> tam gaz -> gaz kesik yavaşlama.
+// rpm(t) ve throttle(t) dışa açık: ölçüm betiği ateşleme frekansını bu eğriyle karşılaştırır.
+export const ENGINE_TEST = {
+  len: 7,
+  at(t) {
+    if (t < 1) return [0.15, 0];
+    if (t < 3.5) return [0.15 + (t - 1) / 2.5 * 1.05, 1];
+    if (t < 3.75) return [1.2 - (t - 3.5) / 0.25 * 0.4, 0];
+    if (t < 5.25) return [0.8 + (t - 3.75) / 1.5 * 0.35, 1];
+    return [1.15 - (t - 5.25) / 1.75 * 0.85, 0];
+  },
+};
+async function renderEngine(kind) {
+  const sr = 44100, oc = new OfflineAudioContext(1, sr * ENGINE_TEST.len, sr);
+  const E = Object.create(AudioEngine.prototype);
+  Object.assign(E, { ctx: oc, loops: {}, rpmPrev: 0, load: 0, engineNode: null, _engOptsT: 0 });
+  E.sfx = oc.createGain(); E.sfx.connect(oc.destination);
+  E.noiseBuf = E.makeNoise(2); E.brownBuf = E.makeBrown(3);
+  const o = { kind, gear: 1, throttle: 0, speed: 0, surface: 'concrete' };
+  let gear = 1;
+  const step = (t) => {
+    const [r, th] = ENGINE_TEST.at(t);
+    if (t >= 3.5 && gear === 1) gear = 2;
+    o.throttle = th; o.gear = gear; o.speed = 3 + t * 4;
+    E.setEngine(true, r, 0.2, undefined, o);
+  };
+  step(0);
+  for (let t = 0.05; t < ENGINE_TEST.len; t += 0.05) { const tt = t; oc.suspend(tt).then(() => { step(tt); oc.resume(); }); }
+  const r = await oc.startRendering();
+  return { chans: [r.getChannelData(0)], sr };
+}
+for (const k of ['small', 'car', 'v8', 'diesel', 'truck', 'moto']) addRender('engine_' + k, () => renderEngine(k));
+

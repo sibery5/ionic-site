@@ -14,7 +14,7 @@ const SHOTS = [
   // Boğaz ve 15 Temmuz Şehitler Köprüsü: sudan, köprüye doğru yavaş süzülme
   [4.5, 12.5, [560, 34, -250], [500, 48, -350], [330, 22, -450], [300, 26, -455]],
   // Haliç, Galata Köprüsü ve Galata Kulesi: alçak, yana kayan plan
-  [12.5, 20.5, [-250, 22, 250], [-60, 30, 265], [-120, 30, 40], [-110, 36, 10]],
+  [12.5, 20.5, [-270, 20, 135], [-205, 27, 172], [-130, 30, 40], [-110, 36, 10]],
   // Tarihî yarımada: Ayasofya ve Sultanahmet üzerinde yükselen plan
   [20.5, 28.5, [120, 40, 650], [80, 85, 520], [-60, 30, 540], [-130, 25, 600]],
   // Kalabalık cadde ve konak: göz hizasında ilerleme
