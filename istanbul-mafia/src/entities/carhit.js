@@ -22,35 +22,36 @@ export function pedImpact(g, v, a, sp) {
     a.knock = { x: v.vx * 0.6 + sx * 3, z: v.vz * 0.6 + sz * 3, t: 0.4 };
     if (!a.dead) { if (sp > 3.2 && a.knockdown) a.knockdown(a.knock.x, a.knock.z, 1.8 + Math.min(1.6, sp * 0.12)); g.cameraShake(Math.min(1.4, 0.4 + sp * 0.08)); }
     g.ui.damageFlash();
-  } else if (!a.dead && sp < 4) {
+  } else if (!a.dead && Math.max(sp, vs) < 4) {
     // sendeleme: kısa itiş + irkilme, düşmez
     const k = a.knock || (a.knock = { x: 0, z: 0, t: 0 });
     k.x = ux * sp * 0.25 + sx * 0.5; k.z = uz * sp * 0.25 + sz * 0.5; k.t = 0.25;
     a.model.hit(k.x, k.z, 0.7 + sp * 0.2);
-  } else if (sp >= 4) {
+  } else {
     // ölse de beden kaputa/havaya gider (aracın altında kalmaz)
     if (a.knock) a.knock.t = 0;
     const F = POOL.pop() || {};
     F.a = a; F.v = v; F.t = 0; F.sx = sx; F.sz = sz; F.ground = false; F.inCar = 0;
-    F.hx = a.pos.x; F.hz = a.pos.z; F.sp = sp;
-    if (sp <= 10) {
+    const cs = Math.max(sp, vs); // tepki türü aracın hızına göre (yaya yürürken kapanma hızı biraz farklı)
+    F.hx = a.pos.x; F.hz = a.pos.z; F.sp = cs; F.maxY = 0; F.y00 = v.pos.y;
+    if (cs <= 10) {
       // kaputa yat: aracın yerel koordinatında önden ön cama doğru, sonra yana yuvarlan
       F.mode = 'hood';
       const rx = f.z, rz = -f.x; // aracın yerel +x yönü
       F.lx = Math.max(-v.def.wid / 2 + 0.35, Math.min(v.def.wid / 2 - 0.35, dx * rx + dz * rz));
       F.lz0 = v.def.len / 2 - 0.15; F.lz1 = v.def.len * 0.08;
       F.hood = Math.max(0.55, (v.def.hei || 1.4) * 0.6);
-      F.dur = 0.35 + 0.025 * (10 - sp);
+      F.dur = 0.35 + 0.025 * (10 - cs);
       F.y0 = a.pos.y;
     } else {
       // savrulma: ileri-yana, hıza göre yükselen balistik iz; araç önünden başlar
       F.mode = 'fly';
-      const fw = 0.72 * sp, sd = 0.24 * sp;
-      F.vx = ux * fw + sx * sd; F.vz = uz * fw + sz * sd; F.vy = 0.22 * sp;
+      const fw = 0.62 * cs, sd = 0.36 * cs; // yana belirgin: aracın yolundan çıkar (araç durmasa da altında kalmaz)
+      F.vx = ux * fw + sx * sd; F.vz = uz * fw + sz * sd; F.vy = 0.22 * cs;
       a.pos.y = Math.max(a.pos.y, v.pos.y + 0.35);
     }
     a.flight = F; LIVE.push(F);
-    const kd = F.mode === 'hood' ? 2.9 : 2.4 + Math.min(1.2, (sp - 10) * 0.08);
+    const kd = F.mode === 'hood' ? 2.9 : 2.4 + Math.min(1.2, (cs - 10) * 0.08);
     if (!a.dead && a.knockdown) a.knockdown(F.mode === 'hood' ? sx : ux, F.mode === 'hood' ? sz : uz, kd);
   }
   const t2 = now(); P.react += t2 - t1;
@@ -86,6 +87,7 @@ export function updateFlights(g, dt) {
     const F = LIVE[i], a = F.a, v = F.v;
     F.t += dt;
     let done = !a.flight || a.vehicle || !g.npcs.list.includes(a);
+    if (done) F.why = !a.flight ? 'noflight' : a.vehicle ? 'veh' : 'list';
     if (!done && F.mode === 'hood') {
       if (v.destroyed) { F.mode = 'fly'; F.vx = v.vx * 0.5 + F.sx * 2; F.vz = v.vz * 0.5 + F.sz * 2; F.vy = 0; }
       else if (F.t < F.dur) {
@@ -111,7 +113,7 @@ export function updateFlights(g, dt) {
       } else {
         a.pos.y = rs.support;
         const s = Math.hypot(F.vx, F.vz), ns = Math.max(0, s - 16 * dt);
-        if (ns <= 0.05) done = true; else { F.vx *= ns / s; F.vz *= ns / s; }
+        if (ns <= 0.05) { done = true; F.why = 'stop'; } else { F.vx *= ns / s; F.vz *= ns / s; }
       }
       // aracın içinden geçme: gövdeye girdiyse dışarı it, aracın hızından yavaş kalmasın
       if (!v.destroyed && pushOut(v, a)) {
@@ -121,10 +123,11 @@ export function updateFlights(g, dt) {
       }
       if (a.kdT !== undefined && a.kdT < 0.8 && !done) a.kdT = 0.8; // uçarken kalkmasın
     }
+    if (F.a && a.pos.y - F.y00 > F.maxY) F.maxY = a.pos.y - F.y00;
     if (a.sync) a.sync();
     if (done || F.t > 4) {
       F.dist = Math.hypot(a.pos.x - F.hx, a.pos.z - F.hz);
-      if (a.flight === F) { a.flight = null; a.lastFlight = { mode: F.sp > 10 ? 'fly' : 'hood', dist: F.dist, sp: F.sp, inCar: F.inCar }; }
+      if (a.flight === F) { a.flight = null; a.lastFlight = { mode: F.sp > 10 ? 'fly' : 'hood', dist: F.dist, sp: F.sp, inCar: F.inCar, maxY: F.maxY, why: F.why || ('t' + F.t.toFixed(2)) }; }
       F.a = null; F.v = null;
       LIVE[i] = LIVE[LIVE.length - 1]; LIVE.pop(); POOL.push(F);
     }
