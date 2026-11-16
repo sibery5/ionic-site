@@ -5,7 +5,7 @@
 //  - alçak kenar (≤ 2.7 m, üstü boş: iskele, rıhtım bordürü): kollarla asılıp çekinme + diz atıp çıkma (1.5 sn).
 // Korkuluklu sahil rıhtımlarında çıkış yalnız merdivenden (korkuluk boşluğu). Tırmanma betikli hareket (scriptCtl)
 // olarak yürür; poz: model.seaClimb = {kind: 'ladder'|'ledge', u}.
-import { WATER_Y, isLand } from '../world/map.js';
+import { WATER_Y, isLand, poolAt } from '../world/map.js';
 import { waveH } from './boats.js';
 import { clamp } from '../core/util.js';
 import * as THREE from 'three';
@@ -15,7 +15,8 @@ const _p = { x: 0, y: 0, z: 0 };
 // Yüzerken su seviyesi (kök = su yüzü): yay + sönüm; suya girişte aşağı hızla hafif dalış
 export function swimVertical(p, dt, g) {
   const t = g.ships ? g.ships.t : 0;
-  const target = WATER_Y + waveH(p.pos.x, p.pos.z, t) * 0.8;
+  const pool = poolAt(p.pos.x, p.pos.z); // [villa] havuzda dalgasız, havuzun su yüzü
+  const target = pool ? pool.y : WATER_Y + waveH(p.pos.x, p.pos.z, t) * 0.8;
   p.vy += ((target - p.pos.y) * 22 - p.vy * 6.5) * dt;
   p.pos.y += p.vy * dt;
 }
@@ -80,6 +81,7 @@ export function tryClimbOut(p, g, mx, mz, ml) {
     if (d < bd) { bd = d; best = l; }
   }
   if (best) { startClimb(p, g, 'ladder', best); return true; }
+  if (poolAt(p.pos.x, p.pos.z)) return false; // [villa] havuzdan kenara yüzerek basamakla çıkılır (havuz tabanına "tırmanma" yok)
   // 2) alçak kenar: önde kara / yürünebilir yüzey, en çok 2.7 m yukarıda, üstü boş
   const ax = p.pos.x + mx * 0.75, az = p.pos.z + mz * 0.75;
   let top = null;

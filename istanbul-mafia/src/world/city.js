@@ -19,6 +19,7 @@ import { buildPoliceStations, POLICE_PROP_DEFS, POLICE_PROP_OPTS } from './polic
 import { buildMilitary, paintMilitary, MILITARY_PROP_DEFS, MILITARY_PROP_OPTS } from './military.js';
 import { buildLandmark, landmarkTrees } from './landmarks.js';
 import { buildBridges, buildMaidensTower, hookLedMeshes } from './bridges.js';
+import { buildPlayerVilla } from './villa.js'; // [villa]
 import { buildAirport, buildMarina, buildVillas, paintAirport, paintVillas, ZONE_PROP_DEFS, ZONE_PROP_OPTS } from './zones.js';
 import { buildHarbor, buildForest, paintLocations, LOCATION_PROP_DEFS, LOCATION_PROP_OPTS } from './locations.js';
 import { LADDER_GAPS } from './sea_ladders.js'; // [deniz] rıhtım merdiveni hizasında korkuluk boşluğu
@@ -420,6 +421,7 @@ export class City {
     buildAirport(this);
     buildMarina(this);
     buildVillas(this);
+    this.playerVilla = buildPlayerVilla(this); // [villa] oyuncunun malikânesi
     buildHarbor(this);
     buildForest(this);
     this.coast = buildCoast(this);

@@ -2,7 +2,7 @@
 // Şekiller: eksen hizalı kutu (AABB), döndürülmüş kutu (OBB), dikey silindir (daire). Her şekil kaba sınır
 // kutusunu (x0..x1, z0..z1) da taşır; eski kodlar (tırmanma, siper) bu alanları okumaya devam edebilir.
 // Kırılabilir küçük eşyalar (çöp kovası, baba, levha...) `b.brk` taşır: araç çarpınca enkaza dönüşür.
-import { isLand, WATER_Y } from './map.js';
+import { isLand, WATER_Y, poolAt } from './map.js';
 import { NavGrid } from './navgrid.js';
 import { terrainHeight, terrainRay } from './terrain.js';
 
@@ -244,7 +244,7 @@ export class Physics {
     if (x > 900) { const th = terrainHeight(x, z); if (th !== null) return th; }
     return isLand(x, z) ? 0 : WATER_Y - 4;
   }
-  inWater(x, z) { return !this.interiorMode && !isLand(x, z); }
+  inWater(x, z) { return !this.interiorMode && (!isLand(x, z) || !!poolAt(x, z)); } // [villa] havuz da su sayılır
 
   // Çember çarpışma çözümü; ayak yüksekliği y. Basamak yüksekliğinden alçak kutular zemin sayılır.
   // Dönen nesne yeniden kullanılır (her çağrıda yeni nesne yok): sonucu hemen okuyun.

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Actor } from './actor.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
-import { isLand, inBridge, WATER_Y } from '../world/map.js';
+import { isLand, inBridge, WATER_Y, poolAt } from '../world/map.js'; // [villa] poolAt
 import { swimVertical, swimEffects, enterWater, tryClimbOut } from './swim.js'; // [deniz]
 
 const tmp = new THREE.Vector3();
@@ -249,12 +249,12 @@ export class Player extends Actor {
     const water = g.physics.inWater(this.pos.x, this.pos.z);
     if (this.swimming) {
       // kara kütlesine yüzerek girilmez (kenar boyunca kayar); köprü altı serbest
-      if (isLand(this.pos.x, this.pos.z) && !inBridge(this.pos.x, this.pos.z)) {
+      if (isLand(this.pos.x, this.pos.z) && !inBridge(this.pos.x, this.pos.z) && !poolAt(this.pos.x, this.pos.z)) { // [villa] havuz
         if (!isLand(this.pos.x, prevZ)) this.pos.z = prevZ; else if (!isLand(prevX, this.pos.z)) this.pos.x = prevX; else { this.pos.x = prevX; this.pos.z = prevZ; }
       }
       if (ml > 0.1) tryClimbOut(this, g, mx, mz, ml);
     }
-    if (water && !this.swimming && !this.vault && !this.scriptCtl && this.pos.y < WATER_Y + 0.25) {
+    if (water && !this.swimming && !this.vault && !this.scriptCtl && this.pos.y < (poolAt(this.pos.x, this.pos.z) || { y: WATER_Y }).y + 0.25) { // [villa] havuz su yüzü
       this.swimming = true; this.rollT = 0; this.crouch = false;
       enterWater(this, g);
     }

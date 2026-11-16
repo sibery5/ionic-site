@@ -44,7 +44,7 @@ export class Interiors {
     // şehir NPC'lerini dondur
     g.npcs.stash(ctx.npcGroup);
     g.pickups.group = ctx.pickupGroup;
-    const builder = BUILDERS[type] || BUILDERS.apartment;
+    const builder = b.build || BUILDERS[type] || BUILDERS.apartment; // [villa] binanın kendi iç mekân kurucusu
     const spawn = builder.call(this, ctx) || { x: 0, z: ctx.d / 2 - 1.6 };
     g.physics.setInterior(cols);
     g.setActiveScene(scene);

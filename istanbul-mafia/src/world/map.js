@@ -70,6 +70,19 @@ export const FOREST = { name: 'Aydos Ormanı', lines: { x0: 900, x1: 985, z0: 25
 export const HIDEOUTS = [];
 // Boğaz kıyısındaki satılık lüks villa/yalı parselleri (CityMap kurulurken doldurulur)
 export const VILLAS = [];
+// [villa] Oyuncunun malikânesi: Boğaz kıyısı (Avrupa yakası, Bebek kuzeyi), koruluk içinde 100 × 100 m parsel.
+// Seçim nedeni: bu kesimde yalnız bir rastgele park bloğu ve iki satılık yalı vardı; aradaki tek ara yol (x≈143)
+// kaldırılınca iki blok tek parsel olur, başka bina/yol bozulmaz. Ön (doğu) cephe kıyı yoluna ve denize bakar,
+// araç kapısı güney caddesinde (z=-760), özel iskele kıyı yolunun karşısında suyun üstünde.
+export const PLAYER_VILLA = {
+  name: 'Villan', x0: 77, x1: 177, z0: -873, z1: -773, cx: 127, cz: -823,
+  gate: { x: 122, z: -773 }, // güney duvarındaki otomatik kapı (z=-760 caddesine bağlanır)
+  pier: { x0: 200, x1: 236, z0: -818.5, z1: -813.5 }, // özel iskele (suyun üstünde)
+  seaGate: { x: 177, z: -816 }, // doğu duvarında yaya kapısı (iskeleye)
+};
+// [villa] Yüzülebilir havuzlar: { x0, x1, z0, z1, y (su yüzü) }. Dünya kurulurken doldurulur (world/villa.js).
+export const POOLS = [];
+export function poolAt(x, z) { for (const p of POOLS) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return p; return null; }
 // Satılık mülkler (villalar + satın alınabilir apartmanlar)
 export const PROPERTIES = [];
 // Emniyet müdürlükleri (bayrak, otopark yerleri)
@@ -232,6 +245,7 @@ export class CityMap {
   // Kenar özel bölgenin içinden mi geçiyor? (askeri üs / havalimanı içinde yol yok)
   inZoneEdge(x0, z0, x1, z1) {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    if (inRect(mx, mz, PLAYER_VILLA)) return true; // [villa] parselin içinden yol geçmez
     for (const zn of [MILITARY_BASE.lines, AIRPORT.lines, FOREST.lines]) if (inRect(mx, mz, { x0: zn.x0 + 1, x1: zn.x1 - 1, z0: zn.z0 + 1, z1: zn.z1 - 1 })) return true;
     return false;
   }
@@ -309,6 +323,24 @@ export class CityMap {
       this.buildings.forEach((bl, i) => { if (bl.id !== i) { if (!this._idWarn) console.error('orman: bina kimliği kaydı', bl.id, i); this._idWarn = true; bl.id = i; } });
     }
     for (const b of this.blocks) if (b.kind === 'villa') this.villaPlots(b);
+    this.claimPlayerVilla();
+  }
+
+  // [villa] Parseldeki blokları 'zone' yapar, oradaki satılık yalıları kaldırır. Rastgele sayı dizisi bozulmasın diye
+  // her şey üretildikten SONRA yapılır (diğer bina, park ve yalıların yeri/rengi aynı kalır).
+  claimPlayerVilla() {
+    const P = PLAYER_VILLA;
+    for (const b of this.blocks) if (inRect(b.cx, b.cz, P)) {
+      if (b.kind === 'park') this.parks.splice(this.parks.indexOf(b), 1);
+      b.kind = 'zone'; b.zone = 'villa';
+    }
+    const gone = new Set();
+    for (let i = VILLAS.length - 1; i >= 0; i--) if (inRect(VILLAS[i].x, VILLAS[i].z, P)) { gone.add(VILLAS[i].buildingId); VILLAS.splice(i, 1); }
+    for (let i = PROPERTIES.length - 1; i >= 0; i--) if (gone.has(PROPERTIES[i].buildingId)) PROPERTIES.splice(i, 1);
+    this.buildings = this.buildings.filter((bl) => !gone.has(bl.id) && !(inRect((bl.x0 + bl.x1) / 2, (bl.z0 + bl.z1) / 2, P)));
+    this.buildings.forEach((bl, i) => { bl.id = i; });
+    for (const v of VILLAS) { const bl = this.buildings.find((x) => x.villaInfo === v); v.buildingId = bl.id; }
+    for (const pr of PROPERTIES) if (pr.kind === 'villa') pr.buildingId = VILLAS.find((v) => v.id === pr.id).buildingId;
   }
 
   // Boğaz kıyısı villa parselleri: blok başına 1-2 yalı, kıyı yoluna (denize) bakar
