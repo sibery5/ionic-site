@@ -32,7 +32,7 @@ const _down = new THREE.Vector3(0, -1, 0), _tmpv = new THREE.Vector3();
 // [kanun] yıldıza göre sınırlar
 export const LAW_CAP = [0, 4, 7, 10, 13, 16]; // sahadaki kolluk personeli (araç içindekiler dahil)
 export const CAR_CAP = [0, 1, 2, 3, 4, 4]; // takipteki ekip aracı
-const ESCAPE = [0, 9, 16, 26, 36, 48]; // görüşten çıkınca bir yıldızın sönme süresi (sn)
+export const ESCAPE = [0, 14, 24, 36, 50, 65]; // [C4] görüşten çıkınca bir yıldızın sönme süresi (sn); 1.5 öncesi 9/16/26/36/48
 const BACKUP_DT = [0, 14, 8, 6, 5, 5]; // takviye sevki aralığı
 const PATROL_R = 110; // suç yerine koşan devriye polis yarıçapı
 const PATROL_CAR_R = 260; // olaya yönlendirilen devriye aracı yarıçapı
