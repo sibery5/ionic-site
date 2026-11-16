@@ -52,6 +52,7 @@ import { NightLights } from './world/lights.js'; // [dünya/ışık] gece ışı
 import { Seating } from './world/seating.js'; // [dünya] bank oturma
 import { placeCityShops } from './world/city_shops.js'; // [şehir] bakkal/market/kafe/AVM yerleşimi
 import { CityLife, buildCafeTerraces } from './game/citylife.js'; // [şehir]
+import { VillaGame } from './game/villa.js'; // [villa]
 
 const DEFAULT_SETTINGS = {
   quality: 'medium', shadows: true, bloom: true, drawDistance: 1400, fov: 68, sensitivity: 1, invertY: false,
@@ -239,6 +240,7 @@ class Game {
     this.cityLife = new CityLife(this); // [şehir]
     this.missions = new Missions(this);
     this.life = new Life(this);
+    this.villa = new VillaGame(this); // [villa] oyuncunun malikânesi
     this.social = new Social(this); // sevgili, ödül avı, kapkaç, görev defteri (J)
     await step(0.9, 'Martılar ve sokak kedileri salınıyor...');
     this.animals = new Animals(this);
@@ -548,6 +550,7 @@ class Game {
     // askerî üs: park hâlinde tank, cip ve kamyonlar
     // [araçlar] askerî üs (tank, zırhlı, kamyon, taarruz helikopteri), havalimanı jeti, marina tekneleri
     spawnWorldVehicles(this);
+    if (this.villa) this.villa.spawn(); // [villa] galeri araçları, helikopterler, korumalar
     this.mooredBoats = spawnMooredFleet(this); // [deniz] marina ve liman iskelesinde bağlı, binilebilir yat/tekneler
     for (let i = 0; i < 4; i++) { this.vehicles.spawnTraffic(p.pos.x, p.pos.z); }
     this.mode = 'playing';
@@ -1135,6 +1138,7 @@ class Game {
     this.law.update(dt); // [kanun]
     this.missions.update(dt);
     this.social.update(dt);
+    if (this.villa) this.villa.update(dt); // [villa]
     // yakalanırsa kaçak mallar
     if (this.wanted.level > 0 && goodsCount(s) > 0 && !this._goodsWarn) { this._goodsWarn = true; this.ui.notify('Dikkat: Üzerinde kaçak mal var. Yakalanırsan el konur!', 'warn'); }
     if (this.wanted.level === 0) this._goodsWarn = false;

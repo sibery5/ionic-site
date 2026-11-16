@@ -76,10 +76,13 @@ export const VILLAS = [];
 // araç kapısı güney caddesinde (z=-760), özel iskele kıyı yolunun karşısında suyun üstünde.
 export const PLAYER_VILLA = {
   name: 'Villan', x0: 77, x1: 177, z0: -873, z1: -773, cx: 127, cz: -823,
-  gate: { x: 120, z: -773 }, // güney duvarındaki otomatik kapı (z=-760 caddesine bağlanır)
-  pier: { x0: 200, x1: 236, z0: -826, z1: -821 }, // özel iskele (suyun üstünde)
-  seaGate: { x: 177, z: -823.5 }, // doğu duvarında yaya kapısı (iskeleye)
+  gate: { x: 122, z: -773 }, // güney duvarındaki otomatik kapı (z=-760 caddesine bağlanır)
+  pier: { x0: 200, x1: 236, z0: -818.5, z1: -813.5 }, // özel iskele (suyun üstünde)
+  seaGate: { x: 177, z: -816 }, // doğu duvarında yaya kapısı (iskeleye)
 };
+// [villa] Yüzülebilir havuzlar: { x0, x1, z0, z1, y (su yüzü) }. Dünya kurulurken doldurulur (world/villa.js).
+export const POOLS = [];
+export function poolAt(x, z) { for (const p of POOLS) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return p; return null; }
 // Satılık mülkler (villalar + satın alınabilir apartmanlar)
 export const PROPERTIES = [];
 // Emniyet müdürlükleri (bayrak, otopark yerleri)

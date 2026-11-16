@@ -5,7 +5,7 @@
 // Etkileşim: teker = imleç etrafında yakınlaştır, sürükle = kaydır, sol tık = rota işareti, sağ tık = sil,
 // +/- yakınlaştır, oklar kaydır, Boşluk = oyuncuya ortala, M/Esc = kapat.
 import * as THREE from 'three';
-import { DISTRICTS, BRIDGES, ISLAND, LANDMARKS, MARINA, HARBOR, AIRPORT, MILITARY_BASE } from '../world/map.js';
+import { DISTRICTS, BRIDGES, ISLAND, LANDMARKS, MARINA, HARBOR, AIRPORT, MILITARY_BASE, PLAYER_VILLA } from '../world/map.js'; // [villa] PLAYER_VILLA
 import { GANGS } from '../game/economy.js';
 import { PIN_FOR, PIN_COLOR, svgImg, iconBitmap } from './icons.js';
 import { audio } from '../core/audio.js';
@@ -140,6 +140,7 @@ function drawMap(g, ctx, v, now) {
     label(AIRPORT.name, tx((AIRPORT.x0 + AIRPORT.x1) / 2), tz(AIRPORT.z0 + 40), ls * 0.9, '#d8d0c0', { weight: '600', font: 'system-ui, sans-serif' });
     label(MILITARY_BASE.name + ' · YASAK BÖLGE', tx((MILITARY_BASE.x0 + MILITARY_BASE.x1) / 2), tz((MILITARY_BASE.z0 + MILITARY_BASE.z1) / 2), ls * 0.9, '#ff8a70', { weight: '600', font: 'system-ui, sans-serif' });
     label(HARBOR.name, tx(680), tz(805), ls * 0.85, '#cfe8ff', { weight: '600', font: 'system-ui, sans-serif' });
+    label(PLAYER_VILLA.name, tx(PLAYER_VILLA.cx), tz(PLAYER_VILLA.z0 + 10), ls * 0.95, '#ffd27a', { weight: '700', font: 'system-ui, sans-serif' }); // [villa]
   }
   // GPS rotası
   const p = g.player;
