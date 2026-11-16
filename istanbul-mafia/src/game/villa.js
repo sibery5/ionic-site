@@ -56,7 +56,7 @@ export class VillaGame {
     const post = (x, z, heading, weapon, patrol) => {
       const look = Object.assign(randomLook(rng, 'gang'), {
         top: 'suit', topColor: '#141416', shirtColor: '#e8e8ea', tieColor: '#111111', pants: 'slacks', pantsColor: '#141416',
-        shoes: 'polished', shoesColor: '#0a0a0a', hat: 'none', glasses: true, glassesStyle: 'sun', chain: false, tespih: false, carry: null,
+        shoes: 'polished', shoesColor: '#0a0a0a', hat: 'none', glasses: true, glassesStyle: 'aviator', chain: false, tespih: false, carry: null,
       });
       const n = g.npcs.add('gang', x, z, look, {
         gang: 'family', ally: true, persistent: true, name: 'Koruma', weapon, hp: 240, heading,
