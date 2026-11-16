@@ -19,6 +19,7 @@ import { districtAt, DISTRICTS } from '../world/map.js';
 import { SLOTS, listSaves, latestSave } from '../game/save.js';
 import { audio } from '../core/audio.js';
 import { esc } from './dom.js';
+import { Speedo } from './speedo.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -320,6 +321,8 @@ export class UI {
       const chp = Math.round(clamp(veh.hp / veh.def.hp, 0, 1) * 100);
       if (S.chp !== chp) { S.chp = chp; H.carhp.style.transform = `scaleX(${chp / 100})`; }
       setText(H.carname, veh.def.name);
+      if (!this.speedoDial) this.speedoDial = new Speedo(H.speedo);
+      this.speedoDial.update(veh);
     }
     const stShow = p.stamina < 99 && !veh;
     if (S.stShow !== stShow) { S.stShow = stShow; H.stamina.classList.toggle('show', stShow); }
