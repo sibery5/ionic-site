@@ -2,7 +2,7 @@
 // "Kırmızı ışık ihlali — ₺… ceza" bildirimi olarak düşer ve para kesilir (nakit yetmezse bankadan).
 import { formatMoney } from '../core/util.js';
 
-export const RED_LIGHT_FINE = 1500;
+export const RED_LIGHT_FINE = 750; // [A2] sahibin isteği: 1500 -> 750 (yarıya)
 
 export class TrafficLaw {
   constructor(game) {
