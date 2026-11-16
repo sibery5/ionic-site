@@ -1,10 +1,11 @@
 // Oyuncu ve NPC'lerin ortak temeli: can, zırh, silah envanteri, ateş etme, hasar.
 import * as THREE from 'three';
 import { CharacterModel } from './character.js';
-import { WEAPONS } from '../game/weapons.js';
+import { WEAPONS, recoilStep } from '../game/weapons.js';
 
 let AID = 1;
 const tmpV = new THREE.Vector3();
+const _rk = { p: 0, y: 0 };
 
 export class Actor {
   constructor(game, look) {
@@ -110,7 +111,17 @@ export class Actor {
     // [savaş entegrasyonu] yıldız namlu alevi, ışık, duman ve kovan atma
     this.game.combat.muzzleFlash(this, muzzle, dir, def);
     // [savaş entegrasyonu] oyuncu için silaha özgü kamera geri tepmesi
-    if (this.isPlayer && def.recoil) { this.camPitch -= def.recoil * (this.aiming ? 0.7 : 1); this.camYaw += (Math.random() - 0.5) * 2 * (def.recoilH || 0); }
+    // [C1] sabit tepme deseni (öğrenilebilir); toparlanma player.recoverRecoil'de
+    if (this.isPlayer && def.recoil) {
+      const now = this.game.combat.clock || 0;
+      if (now - (this.lastShotT || -9) > (def.recover || 0.35)) this.sprayN = 0;
+      this.lastShotT = now;
+      recoilStep(def, this.sprayN || 0, _rk);
+      const m = this.aiming ? 0.7 : 1;
+      this.camPitch -= _rk.p * m; this.camYaw -= _rk.y * m;
+      this.recP = (this.recP || 0) + _rk.p * m; this.recY = (this.recY || 0) + _rk.y * m;
+      this.sprayN = (this.sprayN || 0) + 1;
+    }
     if (def.type === 'launcher' && def.lob) {
       this.game.combat.lobGrenade(this, muzzle, dir, def); // [savaş] 40 mm bombaatar
     } else if (def.type === 'launcher') {
@@ -140,7 +151,11 @@ export class Actor {
     if (!def || def.type === 'melee') return 0;
     const ads = this.adsK !== undefined ? this.adsK : this.aiming ? 1 : 0;
     const hip = def.hipSpread || def.spread || 0, aim = (def.spread || 0) * (def.adsMul || 0.6);
-    let spread = (hip + (aim - hip) * ads + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.6, (this.speed || 0) * 0.06));
+    // [C1] ilk mermi isabeti (dururken, bloom yokken), silaha özgü hareket cezası, havada büyük ceza
+    const still = (this.speed || 0) < 0.5 && this.grounded !== false;
+    const first = still && this.bloom < 0.0005 && def.first ? def.first : 1;
+    let spread = ((hip + (aim - hip) * ads) * first + this.bloom) * (this.crouch ? 0.8 : 1) * (1 + Math.min(0.9, (this.speed || 0) * (def.move !== undefined ? def.move : 0.06)));
+    if (this.grounded === false && !this.swimming && !this.vehicle) spread *= def.jump || 2.5;
     if (this.armHurt) spread = spread * (1 + 1.3 * this.armHurt) + 0.004 * this.armHurt; // [mekanik tepki] yaralı kol: nişan titrer
     return spread;
   }

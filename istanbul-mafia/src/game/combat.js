@@ -8,6 +8,7 @@ import { BI } from '../entities/charParts.js';
 import { resolveBullet, playerIncoming, playerBal, capBurst, knockHelmetOff, syncPlayerGear } from './body.js';
 import { GlassFx } from './glassfx.js';
 import { Reticle } from '../ui/reticle.js';
+const HIT_PRI = { body: 1, head: 2, kill: 3 };
 
 // NPC mermilerinin oyuncuya verdiği hasar: zorluk tablosu body.js PLAYER_BAL (mermi/patlama çarpanı, ani hasar tavanı)
 // [savaş] oyuncu kanaması: seviye başına saniyede can kaybı, alt sınır; kısmi kendiliğinden iyileşme üst sınırı (maxHp oranı)
@@ -146,12 +147,13 @@ export class Combat {
     this.poolCheckT = 0;
     this.whizT = 0;
     this.sndBudget = 0;
-    this.hitMarkFrame = false;
+    this.hitMarkFrame = 0;
     this.bulletHit = new THREE.Vector3();
     // [savaş] ek hedefler, oyuncu sağlık zamanlayıcıları
     this.targets = [];
     this.healT = 0; this.hbT = 0; this.pDrip = 0;
     // [savaş: beden] oyun saati, uçan kasklar, yerleşen cesetler, isabet istatistiği, delip geçme vektörleri, cam efektleri
+    this.hitStats = {};
     this.clock = 0; this.loose = []; this.corpses = []; this._penO = [];
     this.stats = { hits: 0, head: 0, pen: 0 };
     this.glass = new GlassFx(game);
@@ -312,10 +314,17 @@ export class Combat {
     return 'concrete';
   }
 
-  playerHit() {
-    if (this.hitMarkFrame) return;
-    this.hitMarkFrame = true;
-    this.game.ui.hitMarker && this.game.ui.hitMarker();
+  // [C1] isabet işareti: gövde beyaz, baş kırmızı, öldürme kalın; her türün ayrı sesi. Karede en güçlüsü kalır.
+  playerHit(kind = 'body') {
+    const pr = HIT_PRI[kind] || 1;
+    if (this.hitMarkFrame >= pr) return;
+    this.hitMarkFrame = pr;
+    this.hitStats[kind] = (this.hitStats[kind] || 0) + 1;
+    if (this.reticle) this.reticle.hit(kind);
+    const p = this.game.player.pos;
+    if (kind === 'kill') { audio.tone({ freq: 1250, freq2: 700, dur: 0.16, type: 'triangle', gain: 0.22, x: p.x, z: p.z, range: 50 }); audio.tone({ freq: 2100, dur: 0.05, type: 'square', gain: 0.08, x: p.x, z: p.z, range: 50 }); }
+    else if (kind === 'head') { audio.tone({ freq: 2400, freq2: 1900, dur: 0.07, type: 'square', gain: 0.12, x: p.x, z: p.z, range: 50 }); audio.tone({ freq: 3600, dur: 0.04, type: 'sine', gain: 0.1, x: p.x, z: p.z, range: 50, delay: 0.02 }); }
+    else audio.tone({ freq: 1600, dur: 0.035, type: 'triangle', gain: 0.1, x: p.x, z: p.z, range: 50 });
   }
 
   hitscan(attacker, origin, dir, def, muzzle) { this.trace(attacker, origin, dir, def, muzzle, 1, 0, null); }
@@ -406,6 +415,9 @@ export class Combat {
       g.particles.sparks(hp, 5, _w2);
       if (loud) audio.impactMetal(hp.x, hp.z);
       if (helmetOff) knockHelmetOff(target, dir, g.activeScene(), this.loose);
+      // [vurulma tepkisi] kaska isabet: baş savrulur, geri sendeler, kısa sersemleme (önceden yerinde kalıyordu)
+      if (!target.dead && !target.isPlayer) { target.knock = { x: dir.x * 1.6, z: dir.z * 1.6, t: 0.25 }; target.stunT = Math.max(target.stunT || 0, 0.6); }
+      if (!target.dead && target.model && target.model.hit) target.model.hit(dir.x, dir.z, 1.2);
       if (dealt > 0 && target.dead) this.fleshFx(target, hp, dir, 1.2, false, false);
     } else if (blocked === 'vest' && plate && pen <= 0.01) {
       // plaka durdurdu: kumaş/seramik tozu, tok darbe; kan yok
@@ -417,7 +429,7 @@ export class Combat {
     }
     if (blocked !== 'helmet' && !(blocked === 'vest' && plate && pen <= 0.01)) this.woundFx(target, zone, ah.side, hp, dir, attacker, def, dealt);
     else if (!target.dead && target.model && target.model.hitZone) target.model.hitZone(zone, ah.side, Math.min(1.4, 0.6 + dealt / 30), dir.x, dir.z);
-    if (attacker.isPlayer) this.playerHit();
+    if (attacker.isPlayer) this.playerHit(target.dead ? 'kill' : zone === 'head' ? 'head' : 'body');
     if (target.isPlayer) { g.ui.damageFlash(attacker); this.playerHitFx(attacker, dir, dealt, zone); }
     this.stats.hits++;
     if (zone === 'head') this.stats.head++;
@@ -569,6 +581,8 @@ export class Combat {
     if (target.dead) return;
     const strongZ = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
     if (M.hitZone) M.hitZone(zone, side, strongZ, dir.x, dir.z);
+    // [vurulma tepkisi] ölçümde gövde irkilmesi zayıftı (omurga ~2°): merminin yönünde ek itki -> gövde ~8-12° sarsılır
+    if (M.hit) M.hit(dir.x, dir.z, (zone === 'torso' ? 1.9 : zone === 'arm' ? 1.1 : 0.8) * Math.min(1.4, strongZ) * (target.isPlayer ? 0.6 : 1));
     if (zone === 'arm') {
       // kol yarası: nişan titrer, isabet düşer (oyuncuda saçılma artar)
       target.armHurt = Math.min(1, (target.armHurt || 0) + 0.5);
@@ -932,7 +946,7 @@ export class Combat {
   // ---------------- kare güncellemesi ----------------
   update(dt) {
     const g = this.game;
-    this.hitMarkFrame = false;
+    this.hitMarkFrame = 0;
     this.sndBudget = 3;
     if (this.vocT > 0) this.vocT -= dt;
     this.whizT -= dt;
