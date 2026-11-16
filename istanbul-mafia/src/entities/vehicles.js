@@ -2633,7 +2633,8 @@ export class VehicleManager {
     const x = s.x - fz * side * (e.width / 2 - 1.0), z = s.z + fx * side * (e.width / 2 - 1.0);
     for (const v of this.list) if (Math.abs(v.pos.x - x) < 7 && Math.abs(v.pos.z - z) < 7) return null;
     const r = Math.random();
-    const t = r < 0.22 ? 'kartal' : r < 0.36 ? 'hatch' : r < 0.44 ? 'hatch3' : r < 0.53 ? 'sedan' : r < 0.6 ? 'estate' : r < 0.68 ? 'suv' : r < 0.73 ? 'offroad' : r < 0.78 ? 'coupe' : r < 0.82 ? 'cabrio' : r < 0.88 ? 'motor' : r < 0.91 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
+    // [A2] spor oranı %13 -> %17
+    const t = r < 0.19 ? 'kartal' : r < 0.32 ? 'hatch' : r < 0.40 ? 'hatch3' : r < 0.49 ? 'sedan' : r < 0.56 ? 'estate' : r < 0.64 ? 'suv' : r < 0.69 ? 'offroad' : r < 0.75 ? 'coupe' : r < 0.80 ? 'cabrio' : r < 0.86 ? 'motor' : r < 0.89 ? 'bisiklet' : r < 0.95 ? 'gt' : 'taksi';
     // sağdan akan trafikte park: aracın sağ tarafı kaldırıma, yüzü trafik yönüne
     const hd = Math.atan2(fx, fz) + (side > 0 ? 0 : Math.PI);
     // [dünya] park yeri doğrulaması: bina/lamba/ağaç/eşya ile çakışan ya da kavşağa taşan yer reddedilir
@@ -2714,16 +2715,17 @@ export class VehicleManager {
     }
     this.parkTick(dt, px, pz, parkedCount);
     // [B1 trafik] yoğunluk ayarı (trafficDensity: düşük 0.5, orta 1, yüksek 1.25, ultra 1.5) x uyarlamalı ölçek x saat.
-    // Orta: 30 seyir + 18 park (eski 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
+    // Orta: 42 seyir + 36 park (A2; önce 30 + 18, daha önce 20 + 10). Park araçları duruyorken ucuz güncellenir (aşağıda), yük düşük kalır.
     const dens = g.density ? g.density('traffic') : 1;
-    const maxTraffic = Math.round(30 * dens * this.densityFactor());
-    const maxParked = Math.round(18 * Math.max(0.5, dens));
+    // [A2] sahibin isteği: orta ayarda seyir 30 -> 42 (+%40), park 18 -> 36 (x2)
+    const maxTraffic = Math.round(42 * dens * this.densityFactor());
+    const maxParked = Math.round(36 * Math.max(0.5, dens));
     this.maxParked = maxParked;
     if (this.spawnT <= 0 && !p.inInterior) {
       this.spawnT = trafficCount < maxTraffic * 0.6 ? 0.25 : 0.4;
       if (trafficCount < maxTraffic) this.spawnTraffic(px, pz);
       // park yeri doğrulaması (bina/eşya/kavşak, city.parkSpotBad) sık reddeder: tur başına iki deneme
-      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7) this.spawnParked(px, pz);
+      if (parkedCount < maxParked && !this.spawnParked(px, pz) && parkedCount < maxParked * 0.7 && !this.spawnParked(px, pz)) this.spawnParked(px, pz);
     }
     const night = g.env ? g.env.nightFactor : 0;
     headPoolMat().opacity = Math.min(0.55, night * 0.6);
@@ -2794,7 +2796,8 @@ function pickTrafficType(game) {
   const r = rng.next();
   const night = game && game.env ? game.env.nightFactor > 0.5 : false;
   if (r < (night ? 0.36 : 0.24)) return 'taksi';
-  const T = [[0.38, 'kartal'], [0.47, 'hatch'], [0.53, 'hatch3'], [0.6, 'sedan'], [0.64, 'estate'], [0.7, 'dolmus'], [0.74, 'suv'], [0.76, 'offroad'], [0.79, 'bus'], [0.83, 'motor'], [0.845, 'bisiklet'], [0.88, 'kamyon'], [0.9, 'gt'], [0.92, 'coupe'], [0.935, 'cabrio'], [0.955, 'ambulans'], [0.975, 'police'], [1, 'polsuv']];
+  // [A2] spor (gt/coupe/cabrio) oranı %5,5 -> %8
+  const T = [[0.32, 'kartal'], [0.41, 'hatch'], [0.47, 'hatch3'], [0.55, 'sedan'], [0.59, 'estate'], [0.65, 'dolmus'], [0.7, 'suv'], [0.72, 'offroad'], [0.75, 'bus'], [0.79, 'motor'], [0.805, 'bisiklet'], [0.84, 'kamyon'], [0.87, 'gt'], [0.9, 'coupe'], [0.92, 'cabrio'], [0.94, 'ambulans'], [0.965, 'police'], [1, 'polsuv']];
   for (const [p, t] of T) if (r < p) return t;
   return 'kartal';
 }
