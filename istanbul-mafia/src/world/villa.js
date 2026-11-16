@@ -230,7 +230,9 @@ export function buildPlayerVilla(city) {
     B.water.cyl(3.3, 3.3, 0.04, 28, { x: F.x, y: 0.52, z: F.z });
     B.stone.cyl(0.38, 0.6, 1.7, 14, { x: F.x, z: F.z }); B.stone.cyl(1.5, 0.45, 0.35, 20, { x: F.x, y: 1.7, z: F.z });
     B.water.cyl(1.35, 1.35, 0.03, 20, { x: F.x, y: 1.98, z: F.z }); B.stone.cyl(0.14, 0.24, 0.9, 10, { x: F.x, y: 2.0, z: F.z });
-    B.water.cyl(0.03, 0.35, 1.1, 10, { x: F.x, y: 2.85, z: F.z });
+    // su huzmeleri: ortada dik fışkırma + üst çanaktan dökülen ince perdeler (açık, yarı saydam beyaz-mavi)
+    B.props.cyl(0.03, 0.06, 1.3, 6, { x: F.x, y: 2.85, z: F.z, color: 0xe8f6ff, emis: 0.25, rough: 0.1 });
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; B.props.cyl(0.035, 0.05, 1.25, 5, { x: F.x + Math.sin(a) * 1.42, y: 0.62, z: F.z + Math.cos(a) * 1.42, color: 0xd8efff, emis: 0.2, rough: 0.1 }); }
     circ(F.x, F.z, 3.75, 0, 2.6, 'fountain', 'fıskiye'); }
 
   // ---------- bekçi kulübesi ----------

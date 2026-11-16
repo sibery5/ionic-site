@@ -15,7 +15,8 @@ module.exports = async (p, out) => {
     let r;
     try { r = await p.evaluate(fn); } catch (e) { r = { err: String(e.message || e).slice(0, 300) }; }
     const pass = !r || r.err ? false : ok(r);
-    console.log((pass ? 'OK  ' : 'FAIL') + ' ' + name, JSON.stringify(r));
+    const hp = await p.evaluate(() => [Math.round(game.player.hp), game.mode]);
+    console.log((pass ? 'OK  ' : 'FAIL') + ' ' + name, JSON.stringify(r), 'hp', hp.join('/'));
     if (!pass) fails.push(name);
     return r;
   };
@@ -53,7 +54,7 @@ module.exports = async (p, out) => {
   await T('karşılama', () => {
     const g = game, pl = g.player, v = g.villa;
     pl.pos.set(122, 0, -779); sim(1);
-    return { greeted: v.guards.filter((n) => n.greetT > 0).length, suit: v.guards[0].look && v.guards[0].look.top, ally: v.guards.every((n) => n.ally) };
+    return { greeted: v.guards.filter((n) => n.greetT > 0).length, suit: (v.guards[0].model.look || {}).top, ally: v.guards.every((n) => n.ally) };
   }, (r) => r.greeted >= 1 && r.suit === 'suit' && r.ally);
 
   // 3) galeriden araç al ve kapıdan çık
@@ -61,7 +62,7 @@ module.exports = async (p, out) => {
     const g = game, pl = g.player, v = g.villa, car = v.cars[0];
     pl.pos.set(car.pos.x + 1.8, 0, car.pos.z + 3); sim(0.2);
     g.enterVehicle(car, true);
-    hold('KeyW', true); sim(3); hold('KeyW', false); sim(1);
+    hold('KeyW', true); sim(1.4); hold('KeyW', false); sim(1.5);
     const o = { type: car.type, owned: car.owned, inCar: pl.vehicle === car, z: +car.pos.z.toFixed(1), moved: +(car.pos.z - (-795.2)).toFixed(1), hp: car.hp };
     g.vehicles.ejectDriver(car); sim(0.5);
     return o;
@@ -82,10 +83,10 @@ module.exports = async (p, out) => {
   // 5) eve gir, yatakta uyu = kayıt, çık
   await T('yatakta kayıt', () => {
     const g = game, pl = g.player;
-    if (pl.swimming) pl.swimming = false;
+    if (pl.swimming) pl.swimming = false; pl.scriptCtl = null;
     pl.pos.set(122, 0, -816.9); pl.vy = 0; sim(0.3);
     const it = g.findInteraction();
-    if (!it || !/Villan/.test(it.label)) return { label: it && it.label };
+    if (!it || !/Villan/.test(it.label)) return { label: it && it.label, dead: pl.dead, hp: pl.hp, y: +pl.pos.y.toFixed(2), z: +pl.pos.z.toFixed(2), mode: g.mode, door: g.city.doors.filter((d) => d.building.villaPlayer).map((d) => [d.x, d.z]) };
     it.action(); sim(0.3);
     const ctx = pl.inInterior;
     let saved = 0; const sv = g.saveGame; g.saveGame = (...a) => { saved++; return Promise.resolve(); };
@@ -104,7 +105,7 @@ module.exports = async (p, out) => {
     pl.pos.set(h.pos.x + 3, 0, h.pos.z); sim(0.2);
     g.enterVehicle(h, true); hold('Space', true); sim(5); hold('Space', false);
     const o = { type: h.type, y: +h.pos.y.toFixed(1), hp: h.hp };
-    hold('ControlLeft', true); sim(8); hold('ControlLeft', false); sim(2);
+    hold('ControlLeft', true); sim(10, () => { if (h.pos.y < 6) hold('ControlLeft', false); }); hold('ControlLeft', false); sim(4);
     o.landY = +h.pos.y.toFixed(1); o.dmg = Math.round(o.hp - h.hp);
     g.vehicles.ejectDriver(h); sim(0.3);
     return o;
@@ -113,12 +114,12 @@ module.exports = async (p, out) => {
   // 7) saldırı helikopteri: top + roket hedefe hasar verir
   await T('saldırı helikopteri', () => {
     const g = game, pl = g.player, h = g.villa.helis[1];
+    if (pl.dead) return { dead: true };
     const fwd = { x: Math.sin(h.heading), z: Math.cos(h.heading) };
     const tgt = g.vehicles.add('sedan', h.pos.x + fwd.x * 24, h.pos.z + fwd.z * 24, 0); tgt.mission = 'test';
     const hp0 = tgt.hp, n0 = g.combat.projectiles.length;
     pl.pos.set(h.pos.x + 3, 0, h.pos.z); sim(0.2);
     g.enterVehicle(h, true); hold('Space', true); sim(0.6); hold('Space', false);
-    pl.aimDir = null;
     sim(3, (i) => { g.input.mouse.left = true; if (i % 20 === 0) press('KeyQ'); });
     g.input.mouse.left = false; sim(1.5);
     const o = { hp0, hp: Math.round(tgt.hp), destroyed: !!tgt.destroyed, rockets: g.combat.projectiles.length - n0, heliY: +h.pos.y.toFixed(1) };
@@ -161,6 +162,6 @@ module.exports = async (p, out) => {
   await shot('villa-genel.png', { px: 122, pz: -800, x: 250, y: 95, z: -700, lx: 122, ly: 0, lz: -825 }, 15);
   await shot('villa-bina.png', { px: 122, pz: -800, x: 122, y: 6, z: -780, lx: 122, ly: 6, lz: -830 }, 20.6);
   await shot('villa-havuz.png', { px: 150, pz: -830, x: 132, y: 9, z: -812, lx: 165, ly: 1, lz: -836 }, 13);
-  await shot('villa-galeri.png', { px: 100, pz: -820, x: 112, y: 14, z: -775, lx: 98, ly: 1, lz: -830 }, 13);
+  await shot('villa-galeri.png', { px: 100, pz: -820, x: 104, y: 3.2, z: -784.5, lx: 88, ly: 1, lz: -797 }, 13);
   console.log(fails.length ? 'VILLA FAIL: ' + fails.join(', ') : 'VILLA OK');
 };

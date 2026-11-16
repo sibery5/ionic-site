@@ -81,6 +81,7 @@ export function tryClimbOut(p, g, mx, mz, ml) {
     if (d < bd) { bd = d; best = l; }
   }
   if (best) { startClimb(p, g, 'ladder', best); return true; }
+  if (poolAt(p.pos.x, p.pos.z)) return false; // [villa] havuzdan kenara yüzerek basamakla çıkılır (havuz tabanına "tırmanma" yok)
   // 2) alçak kenar: önde kara / yürünebilir yüzey, en çok 2.7 m yukarıda, üstü boş
   const ax = p.pos.x + mx * 0.75, az = p.pos.z + mz * 0.75;
   let top = null;
