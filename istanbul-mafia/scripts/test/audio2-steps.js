@@ -11,7 +11,9 @@ module.exports = async (p) => {
   fs.mkdirSync(dir, { recursive: true });
   await p.evaluate(() => { game.audio.init(); });
   await p.waitForTimeout(300);
-  const names = await p.evaluate(() => Object.keys(game.audio.sfxLab.renders));
+  // ONLY=gun_,engine_ : yalnız adı bunlardan biriyle başlayan sesleri çiz (hızlı ölçüm turu); FAST=1: sızıntı/siren adımlarını atla
+  const only = (process.env.ONLY || '').split(',').filter(Boolean);
+  const names = (await p.evaluate(() => Object.keys(game.audio.sfxLab.renders))).filter((n) => !only.length || only.some((o) => n.startsWith(o)));
   const fails = [];
   const rows = [];
   for (const n of names) {
@@ -38,6 +40,7 @@ module.exports = async (p) => {
   }
   console.log(rows.join('\n'));
 
+  if (process.env.FAST) { console.log(fails.length ? 'AUDIO2 BASARISIZ: ' + fails.join(', ') : 'AUDIO2 TAMAM (hızlı)'); return; }
   // sızıntı testi: 200 ses, sonra canlı düğüm sayısı
   const leak = await p.evaluate(async () => {
     const a = game.audio, L = a.listener, S = a.sfxNodes;
@@ -52,6 +55,29 @@ module.exports = async (p) => {
   console.log('sizinti', JSON.stringify(leak));
   const poolMax = 36 * 5;
   if (leak.after - leak.base > poolMax || leak.active > 0) fails.push('leak');
+
+  // [ses] karışım taşması: 20 eşzamanlı atış (5 m çevresinde) + patlama; hoparlöre giden sinyalin tepesi
+  const mix = await p.evaluate(async () => {
+    const a = game.audio, c = a.ctx, L = a.listener;
+    const tap = (node) => { const an = c.createAnalyser(); an.fftSize = 2048; node.connect(an); return an; };
+    const aIn = tap(a.master), aOut = tap(a.out);
+    const buf = new Float32Array(2048);
+    let pin = 0, pout = 0, over = 0;
+    const kinds = ['pistol', 'rifle', 'shotgun', 'ak', 'sniper', 'magnum', 'smg', 'lmg'];
+    for (let i = 0; i < 20; i++) a.gunshot(kinds[i % kinds.length], L.x + (i % 5) - 2, L.z + 3 + (i % 3));
+    a.explosion && a.explosion(L.x + 8, L.z);
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1500) {
+      aIn.getFloatTimeDomainData(buf); for (const v of buf) { const x = Math.abs(v); if (x > pin) pin = x; }
+      aOut.getFloatTimeDomainData(buf); for (const v of buf) { const x = Math.abs(v); if (x > pout) pout = x; if (x > 0.891) over++; }
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    a.master.disconnect(aIn); a.out.disconnect(aOut);
+    const db = (v) => +(20 * Math.log10(v + 1e-9)).toFixed(1);
+    return { girisTepe: db(pin), cikisTepe: db(pout), ustu1dB: over, state: c.state };
+  });
+  console.log('karisim20', JSON.stringify(mix));
+  if (mix.cikisTepe > -1) fails.push('karisim-tasma');
 
   // oyun içi siren: aranma -> sirenli ekip aracı -> konumlu siren sesi
   await H.start(p); await H.install(p);

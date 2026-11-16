@@ -187,6 +187,52 @@ function scheduleBar(ctx, out, B, bar, t, track) {
   if (bar === 15) hit(B.drum.swell, out.perc, t + BAR - BEAT * 2, 0.35);
 }
 
+
+// [ses/intro] İntro parçası (~45 sn, 15 ölçü, döngüsüz): menü temasının çalgılarıyla ayrı bir dramaturji.
+// 0: tek derin vuruş (stüdyo kartı) · 1-3: yalnız yaylı + ney (rubato hissi, ritim yok) · 4-6: bas nabzı ve seyrek bağlama
+// · 7-11: tam ritim, bağlama tremolo ezgisi, ney cevabı, kabaran gürültü · 12: DORUK (başlık) · 13-14: kapanış ve sönüm.
+const INTRO_FORM = ['Dm', 'Dm', 'Dm', 'Bb', 'A', 'Dm', 'Bb', 'Gm', 'A', 'Gm', 'Eb', 'A', 'Dm', 'Dm', 'Dm'];
+export const INTRO_BARS = INTRO_FORM.length;
+function introBar(ctx, out, B, bar, t, track) {
+  const name = INTRO_FORM[bar], ch = CH[name];
+  const hit = (buf, dest, time, gain, rate = 1) => {
+    if (!buf) return;
+    const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
+    const g = ctx.createGain(); g.gain.value = gain;
+    s.connect(g); g.connect(dest); s.start(time);
+    track && track(s, g);
+  };
+  if (bar === 0) { hit(B.drum.taiko, out.perc, t, 0.95); hit(B.drum.taiko, out.perc, t, 0.5, 0.5); return; } // oktav altı: daha derin
+  // yaylı: girişte kısık, dorukta tam; son ölçü sönüm
+  hit(B.pad[name], out.bed, t, bar < 4 ? 0.22 + bar * 0.06 : bar === 14 ? 0.3 : bar >= 12 ? 0.5 : 0.42);
+  if (bar === 2) hit(B.ney.a, out.lead, t, 0.5);
+  if (bar === 6) hit(B.ney.b, out.lead, t, 0.45);
+  if (bar === 12) hit(B.ney.c, out.lead, t, 0.55); // doruk ezgisi (4 ölçü, sönüme kadar)
+  if (bar >= 4 && bar <= 13) {
+    const full = bar >= 7;
+    for (const e of [0, 3, 6]) hit(B.bass[ch.root], out.bed, t + e * BEAT / 2, full ? 0.62 : 0.4);
+    if (full) for (const e of [2, 5, 7]) hit(B.bass[ch.root], out.bed, t + e * BEAT / 2, 0.22);
+  }
+  // bağlama: 4-6 seyrek arpej, 8-11 tremolo ezgi (menü temasının 8-11. ölçüleri), 7/12-13 tam arpej
+  if (TREM[bar] && bar >= 8 && bar <= 11) {
+    let bt = 0;
+    for (const [m, b] of TREM[bar]) { for (let k = 0; k < b * 4; k++) hit(B.bag[m], out.lead, t + (bt + k / 4) * BEAT + (k % 2) * 0.006, (k % 2 ? 0.2 : 0.32) * (k === 0 ? 1.3 : 1)); bt += b; }
+  } else if (bar >= 4 && bar <= 13) {
+    const sparse = bar < 7, pat = [0, 1, 2, 3, 4, 3, 2, 1];
+    pat.forEach((ix, e) => { if (sparse && e % 2) return; hit(B.bag[ch.v[ix] + 12], out.lead, t + e * BEAT / 2, (e === 0 ? 0.3 : 0.2) * (sparse ? 0.75 : 1)); });
+  }
+  // vurmalı
+  if (bar === 4 || bar === 7) hit(B.drum.taiko, out.perc, t, 0.5);
+  if (bar === 12) { hit(B.drum.taiko, out.perc, t, 0.95); hit(B.drum.taiko, out.perc, t, 0.45, 0.5); }
+  if (bar === 13) { hit(B.drum.taiko, out.perc, t, 0.6); hit(B.drum.taiko, out.perc, t + 2 * BEAT, 0.75); }
+  if (bar >= 5 && bar <= 6) { hit(B.drum.dum, out.perc, t, 0.4); hit(B.drum.dum, out.perc, t + 2.5 * BEAT, 0.32); }
+  if (bar >= 7 && bar <= 12) {
+    const P = ['D', 0, 'T', 0, 'D', 'D', 'T', 0];
+    P.forEach((p, e) => { if (p === 'D') hit(B.drum.dum, out.perc, t + e * BEAT / 2, 0.45); else if (p === 'T') hit(B.drum.tek, out.perc, t + e * BEAT / 2, 0.3); else if (bar >= 9) hit(B.drum.ka, out.perc, t + e * BEAT / 2, 0.14); });
+  }
+  if (bar === 11) hit(B.drum.swell, out.perc, t + BAR - BEAT * 2, 0.5);
+}
+
 function makeBus(ctx, dest, irCache) {
   const bus = ctx.createGain(); bus.gain.value = 0;
   const stems = { bed: ctx.createGain(), lead: ctx.createGain(), perc: ctx.createGain() };
@@ -218,11 +264,16 @@ export function installMusic(P) {
         const live = new Set();
         const track = (s, g) => { live.add(s); s.onended = () => { s.disconnect(); g.disconnect(); live.delete(s); }; };
         let bar = 0, next = c.currentTime + 0.15;
+        const intro = mode === 'intro'; // [ses/intro] döngüsüz, tek seferlik parça
         const tick = () => {
-          while (next < c.currentTime + 1.6) { scheduleBar(c, M.stems, B, bar, next, track); bar = (bar + 1) % BARS; next += BAR; }
+          while (next < c.currentTime + 1.6) {
+            if (intro) { if (bar >= INTRO_BARS) break; introBar(c, M.stems, B, bar, next, track); bar++; } else { scheduleBar(c, M.stems, B, bar, next, track); bar = (bar + 1) % BARS; }
+            next += BAR;
+          }
         };
         tick();
-        M.bus.gain.setValueAtTime(0, c.currentTime); M.bus.gain.linearRampToValueAtTime(0.7, c.currentTime + 2.5);
+        if (intro) M.bus.gain.setValueAtTime(0.52, c.currentTime); // ilk vuruş tam düzeyde duyulsun (0,75'te çevrimdışı tepe +1,5 dBFS, 0,6'da -0,5 idi)
+        else { M.bus.gain.setValueAtTime(0, c.currentTime); M.bus.gain.linearRampToValueAtTime(0.7, c.currentTime + 2.5); }
         this._mus = { M, B, live, timer: setInterval(tick, 250) };
       };
       if (this._musS) go(this._musS);
@@ -272,6 +323,16 @@ addRender('menu_theme_loopseam', async () => {
   const M = makeBus(oc, oc.destination); M.bus.gain.value = 0.7;
   const B = toBuffers(oc, S);
   [12, 13, 14, 15, 0, 1, 2].forEach((b, i) => scheduleBar(oc, M.stems, B, b, 0.05 + i * BAR));
+  const r = await oc.startRendering();
+  return { chans: [r.getChannelData(0), r.getChannelData(1)], sr };
+});
+// [ses/intro] intro parçasının tamamı (45 sn)
+addRender('intro_theme', async () => {
+  const sr = 44100, len = INTRO_BARS * BAR + 1.5, oc = new OfflineAudioContext(2, Math.floor(sr * len), sr);
+  const S = await buildSamples(() => Promise.resolve());
+  const M = makeBus(oc, oc.destination); M.bus.gain.value = 0.52;
+  const B = toBuffers(oc, S);
+  for (let b = 0; b < INTRO_BARS; b++) introBar(oc, M.stems, B, b, 0.05 + b * BAR);
   const r = await oc.startRendering();
   return { chans: [r.getChannelData(0), r.getChannelData(1)], sr };
 });

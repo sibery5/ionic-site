@@ -5,6 +5,7 @@ import { BQ, Reso, rng, normalize, toBuffer, modal, burst, TAU, addEcho, fadeOut
 import { synthSpeech, SPEECH_SR } from './speech.js';
 import { play } from './voices.js';
 import { addRender, addPlay } from './lab.js';
+import { LANDMARKS } from '../../world/map.js';
 
 const SR2 = 32000; // uzun seslerde bellek tasarrufu (patlama, ambiyans)
 
@@ -57,7 +58,7 @@ export function synthExplosion(sr, seed, big = false) {
   fadeOut(d, Math.floor(0.4 * sr));
   normalize(d, 1);
   for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * 1.6) / Math.tanh(1.6);
-  return normalize(d, 0.97);
+  return normalize(d, 0.88); // [ses] tepe -1 dBFS altı (0,97 = -0,3 dBFS idi)
 }
 export function explosion(eng, x, z, sc = 1) {
   if (!eng.ctx || !eng._vp) return;
@@ -165,9 +166,19 @@ function synthStep(sr, surf, seed) {
       grains(0.05, 10, 0.18, 1800, 4200, 0.25);
       break;
     }
+    case 'stone': // [ses] Arnavut kaldırımı / meydan taşı: sert, tiz "tak" + kısa taş çınlaması, az gövde, taneli sürtme
+      thud(0, 140 + R() * 30, 0.22, 0.007);
+      modal(d, sr, 0, [[1250 + R() * 200, 0.012, 0.5], [2650 + R() * 300, 0.008, 0.35], [4300 + R() * 400, 0.005, 0.2]], 0.75, R);
+      burst(d, sr, 0, { dur: 0.012, tau: 0.0015, f: 3800, type: 'hp', amp: 0.45, R });
+      grains(0.004, 8, 0.03, 2500, 6500, 0.18);
+      modal(d, sr, toe, [[1500 + R() * 200, 0.008, 0.35], [3100, 0.005, 0.2]], 0.4, R);
+      burst(d, sr, toe, { dur: 0.05, tau: 0.012, f: 2400, q: 0.9, type: 'bp', amp: 0.22, att: 0.004, R });
+      break;
     default: // beton/asfalt: topuk vuruşu + kum/çakıl tanesi + burun sürtmesi
-      thud(0, 95 + R() * 20, 0.5, 0.012);
-      burst(d, sr, 0, { dur: 0.02, tau: 0.003, f: 2200 + R() * 600, q: 1.1, type: 'bp', amp: 0.75, R });
+      // [ses] ölçüm: eski adımın enerjisinin %98'i 150 Hz altındaydı (yalnız "tup"); topuk tıkı ve taban sürtmesi öne alındı
+      thud(0, 105 + R() * 20, 0.3, 0.01);
+      burst(d, sr, 0, { dur: 0.03, tau: 0.005, f: 1900 + R() * 600, q: 1.0, type: 'bp', amp: 1.1, R });
+      burst(d, sr, 0.004, { dur: 0.04, tau: 0.01, f: 3600, q: 0.8, type: 'bp', amp: 0.3, att: 0.003, R });
       grains(0.002, 5, 0.02, 3000, 7000, 0.2);
       thud(toe, 120, 0.25, 0.008);
       burst(d, sr, toe, { dur: 0.06, tau: 0.014, f: 1500 + R() * 500, q: 0.9, type: 'bp', amp: 0.35, att: 0.004, R });
@@ -175,10 +186,14 @@ function synthStep(sr, surf, seed) {
   fadeOut(d, Math.floor(0.02 * sr));
   return normalize(d, 0.85);
 }
+// [ses] tarihî meydanlar ve Galata çevresi taş döşeli: savaş kodunun zemin türü yalnız beton döndürdüğü için konumdan çıkarılır
+const COBBLE = LANDMARKS.filter((l) => ['galata', 'bluemosque', 'ayasofya', 'sultanahmet_park', 'bazaar', 'suleymaniye'].includes(l.type));
+function onCobble(x, z) { for (let i = 0; i < COBBLE.length; i++) { const l = COBBLE[i], dx = x - l.x, dz = z - l.z; if (dx * dx + dz * dz < 120 * 120) return true; } return false; }
 export function step(eng, x, z, surface) {
   if (!eng.ctx || !eng._vp) return;
   let s = surface || (eng.surfaceAt ? eng.surfaceAt(x, z) : 'concrete');
   if (!['grass', 'dirt', 'wood', 'metal', 'water'].includes(s)) s = 'concrete';
+  if (s === 'concrete' && x !== undefined && onCobble(x, z)) s = 'stone';
   const L = eng.listener, own = x !== undefined && Math.hypot(x - L.x, z - L.z) < 1.5;
   play(eng, pick(bank(eng, 'step:' + s, 4, (i) => synthStep(SR2, s, 700 + i * 17 + s.length), SR2)), { x, z, range: 26, ref: 2.5, gain: (own ? 0.17 : 0.3) * (eng.indoor ? 1.2 : 1), rate: 0.92 + Math.random() * 0.16, rev: eng.indoor ? 0.12 : 0.04, cat: 'step', minD: own ? 1.5 : 0 });
 }
@@ -452,10 +467,11 @@ addRender('impact_wood', one(() => synthImpact(44100, 'wood', 304), 44100));
 addRender('ricochet', one(() => synthRicochet(44100, 400), 44100));
 addRender('shell_brass', one(() => synthShell(44100, false, 500), 44100));
 addRender('steps_surfaces', async () => {
-  const sr = SR2, out = new Float32Array(sr * 7);
-  ['concrete', 'grass', 'dirt', 'wood', 'metal', 'water'].forEach((s, k) => { for (let j = 0; j < 2; j++) { const d = synthStep(sr, s, 700 + j * 17 + s.length); const o = Math.floor((k * 1.15 + j * 0.5) * sr); for (let i = 0; i < d.length && o + i < out.length; i++) out[o + i] += d[i] * 0.8; } });
+  const sr = SR2, out = new Float32Array(sr * 8.5);
+  ['concrete', 'stone', 'grass', 'dirt', 'wood', 'metal', 'water'].forEach((s, k) => { for (let j = 0; j < 2; j++) { const d = synthStep(sr, s, 700 + j * 17 + s.length); const o = Math.floor((k * 1.15 + j * 0.5) * sr); for (let i = 0; i < d.length && o + i < out.length; i++) out[o + i] += d[i] * 0.8; } });
   return { chans: [out], sr };
 });
+for (const s of ['concrete', 'stone', 'grass', 'wood']) addRender('step_' + s, one(() => synthStep(SR2, s, 700 + s.length)));
 addRender('door_open_close', async () => {
   const sr = SR2, a = synthDoor(sr, 'wood', true, 901), b = synthDoor(sr, 'wood', false, 902), out = new Float32Array(a.length + b.length);
   out.set(a); out.set(b, a.length); return { chans: [out], sr };

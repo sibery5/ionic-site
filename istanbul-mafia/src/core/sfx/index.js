@@ -92,6 +92,7 @@ export function installSfx(AudioEngine) {
     error() { uiSound(this, 'error'); },
     success() { uiSound(this, 'success'); },
     fail() { uiSound(this, 'fail'); },
+    phone() { uiSound(this, 'phone'); }, // [ses] telefon zili (arayüz bağlanınca)
     // Konuşma: (metin, x, z, { mega, pitch, rate, gain, heli }) -> süre
     voice(text, x, z, opts = {}) { return speak(this, text, x, z, opts); },
     megaphone(text, x, z, opts = {}) { return speak(this, text, x, z, Object.assign({ mega: true }, opts)); },

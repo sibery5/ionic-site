@@ -61,6 +61,8 @@ export function geo(eng, x, z) {
 
 // Ana çalma işlevi. buf: kuru ses; tail: { buf, gain } kuyruk (mesafeyle daha yavaş sönümlenir)
 // o: { x, z, range, gain, rate, rev, cat, delay, ref, lp, tailRef, minD }
+// [ses] hava soğurması: uzak seste yüksekler hızla düşer (ölçüm: eski eğriyle 150 m tüfekte 2-6 kHz payı yakındakiyle aynıydı, %11/%12)
+export const airLP = (d, range) => 16000 * Math.exp(-d / (range * 0.12)) + 600;
 export function play(eng, buf, o = {}) {
   if (!eng.ctx || !buf || !eng._vp) return null;
   const c = eng.ctx;
@@ -76,7 +78,7 @@ export function play(eng, buf, o = {}) {
   const ch = acquire(eng, o.cat || 'misc');
   const t = c.currentTime + (o.delay || 0);
   // hava sönümü: uzakta tiz kaybolur
-  const lpF = clamp(Math.min(o.lp || 20000, G.pos ? 20000 * Math.exp(-d / (range * 0.28)) + 350 : 20000), 200, 20000);
+  const lpF = clamp(Math.min(o.lp || 20000, G.pos ? airLP(d, range) : 20000), 200, 20000);
   ch.lp.frequency.setValueAtTime(lpF, c.currentTime);
   ch.gD.gain.setValueAtTime(aD, c.currentTime);
   if (ch.pan.pan) ch.pan.pan.setValueAtTime(G.pan, c.currentTime);

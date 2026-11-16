@@ -12,6 +12,7 @@ if (/[?&]nomh/.test(location.search)) setMH(false); // karşılaştırma/test: k
 if (/[?&]nophoto/.test(location.search)) setPhotoTextures(false); // karşılaştırma/test: yalnızca prosedürel dokular
 import { Input } from './core/input.js';
 import { audio } from './core/audio.js';
+import { startIntroOrMenu } from './ui/intro.js'; // [ses/intro]
 import { Particles } from './core/particles.js';
 import { CityMap, districtAt, LANDMARKS } from './world/map.js';
 import { Physics } from './world/physics.js';
@@ -304,7 +305,7 @@ class Game {
     this.player.model.root.visible = false;
     this.setupCreatorScene();
     this.bootGfx = { quality: this.settings.quality, antialias: this.settings.antialias, textureQuality: this.settings.textureQuality };
-    this.ui.mainMenu();
+    startIntroOrMenu(this); // [ses/intro] ilk açılışta intro, yoksa ana menü
     // ayar değişikliği için yeniden başlatıldıysa kaldığı kayıttan devam et
     try { if (sessionStorage.getItem('istanbul-mafia-resume')) { sessionStorage.removeItem('istanbul-mafia-resume'); this.loadGame('latest'); } } catch (e) { /* yok say */ }
     const startAudio = () => { audio.init(); this.applySettings(); audio.startMusic('menu'); };

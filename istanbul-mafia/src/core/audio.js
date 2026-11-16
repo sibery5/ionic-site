@@ -5,6 +5,8 @@
 // dinleyicinin bakış yönüne göre stereo kaydırılır.
 
 import { installSfx } from './sfx/index.js';
+import { addRender } from './sfx/lab.js';
+import { ENGINE_SYN, makeEngineBank } from './sfx/engine.js';
 
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
 // trem titreşim derinliği, nf/grit gürültü bandı ve miktarı, lp/lpSpan süzgeç, sq kare dalga, bright parlaklık, motor/vol kazanç
@@ -61,7 +63,16 @@ export class AudioEngine {
     this.ctx = new AC();
     this.comp = this.ctx.createDynamicsCompressor();
     this.comp.threshold.value = -10; this.comp.knee.value = 8; this.comp.ratio.value = 6; this.comp.attack.value = 0.003; this.comp.release.value = 0.25;
-    this.comp.connect(this.ctx.destination);
+    // [ses] ana karışım sınırlayıcısı: ölçüm (20 eşzamanlı atış + patlama) bu zincir yokken çıkışta +2,1 dBFS tepe ve
+    // 39 örnek > -1 dBFS verdi (kırpılma). Hızlı tepe sınırlayıcı + yumuşak tavan (-1 dBFS altı); 0,6 altı doğrusal kalır.
+    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -4; this.limiter.knee.value = 0; this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.12;
+    this.ceiling = this.ctx.createWaveShaper();
+    const cv = new Float32Array(2049);
+    for (let i = 0; i < cv.length; i++) { const x = i / 1024 - 1, a = Math.abs(x); cv[i] = a < 0.6 ? x : Math.sign(x) * (0.6 + 0.28 * Math.tanh((a - 0.6) / 0.28)); }
+    this.ceiling.curve = cv; this.ceiling.oversample = '2x';
+    this.comp.connect(this.limiter); this.limiter.connect(this.ceiling); this.ceiling.connect(this.ctx.destination);
+    this.out = this.ceiling; // hoparlöre giden son düğüm (ölçüm testi buradan dinler)
     this.master = this.ctx.createGain();
     this.master.connect(this.comp);
     this.sfx = this.ctx.createGain(); this.sfx.connect(this.master);
@@ -396,7 +407,7 @@ export class AudioEngine {
     if (!on && this.engineNode) {
       const n = this.engineNode; this.engineNode = null;
       n.g.gain.setTargetAtTime(0, c.currentTime, 0.05);
-      setTimeout(() => { for (const s of n.stop) { try { s.stop(); } catch (e) { /* zaten durdu */ } } }, 300);
+      setTimeout(() => { for (const s of n.stop) { try { s.stop(); } catch (e) { /* zaten durdu */ } } if (n.bank) n.bank.stop(); }, 300);
       for (const l of ['gravel', 'roadwind', 'water', 'freewheel']) this.loopGain(l, 0, 0.1);
       return;
     }
@@ -411,6 +422,15 @@ export class AudioEngine {
     this.rpmPrev = rpm;
     const r = clamp(rpm, 0, 1.4);
     const K = ENGINE_KINDS[o.kind] || ENGINE_KINDS.car;
+    // [ses] kara/deniz araçları: ateşleme darbesi bankası (sfx/engine.js); osilatör yolu yalnız helikopter/jet/bisiklet için kalır.
+    // Sınıf değişince (başka araca binildi) banka yeniden kurulur: kare içinde değil, binişte bir kez.
+    const kind = o.kind || 'car';
+    if (n.bankKind !== kind) {
+      if (n.bank) { const b = n.bank; b.out.gain.setTargetAtTime(0, t, 0.03); setTimeout(() => b.stop(), 200); }
+      n.bank = ENGINE_SYN[kind] ? makeEngineBank(c, kind) : null; n.bankKind = kind;
+      if (n.bank) n.bank.out.connect(n.g);
+    }
+    if (n.bank) n.bank.set(rpm, load, t);
     const S = (p, v, tc = 0.05) => tgt(p, v, t, tc);
     const base = K.base + r * K.span;
     S(n.o1.frequency, base); S(n.o2.frequency, base * K.h2); S(n.o3.frequency, base * 2); S(n.o4.frequency, base * 0.25);
@@ -419,7 +439,7 @@ export class AudioEngine {
     S(n.g2.gain, K.sq, 0.2);
     S(n.g3.gain, (0.12 + load * 0.3) * K.bright, 0.1);
     S(n.f.frequency, K.lp + r * K.lpSpan + load * 900, 0.06);
-    S(n.mg.gain, K.motor, 0.1);
+    S(n.mg.gain, n.bank ? 0 : K.motor, 0.1);
     // uğultu katmanı: rotor çırpması / jet gürlemesi / dalga
     const sp = o.speed || 0;
     if (o.kind === 'heli') {
@@ -748,3 +768,38 @@ Object.assign(AudioEngine.prototype, {
 
 installSfx(AudioEngine); // [ses B2] sfx/ modülleri
 export const audio = new AudioEngine();
+
+// [ses] motor ölçümü: GERÇEK setEngine yolu, OfflineAudioContext + suspend ile 50 ms'de bir güncellenir.
+// Senaryo (7 sn): boşta 1 sn -> tam gazla devir yükselir -> vites (gaz kesik 0,25 sn, devir düşer) -> tam gaz -> gaz kesik yavaşlama.
+// rpm(t) ve throttle(t) dışa açık: ölçüm betiği ateşleme frekansını bu eğriyle karşılaştırır.
+export const ENGINE_TEST = {
+  len: 7,
+  at(t) {
+    if (t < 1) return [0.15, 0];
+    if (t < 3.5) return [0.15 + (t - 1) / 2.5 * 1.05, 1];
+    if (t < 3.75) return [1.2 - (t - 3.5) / 0.25 * 0.4, 0];
+    if (t < 5.25) return [0.8 + (t - 3.75) / 1.5 * 0.35, 1];
+    return [1.15 - (t - 5.25) / 1.75 * 0.85, 0];
+  },
+};
+async function renderEngine(kind) {
+  const sr = 44100, oc = new OfflineAudioContext(1, sr * ENGINE_TEST.len, sr);
+  const E = Object.create(AudioEngine.prototype);
+  Object.assign(E, { ctx: oc, loops: {}, rpmPrev: 0, load: 0, engineNode: null, _engOptsT: 0 });
+  E.sfx = oc.createGain(); E.sfx.connect(oc.destination);
+  E.noiseBuf = E.makeNoise(2); E.brownBuf = E.makeBrown(3);
+  const o = { kind, gear: 1, throttle: 0, speed: 0, surface: 'concrete' };
+  let gear = 1;
+  const step = (t) => {
+    const [r, th] = ENGINE_TEST.at(t);
+    if (t >= 3.5 && gear === 1) gear = 2;
+    o.throttle = th; o.gear = gear; o.speed = 3 + t * 4;
+    E.setEngine(true, r, 0.2, undefined, o);
+  };
+  step(0);
+  for (let t = 0.05; t < ENGINE_TEST.len; t += 0.05) { const tt = t; oc.suspend(tt).then(() => { step(tt); oc.resume(); }); }
+  const r = await oc.startRendering();
+  return { chans: [r.getChannelData(0)], sr };
+}
+for (const k of ['small', 'car', 'v8', 'diesel', 'truck', 'moto']) addRender('engine_' + k, () => renderEngine(k));
+
