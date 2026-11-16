@@ -34,3 +34,26 @@ Her madde: belirti (kullanıcının sözü) · kabul kriteri · not.
 
 ## Değişmez kural
 "Bunlar olurken asla kasma, donma olmamalı." Her madde kare süresi ölçümüyle teslim edilir (BEYIN §3.2).
+
+## Ek — 1.11.0 sonrası geri bildirim (öncelik sırasıyla)
+**Bozanlar (önce):**
+- K1 Gasp kapısı hâlâ saçma açılıyor; binip kapıyı kapatınca gövdenin sol yanı kayboluyor, içi görünüyor (1.11 kapı deliği düzeltmesinin yan etkisi olabilir).
+- K2 Villa havuzuna giren çıkamıyor (zıplama/tırmanma yok).
+- K3 Polis aracı ve helikopter sesi var ama kendileri görünmüyor; helikopter projektörü görünmeyen helikopterden ve binaların arkasından geliyor (görüş hattı yok).
+- K4 Gemi/tekne: saydam, arkası görünüyor, beyaz katman (malzeme/çizim sırası).
+- K5 Gizli oda ve Baba'nın evlerinde kapı/iç mekân çok karanlık.
+**His:**
+- K6 Yürüme, koşma, zıplama, eğilme (gerçek çömelme), tırmanma, yumruk: PUBG gerçekçiliği hedef. Askeri bölgeye yaya sızma: duvar/çit tırmanılabilir.
+- K7 Araç yol tutuşu, viraj, fren (B1); motosiklet de. Vites geçişinde egzozdan alev.
+- K8 Silah tutuşu tüm silahlarda (PUBG gibi), keskin nişancı dürbünü (GTA 5 gibi).
+- K9 Saldırı helikopteri: sağ tık nişan + top/roket ayrı, füze kilitleme ve güdüm (hedef takip).
+- K10 Uyarı ve "öldün" yazıları: yarı saydam siyah şerit + sarı yazı (GTA 5 tarzı).
+**İçerik:**
+- K11 Villa: kısa çim, havuz ve mimari cilası, iç mimar elinden iç tasarım, merdivenli üst katlar, televizyonda canlı güvenlik kamerası.
+- K12 Camlardan dışarısı görünsün (bütün binalar).
+- K13 Araç tasarımı: spor ızgaralar, gerçek arabalara yakın görünüm (marka adı ve logo yok), otobüs/kamyon/motosiklet.
+- K14 Trafik ve park eden araç artışı; otobüs durakları (Plan C3); harita (C5); 3B sarı ok (C6).
+- K15 Karakter yaratıcısı: bütün giysiler doğru (şort, saat, şapka, bere, gözlük yüze oturur, spor ayakkabı); yaratıcı ekranı aydınlık, mağaza gibi 3B arka plan; açılış ekranı.
+- K16 Şehir: gökdelen bölgesi mega şehir, kuşbakışında karton görünümlü binalar, balkona gömülü tabelalar, askeri bölgede deniz-yol kenarına zincir çit, daha ferah yollar.
+- K17 Hız göstergesi: yuvarlak, gerçek araç göstergesi gibi + vites.
+**Ayar (küçük):** öldürülenden düşen para ↑, görev ödülleri ↑, kırmızı ışık cezası ÷2, tekne hızı ↑.
