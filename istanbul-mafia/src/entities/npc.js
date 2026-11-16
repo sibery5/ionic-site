@@ -11,6 +11,7 @@ import { districtAt, isLand, WATER_Y } from '../world/map.js';
 import { GANGS, rankOf } from '../game/economy.js';
 import { WEAPONS } from '../game/weapons.js';
 import { audio } from '../core/audio.js';
+import { pedImpact, updateFlights } from './carhit.js'; // [hareket]
 import { N_FREE, N_LOW, N_BLOCK } from '../world/navgrid.js';
 import { actorVsVehicle } from './vehicle_physics.js';
 
@@ -1811,35 +1812,18 @@ export class NPCManager {
     const dt = g.dt || 1 / 60;
     const p = g.player;
     if (p.carHitT > 0) p.carHitT -= dt;
+    updateFlights(g, dt); // [hareket]
     for (const v of g.vehicles.list) {
       if (v.kind !== 'car' || v.pos.y > 1.5 || v.sinking > 0) continue;
       const R = v.def.len * 0.5 + 1 + Math.hypot(v.vx, v.vz) * dt;
       const cand = this.neighborsBox(v.pos.x, v.pos.z, R);
       for (let i = 0; i < cand.length; i++) {
         const a = cand[i];
-        if (a.dead || a.vehicle || a.inInterior || a.vault) continue;
+        if (a.dead || a.vehicle || a.inInterior || a.vault || a.flight) continue; // [hareket] uçuştaki yaya
         if (a.isPlayer && (p.vehicle || p.dead)) continue;
         const sp = actorVsVehicle(g, v, a, dt);
         if (sp <= 0) continue;
-        const f = v.fwd;
-        const dmg = sp * sp * 0.35 + sp * 2;
-        a.takeDamage(dmg, v.driver, 'car');
-        const dx = a.pos.x - v.pos.x, dz = a.pos.z - v.pos.z, lat = dx * -f.z + dz * f.x;
-        a.knock = { x: v.vx * 0.6 + (lat > 0 ? -f.z : f.z) * 3, z: v.vz * 0.6 + (lat > 0 ? f.x : -f.x) * 3, t: 0.4 };
-        // [mekanik tepki] çarpma yönünde irkilme; hızlı çarpmada yere savrulma (sürücüsüz araçta da)
-        if (!a.dead) {
-          if (!v.driver) a.model.hit(a.knock.x, a.knock.z, 1.4);
-          if (sp > 3.2 && a.knockdown) a.knockdown(a.knock.x, a.knock.z, 1.8 + Math.min(1.6, sp * 0.12));
-          if (a.isPlayer) g.cameraShake(Math.min(1.4, 0.4 + sp * 0.08));
-        }
-        audio.punch(a.pos.x, a.pos.z);
-        g.particles.blood({ x: a.pos.x, y: 1, z: a.pos.z }, 6);
-        const m = v.def.mass || v.def.len * v.def.wid * 150;
-        const k = m / (m + 80);
-        v.vx *= k; v.vz *= k;
-        if (a.isPlayer) g.ui.damageFlash();
-        if (v.driver && v.driver.isPlayer && !a.dead && a.faction === 'civilian') g.wanted.crime('hit_ped', a.pos);
-        if (!a.dead && a.hearThreat) a.hearThreat(v.driver || g.player, 2);
+        pedImpact(g, v, a, sp); // [hareket] hıza göre sendeleme / kaput / savrulma (entities/carhit.js)
       }
     }
   }
