@@ -44,6 +44,7 @@ const HUD_IDS = ['dmg', 'xhair', 'hitmark', 'minimap', 'district', 'clockIcon', 
   'arcHp', 'arcAr', 'objective', 'timer', 'jobTimer', 'holdbar', 'racepos', 'notes', 'prompt', 'bigmsg', 'banner', 'speedo', 'kmh', 'carhp', 'carname', 'barks', 'wheel', 'fps', 'stamina'];
 const ARC_C = 2 * Math.PI * 104, ARC_C2 = 2 * Math.PI * 98;
 const MM_BASE = 440; // mini harita çizim koordinatları (gerçek tuval boyutu cihaza göre)
+const MM_DASH = [7, 5], MM_NODASH = []; // mini harita kesikli çizgi (kare içinde dizi ayırma yok)
 const NAV_SEL = 'button:not([disabled]), .slot, input, [data-nav]';
 const colorCache = new Map();
 const hexOf = (c) => { let v = colorCache.get(c); if (v === undefined) { v = '#' + new THREE.Color(c).getHexString(); colorCache.set(c, v); } return v; };
@@ -472,6 +473,13 @@ export class UI {
       if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead || mk.actor.passengerOf) continue; }
       if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
       if (mk.mmHide) continue;
+      if (mk.area && Math.hypot(x - p.pos.x, z - p.pos.z) < mk.area + 25) {
+        // bölgeye girince (ödül avı) arama alanı mini haritada daire olarak görünür
+        this._mmTo(x, z); const col = hexOf(mk.color);
+        c.fillStyle = col + '26'; c.strokeStyle = col + 'cc'; c.lineWidth = 2; c.setLineDash(MM_DASH);
+        c.beginPath(); c.arc(this._sx, this._sy, mk.area * this._mmc.scale, 0, Math.PI * 2); c.fill(); c.stroke(); c.setLineDash(MM_NODASH);
+      }
+      if (mk.areaOnly) continue;
       const hot = !!(mk.blink || mk.story);
       if (mk.story) story = true;
       this._mmPin(c, R, x, z, p, mk.giver ? 'pin_reis' : mk.icon, mk.giver ? '#d4af37' : hexOf(mk.color), hot, strong, now);

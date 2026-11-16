@@ -115,7 +115,10 @@ export class Bounties {
       const r = S.rec[b.id];
       if (r.status !== 'open') continue;
       if (S.active === b.id) {
-        if (this.live && !this.live.target.dead) list.push({ actor: this.live.target, color: 0xff3030, icon: 'pin_skull', label: b.name, blink: true });
+        if (this.live && !this.live.target.dead) {
+          list.push({ x: r.ax ?? r.x, z: r.az ?? r.z, color: 0xff5030, area: 45, areaOnly: true });
+          list.push({ actor: this.live.target, color: 0xff3030, icon: 'pin_skull', label: b.name, blink: true });
+        }
         else list.push({ x: r.ax ?? r.x, z: r.az ?? r.z, color: 0xff5030, icon: 'pin_skull', label: `${b.name} · ${formatMoney(b.amount)}`, area: 45, blink: true });
       } else {
         const [cx, cz] = DISTRICT_C[b.district];
@@ -126,10 +129,60 @@ export class Bounties {
     if (force || key !== this._k) { this._k = key; this.markers.list = list; this.markers.version++; }
   }
 
+  // D4: hedef 60 m içindeyken tepesinde ok; ekran dışındaysa ekran kenarında yön oku + mesafe [hareket]
+  updateArrow() {
+    const g = this.g, p = g.player, L = this.live;
+    let d = 1e9, tp = null;
+    if (L && !L.target.dead && !p.inInterior && g.mode === 'playing') {
+      tp = L.target.vehicle ? L.target.vehicle.pos : L.target.pos;
+      d = Math.hypot(p.pos.x - tp.x, p.pos.z - tp.z);
+    }
+    const on = d < 60;
+    if (!this.arrow) {
+      if (!on) return;
+      const geo = new THREE.ConeGeometry(0.32, 0.75, 4); geo.rotateX(Math.PI); // uç aşağı
+      this.arrow = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.92, depthWrite: false }));
+      this.arrow.renderOrder = 5; g.scene.add(this.arrow);
+      const e = this.edgeEl = document.createElement('div');
+      e.className = 'bounty-edge';
+      e.style.cssText = 'position:fixed;left:0;top:0;z-index:20;pointer-events:none;display:none;font:bold 14px system-ui,sans-serif;color:#fff;text-shadow:0 0 4px #000,0 0 2px #000;text-align:center;will-change:transform';
+      e.innerHTML = '<div style="width:0;height:0;margin:0 auto 2px;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:20px solid #ff3030;filter:drop-shadow(0 0 2px #000)"></div><span></span>';
+      document.body.appendChild(e);
+      this._ev = new THREE.Vector3(); this._ed = -1;
+    }
+    this.arrow.visible = on;
+    if (!on) { if (this.edgeEl.style.display !== 'none') this.edgeEl.style.display = 'none'; return; }
+    const tH = L.target.vehicle ? 2.6 : 2.55;
+    this.arrow.position.set(tp.x, tp.y + tH + Math.sin(performance.now() * 0.006) * 0.15, tp.z);
+    this.arrow.rotation.y += 0.04;
+    const v = this._ev.set(tp.x, tp.y + tH, tp.z).project(g.camera);
+    const W = innerWidth, Hh = innerHeight;
+    const behind = v.z > 1;
+    let x = v.x, y = v.y;
+    const inView = !behind && Math.abs(x) < 0.94 && Math.abs(y) < 0.9;
+    let ang = 180; // ekranda: ok aşağı (hedefe) bakar
+    if (!inView) {
+      if (behind) { x = -x; y = -y; }
+      const k = Math.max(Math.abs(x) / 0.9, Math.abs(y) / 0.82, 1e-3);
+      x /= k; y /= k;
+      ang = Math.atan2(x * W, y * Hh) * 180 / Math.PI;
+    }
+    const sx = (x * 0.5 + 0.5) * W, sy = (-y * 0.5 + 0.5) * Hh - (inView ? 42 : 0);
+    const e = this.edgeEl;
+    if (e.style.display === 'none') e.style.display = 'block';
+    e.style.transform = `translate(${sx - 30}px,${sy - 18}px)`;
+    e.firstChild.style.transform = `rotate(${ang}deg)`;
+    e.firstChild.style.visibility = inView ? 'hidden' : 'visible';
+    const dm = Math.round(d);
+    if (dm !== this._ed) { this._ed = dm; e.lastChild.textContent = dm + ' m'; }
+    e.style.width = '60px';
+  }
+
   update(dt) {
     const g = this.g, p = g.player, S = this.S;
     this.mkT -= dt;
     if (this.mkT <= 0) { this.mkT = 0.6; this.updateMarkers(false); }
+    this.updateArrow();
     if (p.inInterior || !S.active) return;
     const b = BOUNTY_POOL.find((x) => x.id === S.active);
     const h = this.hideout(b);

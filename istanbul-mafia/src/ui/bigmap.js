@@ -184,6 +184,7 @@ function drawMap(g, ctx, v, now) {
       ctx.strokeStyle = col; ctx.globalAlpha = (1 - ph) * (strong ? 1 : 0.7); ctx.lineWidth = strong ? 5 : 3;
       ctx.beginPath(); ctx.arc(X, Y, 14 + ph * (strong ? 34 : 24), 0, 6.3); ctx.stroke(); ctx.globalAlpha = 1;
     }
+    if (mk.areaOnly) continue;
     if (mk.giver) ctx.drawImage(iconBitmap('pin_reis', '#d4af37', 48), X - 19, Y - 19, 38, 38);
     else if (mk.icon) ctx.drawImage(iconBitmap(mk.icon, col, 48), X - 17, Y - 17, 34, 34);
     else { ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, 11, 0, 6.3); ctx.fill(); ctx.stroke(); }
