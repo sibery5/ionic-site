@@ -5,6 +5,7 @@ import { Actor } from './actor.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { WEAPONS, WEAPON_ORDER } from '../game/weapons.js';
 import { isLand, inBridge, WATER_Y, poolAt } from '../world/map.js'; // [villa] poolAt
+import { tryMantle, stepMantle } from './mantle.js'; // [hareket H1]
 import { swimVertical, swimEffects, enterWater, tryClimbOut } from './swim.js'; // [deniz]
 
 const tmp = new THREE.Vector3();
@@ -100,6 +101,8 @@ export class Player extends Actor {
     this.updateCamera(dt);
   }
 
+  mantle(dx, dz) { return tryMantle(this, dx, dz); }
+
   // Alçak engel (korkuluk, bank, çöp kutusu; 0.42-1.25 m) üzerinden atlama ya da üstüne tırmanma
   tryVault(dx, dz, allowWater) {
     const g = this.game, p = this.pos;
@@ -177,7 +180,8 @@ export class Player extends Actor {
     if (this.landSlow > 0) { this.landSlow -= dt; speed *= 0.55; }
     // bacağından yaralı: topallar, koşusu yavaşlar
     if (this.limp > 0) speed *= 1 - (sprint ? 0.45 : 0.3) * this.limp;
-    if (this.vault) {
+    if (this.vault && this.vault.mantle) stepMantle(this, this.vault, dt); // [hareket H1] duvara tutunup aşma
+    else if (this.vault) {
       const V = this.vault;
       V.t += dt;
       const u = Math.min(1, V.t / V.dur), e = u * u * (3 - 2 * u);
@@ -247,6 +251,8 @@ export class Player extends Actor {
     if (!busy && this.grounded && !this.swimming && ml > 0 && this.speed > 2.5 && (sprint || input.hit('Space'))) {
       if (this.tryVault(mx, mz, input.hit('Space'))) input.pressed.delete('Space');
     }
+    // [hareket H1] Space ile önündeki 1,3–2,6 m duvara tutunup aş (duruyorken de; yön: hareket ya da bakış)
+    if (!this.vault && !busy && !this.swimming && this.grounded && input.hit('Space') && this.mantle(ml > 0 ? mx : Math.sin(this.heading), ml > 0 ? mz : Math.cos(this.heading))) input.pressed.delete('Space');
 
     // [deniz] yüzme: suya giriş (düşerek), su çizgisi (dalgayı izler), kulaç efektleri, kıyıya çıkış (merdiven / alçak kenar)
     const water = g.physics.inWater(this.pos.x, this.pos.z);
