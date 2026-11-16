@@ -353,6 +353,33 @@ export class UI {
     const d = Math.hypot(this._sx - R, this._sy - R);
     if (d > R - pad) { this._sx = R + (this._sx - R) / d * (R - pad); this._sy = R + (this._sy - R) / d * (R - pad); }
   }
+  // tek görev iğnesi: nabız halkası + iğne; harita dışındaysa kenarda yön oku ve mesafe [hareket]
+  _mmPin(c, R, x, z, p, icon, col, hot, strong, now) {
+    this._mmTo(x, z);
+    const rx = this._sx, ry = this._sy;
+    this._mmClamp(R, 18);
+    const sx = this._sx, sy = this._sy;
+    if (hot) {
+      const ph = (now % 1100) / 1100;
+      c.strokeStyle = col; c.globalAlpha = (1 - ph) * (strong ? 1 : 0.75); c.lineWidth = strong ? 5 : 3;
+      c.beginPath(); c.arc(sx, sy, 12 + ph * (strong ? 22 : 16), 0, Math.PI * 2); c.stroke();
+      c.globalAlpha = 1;
+    }
+    if (icon) c.drawImage(iconBitmap(icon, col), sx - 15, sy - 15, 30, 30);
+    else { c.fillStyle = col; c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fill(); c.stroke(); }
+    if (!hot || Math.abs(rx - sx) + Math.abs(ry - sy) < 0.5) return;
+    // kenar oku: iğnenin dışında, merkezden hedefe doğru
+    const dx = sx - R, dy = sy - R, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+    const tx = R + ux * (R - 5), ty = R + uy * (R - 5);
+    c.fillStyle = col; c.strokeStyle = '#000'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(tx, ty); c.lineTo(tx - ux * 11 - uy * 7, ty - uy * 11 + ux * 7); c.lineTo(tx - ux * 11 + uy * 7, ty - uy * 11 - ux * 7); c.closePath(); c.fill(); c.stroke();
+    const m = Math.hypot(x - p.pos.x, z - p.pos.z);
+    const lx = R + ux * (R - 44), ly = R + uy * (R - 44);
+    c.font = 'bold 13px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.85)'; c.fillStyle = '#fff';
+    const t = m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
+    c.strokeText(t, lx, ly); c.fillText(t, lx, ly);
+  }
   drawMinimap() {
     const g = this.game, p = g.player;
     const c = this.mm, W = MM_BASE, R = W / 2, k0 = this.mmScale;
@@ -436,26 +463,21 @@ export class UI {
       }
     }
     c.restore();
-    // görev işaretçileri (kenara sabitlenir). Sıradaki hikâye hedefi nabız gibi atar; konaktan yeni çıkınca güçlü yanıp söner.
+    // görev işaretçileri (kenara sabitlenir). Aktif hedef her zaman görünür: iğne + nabız halkası; harita dışındaysa
+    // kenarda yön oku ve mesafe. Konaktan yeni çıkınca halka güçlenir ama iğne asla kaybolmaz.
     const strong = now < g.missions.blinkUntil;
+    let story = false;
     for (const mk of g.missions.markers) {
       let x = mk.x, z = mk.z;
       if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; if (mk.actor.dead || mk.actor.passengerOf) continue; }
       if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; }
       if (mk.mmHide) continue;
-      this._mmTo(x, z); this._mmClamp(R, 18);
-      const sx = this._sx, sy = this._sy;
-      if (mk.blink || (mk.story && strong)) {
-        const ph = (now % 900) / 900;
-        c.strokeStyle = hexOf(mk.color); c.globalAlpha = (1 - ph) * (strong ? 1 : 0.6); c.lineWidth = strong ? 5 : 3;
-        c.beginPath(); c.arc(sx, sy, 12 + ph * (strong ? 22 : 14), 0, Math.PI * 2); c.stroke();
-        c.globalAlpha = 1;
-        if (strong && Math.floor(now / 300) % 2) continue; // yanıp sön
-      }
-      if (mk.giver) c.drawImage(iconBitmap('pin_reis', '#d4af37'), sx - 16, sy - 16, 32, 32);
-      else if (mk.icon) c.drawImage(iconBitmap(mk.icon, hexOf(mk.color)), sx - 14, sy - 14, 28, 28);
-      else { c.fillStyle = hexOf(mk.color); c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      const hot = !!(mk.blink || mk.story);
+      if (mk.story) story = true;
+      this._mmPin(c, R, x, z, p, mk.giver ? 'pin_reis' : mk.icon, mk.giver ? '#d4af37' : hexOf(mk.color), hot, strong, now);
     }
+    // adımın işaretçisi yoksa (yalnız rota verilmişse) hedefi GPS noktasından göster
+    if (!story && g.missions.active && g.gpsTarget) this._mmPin(c, R, g.gpsTarget.x, g.gpsTarget.z, p, null, '#ffcc00', true, strong, now);
     // iş işaretçileri (kenara sabitlenir, elmas biçimli)
     if (C) for (const mk of C.markers) {
       if (mk.actor && mk.actor.dead) continue;

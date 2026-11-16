@@ -161,6 +161,29 @@ module.exports = async (p, out) => {
     starts.push(r);
   }
   check(starts.every((r) => !r.err && r.active), 'Yeni görevler hatasız başlıyor ' + JSON.stringify(starts.map((r) => r.id + ':' + (r.err || r.step + ' ' + (r.obj || '').slice(0, 28)))));
+  // D3: görev kabulünden bitişine her adımda haritada hedef işareti (story işaretçisi ya da GPS hedefi) var
+  const mkSteps = await p.evaluate(() => {
+    const M = game.missions, out = [];
+    for (const id of ['takip', 'kurtarma', 'bolge']) {
+      const def = M.STORY.find((d) => d.id === id); if (!def || !def.steps) continue;
+      try {
+        if (game.player.inInterior) game.interiors.exit();
+        M.flags.leylaSoz = 'soz'; M.flags.trust = 80;
+        M.start(def, { replay: true }); sim(0.5);
+        for (let k = 0; k < def.steps.length && M.active === def; k++) {
+          M.dialogue.hangup(); if (M.dialogue.open && M.dialogue._finish) M.dialogue._finish();
+          const has = M.markers.some((m) => m.story && !(m.actor && m.actor.dead)) || !!game.gpsTarget;
+          out.push({ id, k, has });
+          M.next(); sim(0.3);
+        }
+        if (M.active) M.cleanup(true);
+      } catch (e) { out.push({ id, err: e.message }); }
+    }
+    M.dialogue.hangup(); if (M.dialogue.open && M.dialogue._finish) M.dialogue._finish();
+    return out;
+  });
+  const mkMiss = mkSteps.filter((r) => !r.has);
+  check(mkSteps.length > 4 && mkMiss.length === 0, `Görev adımlarında harita işareti: ${mkSteps.length - mkMiss.length}/${mkSteps.length} adım ${JSON.stringify(mkMiss).slice(0, 200)}`);
   await p.evaluate(() => { const M = game.missions; M.flags.trust = 30; delete M.flags.leylaSoz; game.wanted.reset(); game.npcs.calmPolice(); for (const n of game.npcs.list.slice()) if (n.faction === 'police') game.npcs.remove(n); sim(0.5); });
 
   // ---------------- 6) büyük harita ----------------
