@@ -58,7 +58,7 @@ export function synthExplosion(sr, seed, big = false) {
   fadeOut(d, Math.floor(0.4 * sr));
   normalize(d, 1);
   for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * 1.6) / Math.tanh(1.6);
-  return normalize(d, 0.97);
+  return normalize(d, 0.88); // [ses] tepe -1 dBFS altı (0,97 = -0,3 dBFS idi)
 }
 export function explosion(eng, x, z, sc = 1) {
   if (!eng.ctx || !eng._vp) return;

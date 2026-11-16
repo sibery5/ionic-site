@@ -272,7 +272,7 @@ export function installMusic(P) {
           }
         };
         tick();
-        if (intro) M.bus.gain.setValueAtTime(0.6, c.currentTime); // ilk vuruş tam düzeyde duyulsun (0,75'te çevrimdışı tepe +1,5 dBFS idi)
+        if (intro) M.bus.gain.setValueAtTime(0.52, c.currentTime); // ilk vuruş tam düzeyde duyulsun (0,75'te çevrimdışı tepe +1,5 dBFS, 0,6'da -0,5 idi)
         else { M.bus.gain.setValueAtTime(0, c.currentTime); M.bus.gain.linearRampToValueAtTime(0.7, c.currentTime + 2.5); }
         this._mus = { M, B, live, timer: setInterval(tick, 250) };
       };
@@ -330,7 +330,7 @@ addRender('menu_theme_loopseam', async () => {
 addRender('intro_theme', async () => {
   const sr = 44100, len = INTRO_BARS * BAR + 1.5, oc = new OfflineAudioContext(2, Math.floor(sr * len), sr);
   const S = await buildSamples(() => Promise.resolve());
-  const M = makeBus(oc, oc.destination); M.bus.gain.value = 0.6;
+  const M = makeBus(oc, oc.destination); M.bus.gain.value = 0.52;
   const B = toBuffers(oc, S);
   for (let b = 0; b < INTRO_BARS; b++) introBar(oc, M.stems, B, b, 0.05 + b * BAR);
   const r = await oc.startRendering();
