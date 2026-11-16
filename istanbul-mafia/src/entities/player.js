@@ -553,7 +553,7 @@ export class Player extends Actor {
       }
       // [hareket M6] near düzlemi köşeleri: hedeften her köşeye ışın; köşe duvarın arkasındaysa bomu kısalt.
       // Tek merkez ışını yan duvarı (dar sokak) görmez; köşe ışınları kesit dikdörtgenini de korur.
-      const ux = -back.y * rz, uy = back.z * rx - back.x * rz, uz = back.y * rx; // yukarı = sağ × ileri (ileri = -back)
+      const ux = back.y * rz, uy = back.z * rx - back.x * rz, uz = -back.y * rx; // yukarı = sağ × ileri (ileri = -back)
       const hh = cam.near * Math.tan(cam.fov * Math.PI / 360) * 1.35 + 0.05, hw = hh * cam.aspect + 0.03;
       for (let k = 0; k < 4; k++) {
         const sx = NEAR_CORNERS[k][0] * hw, sy = NEAR_CORNERS[k][1] * hh;

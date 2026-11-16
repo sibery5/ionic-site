@@ -500,12 +500,11 @@ export function deckStep(a) {
   const v = B.v, d = v.def, D = deckOf(d);
   const l = toLocal(v, a.pos.x, a.pos.z);
   let lx = l.lx, lz = l.lz;
-  const air = !a.grounded && a.pos.y > deckYAt(v, lx, lz) + 0.25;
+  // havada (zıplama): küpeşteyi aşan bırakılır (suya); yerde güverte sınırında tutulur
+  const air = a.vy > 0.5 || a.pos.y > deckYAt(v, lx, lz) + 0.08;
   const L2 = d.len / 2 - 0.35;
   let hw = deckHalfW(d, clamp(lz, -L2, L2)) - r;
-  if (Math.abs(lx) > hw + r * 0.5 || Math.abs(lz) > L2 + r * 0.5) {
-    if (air) { a.onBoat = null; return; } // küpeşteden atladı: suya
-  }
+  if (air && (Math.abs(lx) > hw + 0.02 || Math.abs(lz) > L2 + 0.02)) { a.onBoat = null; return; }
   lz = clamp(lz, -L2, L2); hw = Math.max(0.05, deckHalfW(d, lz) - r);
   lx = clamp(lx, -hw, hw);
   for (const o of D.obs) {

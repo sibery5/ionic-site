@@ -100,7 +100,8 @@ export function stepMantle(pl, V, dt) {
     hang = 0.5 * (1 - u); pl.vaultT = 0.2 + 0.6 * u;
   } else { // in: öbür yana düşüş ya da üstte doğrulma
     const u = Math.min(1, (t - V.t4) / (V.dur - V.t4));
-    p.x = V.ox + (V.ex - V.ox) * sm(u); p.z = V.oz + (V.ez - V.oz) * sm(u);
+    const eo = 1 - (1 - u) * (1 - u) * (1 - u); // önce dışarı, sonra düş (duvarın içinden geçmez)
+    p.x = V.ox + (V.ex - V.ox) * eo; p.z = V.oz + (V.ez - V.oz) * eo;
     const y0 = V.top + 0.07;
     p.y = V.over ? y0 + (V.ey - y0) * u * u : y0 + (V.ey - y0) * sm(u);
     pl.vaultT = 0.8 + 0.2 * u;

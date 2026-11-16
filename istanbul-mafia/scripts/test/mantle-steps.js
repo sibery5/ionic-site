@@ -50,7 +50,7 @@ module.exports = async (p, out) => {
   }
   // kalın yapı (konteyner): üstüne çıkar
   const thick = await p.evaluate(() => {
-    const g = game, pl = g.player, s = window.__spot, b = window.__wall(2.0, 2.5, 1.2);
+    const g = game, pl = g.player, s = window.__spot, b = window.__wall(2.0, 2.5, 0.8);
     pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.vault = null; pl.grounded = true; sim(0.2);
     const ok = pl.mantle(0, 1); let t = 0; for (let i = 0; i < 150 && pl.vault; i++) { sim(1 / 30); t += 1 / 30; }
     sim(0.5); const r = { ok, t: +t.toFixed(2), y: +pl.pos.y.toFixed(2) }; g.physics.city.remove(b); pl.pos.set(s.x, 0, s.z); sim(0.3); return r;
@@ -59,9 +59,9 @@ module.exports = async (p, out) => {
   // 3 m aşılamaz; askeri (noClimb) reddedilir
   const rej = await p.evaluate(() => {
     const g = game, pl = g.player, s = window.__spot;
-    let b = window.__wall(3.0, 0.3, 1.2); pl.pos.set(s.x, 0, s.z); pl.vault = null; sim(0.1);
+    let b = window.__wall(3.0, 0.3, 0.8); pl.pos.set(s.x, 0, s.z); pl.vault = null; sim(0.1);
     const h3 = pl.mantle(0, 1); g.physics.city.remove(b);
-    b = window.__wall(2.0, 0.3, 1.2, 'milwall', { noClimb: true }); pl.climbAttempt = null; sim(0.1);
+    b = window.__wall(2.0, 0.3, 0.8, 'milwall', { noClimb: true }); pl.climbAttempt = null; sim(0.1);
     const mil = pl.mantle(0, 1), att = !!pl.climbAttempt; g.physics.city.remove(b);
     return { h3, mil, att };
   });
@@ -106,7 +106,7 @@ module.exports = async (p, out) => {
   check('M6 dar sokakta kamera titremez (kare başı sıçrama ≤ 0,18 m)', cam.jumps === 0, cam);
 
   if (process.env.SHOTS === '1') {
-    await p.evaluate(() => { const pl = game.player, s = window.__spot; window.__wall(2.0, 0.3, 1.2); pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.camYaw = Math.PI + 0.6; sim(0.3); pl.mantle(0, 1); sim(0.5); });
+    await p.evaluate(() => { const pl = game.player, s = window.__spot; window.__wall(2.0, 0.3, 0.8); pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.camYaw = Math.PI + 0.6; sim(0.3); pl.mantle(0, 1); sim(0.5); });
     await H.shot(p, path.join(out, 'mantle.png'));
   }
   console.log('SONUÇ: ' + (fail ? 'FAIL ' + fail : 'OK'));
