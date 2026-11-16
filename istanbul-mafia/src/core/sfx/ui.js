@@ -11,18 +11,28 @@ const SR = 44100;
 function thump(d, sr, t0, f, tau, a) { let ph = 0; const i0 = Math.floor(t0 * sr); for (let i = 0; i < tau * 7 * sr && i0 + i < d.length; i++) { ph += TAU * f * (0.75 + 0.25 * Math.exp(-i / (0.006 * sr))) / sr; d[i0 + i] += Math.sin(ph) * a * Math.exp(-i / (tau * sr)) * Math.min(1, i / 30); } }
 function room(d, sr, k = 1) { const s = d.slice(); addEcho(d, s, 0.009, 0.16 * k, sr, 5000); addEcho(d, s, 0.017, 0.1 * k, sr, 4000); addEcho(d, s, 0.031, 0.05 * k, sr, 3000); }
 
+// [ses] menü tıklaması: ölçümde eski tıkın enerjisinin %93'ü 150 Hz altındaydı (boğuk "tup"). Yeni: belirgin tuş tıkı
+// (1,6-5 kHz kipleri), küçük gövde (230 Hz), kısa bırakma tıkı; toplam ~70 ms.
 export function synthClick(sr, seed) {
-  const R = rng(seed), d = new Float32Array(Math.floor(0.14 * sr)), j = 1 + R.n() * 0.03;
-  // basma: yumuşak tuş + gövde
-  modal(d, sr, 0, [[1180 * j, 0.016, 0.5], [2630 * j, 0.009, 0.28], [4150 * j, 0.005, 0.12]], 0.55, R);
-  thump(d, sr, 0, 150 * j, 0.02, 0.55);
-  burst(d, sr, 0, { dur: 0.006, tau: 0.0007, f: 6500, type: 'hp', amp: 0.18, R });
-  // bırakma: daha hafif, biraz daha tiz
-  modal(d, sr, 0.038, [[1400 * j, 0.01, 0.4], [3100 * j, 0.006, 0.2]], 0.22, R);
-  thump(d, sr, 0.038, 190 * j, 0.012, 0.18);
-  room(d, sr);
+  const R = rng(seed), d = new Float32Array(Math.floor(0.12 * sr)), j = 1 + R.n() * 0.03;
+  modal(d, sr, 0, [[1650 * j, 0.011, 0.55], [3350 * j, 0.007, 0.38], [5200 * j, 0.004, 0.2]], 0.6, R);
+  thump(d, sr, 0, 230 * j, 0.01, 0.2);
+  burst(d, sr, 0, { dur: 0.005, tau: 0.0006, f: 6000, type: 'hp', amp: 0.32, R });
+  modal(d, sr, 0.032, [[2100 * j, 0.007, 0.4], [4300 * j, 0.004, 0.2]], 0.24, R);
+  room(d, sr, 0.7);
   fadeOut(d, Math.floor(0.02 * sr));
   return normalize(d, 0.8);
+}
+// telefon: kısa zil ezgisi (iki kez) + gövde titreşimi (170 Hz vızıltı)
+function synthPhone(sr, seed) {
+  const R = rng(seed), d = new Float32Array(Math.floor(1.1 * sr));
+  for (const [m, t] of [[76, 0], [83, 0.11], [79, 0.22], [76, 0.5], [83, 0.61], [79, 0.72]]) {
+    const f = mid(m); modal(d, sr, t, [[f, 0.09, 0.8], [f * 2, 0.05, 0.25], [f * 3.01, 0.03, 0.12]], 0.5, R);
+  }
+  for (let i = 0; i < 0.36 * sr; i++) { const t = i / sr; d[i] += Math.sign(Math.sin(TAU * 170 * t)) * 0.06 * Math.min(1, t / 0.02) * Math.min(1, (0.36 - t) / 0.03); }
+  room(d, sr);
+  fadeOut(d, Math.floor(0.05 * sr));
+  return normalize(d, 0.7);
 }
 export function synthHover(sr, seed) {
   const R = rng(seed), d = new Float32Array(Math.floor(0.06 * sr));
@@ -63,6 +73,7 @@ const DEF = {
   hover: { fn: synthHover, n: 2, g: 0.1 },
   cash: { fn: synthCash, n: 1, g: 0.32 },
   error: { fn: synthError, n: 1, g: 0.3 },
+  phone: { fn: synthPhone, n: 1, g: 0.3 },
   // Re Hicaz: Re Fa# La Re (yükselen, aydınlık) / La Sol Fa# Mi♭ Re (inen, karanlık)
   success: { fn: (sr, s) => synthPhrase(sr, [[62, 0, 0.7], [66, 0.1, 0.65], [69, 0.2, 0.7], [74, 0.32, 0.85], [62, 0.32, 0.35]], 1.6, s), n: 1, g: 0.32 },
   fail: { fn: (sr, s) => synthPhrase(sr, [[69, 0, 0.7], [67, 0.18, 0.65], [66, 0.36, 0.6], [63, 0.54, 0.65], [62, 0.8, 0.8], [50, 0.8, 0.5]], 2.0, s), n: 1, g: 0.3 },
