@@ -21,5 +21,5 @@ export function propsReady(timeoutMs = 20000) {
   return ready;
 }
 // [{ geo, mat }] ya da null
-export const propParts = (name) => PARTS.get(name) || null;
+export const propParts = (name) => (typeof window !== 'undefined' && window.__noProps ? null : PARTS.get(name) || null);
 void THREE;

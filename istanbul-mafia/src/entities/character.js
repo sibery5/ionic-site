@@ -267,6 +267,7 @@ const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 // [savaş kancası] paylaşılan yara geometrisi/malzemesi (tembel), yüzüstü yatış yönü
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
+export const SOCK = { x: 0.028, y: 0.07, z: 0.036 }; // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
 let PROPS = null;
@@ -357,6 +358,9 @@ export class CharacterModel {
     this.rest = this.bones.map((b) => b.position.clone());
     this.settled = false; // [savaş] yeniden kurulan ceset T-pozunda kalmasın: son ölüm pozu bir kez daha uygulanır
     this.hipX = R.hipX;
+    // [tutuş] silah yuvası (bilek kemiği uzayı; +z başparmak/yukarı, avuç içi -s·x... yani iç yana). Gerçek boyutlu elde kabza avucun içine
+    // oturmalı: silah avuç tarafına (x) ve başparmak yönüne (z) kaydırılır ki parmaklar kabzayı sarsın (ölçüm: atölye --tutus).
+    for (const a of this.arms) a.socket.position.set(R.mh ? -a.s * SOCK.x : -a.s * 0.004, R.mh ? -SOCK.y : -0.072, R.mh ? SOCK.z : 0.004);
     if (this.lod < 0) {
       // ilk LOD tahmini: son kamera konumuna uzaklık (sonraki çizimde düzeltilir)
       const pe = this.root.parent ? this.root.parent.matrixWorld.elements : null;
@@ -1112,6 +1116,7 @@ export class CharacterModel {
     cr[0] = Math.max(relaxed, fistW[0]); cr[1] = Math.max(relaxed, fistW[1]);
     if (this.weaponMesh) cr[1] = 0.85;
     if (twoH && gunW > 0.5) cr[0] = 0.8;
+    else if (this.weaponMesh && gunW > 0.5 && W.aim > 0.5) cr[0] = 0.75; // [tutuş] tabancada destek eli tetik elini sarar (gerçek boyutlu elde düz el sarkıyordu)
     if (this.look.carry === 'briefcase' && !this.weaponMesh) cr[1] = 0.9;
     if (this.look.tespih) cr[0] = Math.max(cr[0], 0.55);
     if (W.phone > 0.3) cr[1] = Math.max(cr[1], 0.55);

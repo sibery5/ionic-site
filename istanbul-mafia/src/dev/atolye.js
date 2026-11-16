@@ -24,6 +24,17 @@ const person = (look) => () => {
 };
 // [insan] force: kök sahneye eklenmeden animate erken dönüyordu -> atölye bağlama (T benzeri) pozunu gösteriyordu; artık oyundaki boşta duruşu
 CAT['insan:kahraman'] = person(defaultLook('m'));
+// [tutuş] silah tutuşu denetimi: nişan pozunda tabanca / AK / bıçak (el ve kabza uyumu)
+const holding = (wid, st) => () => {
+  const mr = Math.random, r = new RNG(11); Math.random = () => r.next();
+  try { const m = new CharacterModel(defaultLook('m')); m.seed = 0.5; m.forceLod = 0; m.setLod(0); m.setWeapon(wid); for (let i = 0; i < 90; i++) m.animate(0.016, { speed: 0, force: true, ...st }); m.root.userData.model = m; window.__curl = m.curl.slice(); return m.root; } finally { Math.random = mr; }
+};
+CAT['tutus:tabanca'] = holding('pistol', { aim: true });
+CAT['tutus:ak'] = holding('ak', { aim: true, twoHanded: true });
+CAT['tutus:ak-bosta'] = holding('ak', { twoHanded: true });
+CAT['tutus:bicak'] = holding('knife', {});
+CAT['tutus:eskisilah'] = () => { window.__noProps = true; return holding('pistol', { aim: true })(); };
+CAT['tutus:yumruk'] = () => { const root = holding('pistol', { aim: true })(); const m = root.userData.model; if (m) for (const A of m.arms) { A.fi.rotation.set(0, 0, -A.s * 1.5); A.fd.rotation.set(0, 0, -A.s * 1.45); } root.updateMatrixWorld(true); return root; };
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
 CAT['insan:reis'] = person(REIS_LOOK);
 CAT['insan:kenan'] = person(KENAN_LOOK);
@@ -68,7 +79,7 @@ function studio() {
 }
 
 // Görünüşler: q = ön-sol 3/4, f = ön, s = yan, b = arka 3/4, t = üst, yuz = yüz yakın planı (insanlar)
-const DIRS = { q: [-0.75, 0.38, 1], f: [0, 0.12, 1], s: [1, 0.1, 0], b: [0.75, 0.38, -1], t: [0, 1, 0.001], yuz: [-0.35, 0.05, 1], el: [-0.6, 0.2, 1] };
+const DIRS = { q: [-0.75, 0.38, 1], f: [0, 0.12, 1], s: [1, 0.1, 0], b: [0.75, 0.38, -1], t: [0, 1, 0.001], yuz: [-0.35, 0.05, 1], el: [-0.6, 0.2, 1], silah: [0.5, 0.25, 1], silahust: [0.05, 1, 0.3], silahic: [-1, 0.15, 0.2] };
 
 function place(id) {
   studio();
@@ -95,7 +106,7 @@ export function bilgi(id) {
     const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1);
   });
   const s = box.getSize(V(0, 0, 0));
-  return { id, ucgen: Math.round(tris), ag: meshes, malzeme: mats.size, boyut: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2)] };
+  return { id, ucgen: Math.round(tris), ag: meshes, malzeme: mats.size, boyut: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2)], ...(window.__curl ? { kivrim: window.__curl.map((x) => +x.toFixed(2)) } : {}) };
 }
 
 // Kesit ölçüsü (m). Modelin ön ve yan siluetini dik izdüşümle çizer (2–5 mm/piksel) ve boyuna göre verilen yükseklik
@@ -130,6 +141,8 @@ export function shot(id, view = 'q') {
   let r = size.length() / 2;
   if (view === 'yuz') { c.set(c.x, box.min.y + size.y * 0.925, c.z + size.z * 0.1); r = Math.max(0.2, size.y * 0.115); }
   if (view === 'el') { c.set(box.min.x + size.x * 0.12, box.min.y + size.y * 0.47, c.z); r = Math.max(0.16, size.y * 0.1); }
+  // silahlı kişide 'el': silahın etrafına odaklan (tutuş denetimi)
+  if (view === 'el' || view.startsWith('silah')) { let wm = null; scene.traverse((o) => { if (o.userData && o.userData.weaponId) wm = o; }); if (wm) { const wb = new THREE.Box3().setFromObject(wm); wb.getCenter(c); r = Math.max(0.14, wb.getSize(V(0, 0, 0)).length() * 0.7); } }
   const d = V(...(DIRS[view] || DIRS.q)).normalize();
   const dist = r / Math.sin(THREE.MathUtils.degToRad(cam.fov / 2)) * 1.06;
   cam.position.copy(c).addScaledVector(d, dist); cam.near = Math.max(0.02, dist - r * 3); cam.far = dist + r * 40; cam.updateProjectionMatrix(); cam.lookAt(c);
@@ -182,4 +195,23 @@ export function aracOlcu(id) {
   if (h && Math.abs(m.iz - (m.W - 0.25)) > 0.06) bad.push(`iz≠W-0.25`);
   if (m.tekerIc < 0.01 || m.tekerIc > 0.03) bad.push(`tekerIc=${m.tekerIc}`);
   return { id, sinif: ARAC_SINIF[t] || '-', ...m, ucgen: Math.round(tris), cizim: calls, hata: bad.join(' ') };
+}
+
+// [tutuş] parmak ve avuç ağırlık merkezlerinin silahın kendi eksenlerindeki konumu (m). Silah: x kalınlık, y yukarı, z namlu; kabza orijinde.
+export function tutusOlc(id) {
+  const { obj } = place(id);
+  obj.updateMatrixWorld(true);
+  let mesh = null, wm = null; obj.traverse((o) => { if (o.isSkinnedMesh) mesh = o; if (o.userData && o.userData.weaponId) wm = o; });
+  if (!mesh || !wm) return null;
+  const B = mesh.skeleton.bones.map((b) => b.name), si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight;
+  const inv = new THREE.Matrix4().copy(wm.matrixWorld).invert(), v = V(0, 0, 0), out = {};
+  for (const bn of ['fdR', 'fiR', 'thR', 'wrR', 'fdL', 'wrL']) {
+    const k = B.indexOf(bn); const acc = V(0, 0, 0); let n = 0;
+    for (let i = 0; i < si.count; i++) {
+      if (si.getX(i) !== k || sw.getX(i) < 0.6) continue;
+      mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inv); acc.add(v); n++;
+    }
+    if (n) out[bn] = acc.divideScalar(n).toArray().map((x) => +x.toFixed(3));
+  }
+  return out;
 }
