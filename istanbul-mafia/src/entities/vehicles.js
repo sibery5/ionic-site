@@ -1005,6 +1005,16 @@ function buildGenericBody(B, S) {
 // [araç] Binek ön/arka yüz: farlar, stoplar, tamponlar ve ızgara gövde çevresine (planBand) sarılır; kutu tamponlar köşede
 // gövdeden taşıyordu, farlar düz yüzde küçük kutulardı. Far: camlı mercek + iki projektör + altında gündüz farı şeridi,
 // köşede sinyal. Stop: köşeye sarılan kırmızı bölme + geri vites ve sinyal bölmeleri. Tampon: gövde renginde, altta koyu hava girişi.
+// [A2] bal peteği ızgara: altıgen hücreler (6 kenarlı silindir), satırlar yarım hücre kaydırılır. Koyu metal, B.d.
+function honeycomb(B, w, y0, y1, z, r, tag) {
+  const dx = r * 1.85, dy = r * 1.6, rows = Math.max(1, Math.floor((y1 - y0) / dy)), cols = Math.max(2, Math.floor(w / dx));
+  const g = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols - (j & 1); i++) {
+    const c = cyl(r * 0.78, r * 0.78, 0.016, 6, 'z', (i - (cols - 1) / 2 + (j & 1) * 0.5) * dx, y0 + (j + 0.5) * ((y1 - y0) / rows), z);
+    g.push(c);
+  }
+  if (g.length) B.d(mergeGeometries(g), 0x2c2d30, tag);
+}
 function buildFrontRearCar(B, S) {
   const P = planOutline(S), { zF, zR, Rc } = P, { cl, W } = S;
   const yTop = (z) => topYAt(S.top, z);
@@ -1012,7 +1022,7 @@ function buildFrontRearCar(B, S) {
   const old = S.lights === 'old', rugged = S.st === 'jeep' || S.st === 'offroad', sport = S.st === 'sport' || S.st === 'coupe' || S.st === 'cabrio';
   const hwF = S.hw(yF - 0.1, zF - Rc), hwR = S.hw(yRr - 0.1, zR + Rc);
   const archF = S.arches[0] + S.archR + 0.03, archR = S.arches[S.arches.length - 1] - S.archR - 0.03;
-  const lampH = sport ? 0.09 : rugged ? 0.16 : 0.12;
+  const lampH = sport ? 0.07 : rugged ? 0.16 : S.st === 'suv' ? 0.1 : 0.12; // [A2] spor/SUV: ince far
   const yL1 = yF - 0.03, yL0 = yL1 - lampH;
   // --- farlar ---
   if (old) {
@@ -1028,6 +1038,8 @@ function buildFrontRearCar(B, S) {
       B.d(planBand(S, sel, yL0 - 0.008, yL1 + 0.008, 0.004, 0.004, s, 4), 0x16191c);
       B.l(planBand(S, sel, yL0, yL1, 0.008, 0.006, s, 4), 0x737e88, 0xfff4e0, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * 0.96, yL0 - 0.016, yL0 - 0.004, 0.012, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
+      // [A2] ince LED gündüz şeridi (far üst kenarı): spor/SUV/sedan ön yüzleri ayırt edilir
+      if (sport || S.st === 'suv' || S.st === 'sedan' || S.st === 'police') B.l(planBand(S, (x, z) => sel(x, z) && x < hwF * (sport ? 0.98 : 0.9), yL1 - 0.012, yL1 - 0.003, 0.013, 0, s, 1), 0xf4f8ff, 0xffffff, 0);
       B.l(planBand(S, (x, z) => sel(x, z) && z < zF - Rc * 0.55, yL0 + 0.01, yL1 - 0.01, 0.012, 0.004, s, 2), 0xd08a20, 0xff8a10, s > 0 ? 3 : 4);
       for (const k of [0.5, 0.7]) {
         const x = s * hwF * k, y = (yL0 + yL1) / 2, z = zF + 0.01;
@@ -1042,8 +1054,11 @@ function buildFrontRearCar(B, S) {
   B.d(planBand(S, (x, z) => x < gx && z > zF - 0.02, gBot, gTop, 0.006, 0.004, 0, 3), 0x0b0b0c);
   const gw = gx * 2 - 0.06;
   if (S.grille === 'jeep') for (let i = -3; i <= 3; i++) B.d(bx(0.035, (gTop - gBot) * 0.85, 0.03, i * gw / 7.5, (gTop + gBot) / 2, zF + 0.014), S.solidColor || 0x2a2a2a);
-  else if (!sport) for (let i = 0; i < 4; i++) B.c(bx(gw, 0.008, 0.012, 0, gBot + (gTop - gBot) * (0.2 + i * 0.2), zF + 0.016));
-  else for (let i = 0; i < 9; i++) for (let k = 0; k < 2; k++) B.d(bx(0.012, (gTop - gBot) * 0.8, 0.012, (i - 4) * gw / 9 + k * 0.03, (gTop + gBot) / 2, zF + 0.014), 0x2a2a2c);
+  else if (sport) honeycomb(B, gw, gBot + 0.01, gTop - 0.01, zF + 0.012, 0.024);
+  // [A2] sedan: krom dikey çubuk; SUV: kalın üç yatay krom; hatch/estate: ince yatay + orta çizgi
+  else if (S.st === 'sedan' || S.st === 'police' || S.st === 'taxi') { const n = Math.max(7, Math.round(gw / 0.055)); for (let i = 0; i < n; i++) B.c(bx(0.009, (gTop - gBot) * 0.82, 0.014, (i - (n - 1) / 2) * gw / n, (gTop + gBot) / 2, zF + 0.016)); B.c(bx(gw, 0.012, 0.016, 0, gTop - 0.012, zF + 0.017)); }
+  else if (S.st === 'suv') for (let i = 0; i < 3; i++) B.c(bx(gw, 0.028, 0.02, 0, gBot + (gTop - gBot) * (0.22 + i * 0.28), zF + 0.017));
+  else for (let i = 0; i < 4; i++) B.c(bx(gw, 0.008, 0.012, 0, gBot + (gTop - gBot) * (0.2 + i * 0.2), zF + 0.016));
   if (!rugged) B.c(cyl(0.04, 0.04, 0.016, 16, 'z', 0, (gTop + gBot) / 2, zF + 0.022));
   // --- ön tampon ---
   const bTop = gBot - 0.015, bSel = (x, z) => z > archF;
@@ -1054,6 +1069,16 @@ function buildFrontRearCar(B, S) {
   const intake = planBand(S, (x, z) => (sport ? x > hwF * 0.36 && x < hwF * 0.86 : x < hwF * 0.7) && z > zF - Rc * 0.6, cl + 0.03, sport ? bTop - 0.03 : iTop, 0.045, 0, 0, 2);
   B.d(intake, 0x0a0a0a, 'bumperF');
   if (!old && !rugged) for (const s of [1, -1]) B.d(rbx(0.16, 0.06, 0.03, 0.02, s * hwF * 0.8, cl + 0.1, zF + 0.035), 0x101010, 'bumperF');
+  if (sport) {
+    // [A2] orta alt hava girişi (bal peteği) + ön splitter
+    const iw = hwF * 0.62, iy0 = cl + 0.05, iy1 = Math.min(bTop - 0.03, cl + 0.15);
+    B.d(planBand(S, (x, z) => x < iw / 2 + 0.02 && z > zF - 0.06, iy0 - 0.01, iy1 + 0.01, 0.04, 0, 0, 1), 0x070707, 'bumperF');
+    honeycomb(B, iw, iy0, iy1, S.frontZ ? Math.min(zF, S.frontZ((iy0 + iy1) / 2)) - 0.005 : zF - 0.02, 0.02, 'bumperF');
+    B.d(bx(hwF * 1.7, 0.018, 0.08, 0, cl - 0.005, zF - 0.01), 0x0a0a0a, 'bumperF');
+    // yan hava girişleri: arka çamurluk önünde, kapı arkasında
+    const za = S.arches[S.arches.length - 1] + S.archR + 0.22, ya = cl + 0.3, xa = S.hw(ya, za);
+    for (const s of [1, -1]) B.d(bx(0.02, 0.1, 0.3, s * (xa + 0.004), ya, za), 0x060606);
+  }
   // --- stoplar ---
   const tH = old ? 0.12 : 0.13, yT1 = yRr - 0.035, yT0 = yT1 - tH;
   for (const s of [1, -1]) {
@@ -1067,6 +1092,8 @@ function buildFrontRearCar(B, S) {
   const bumpR = planBand(S, (x, z) => z < archR, cl - 0.01, rTop, 0.016, 0.022, 0, 6);
   if (S.bumper === 'chrome') B.c(bumpR, 'bumperR'); else if (S.bumper === 'dark') B.d(bumpR, 0x1a1a1a, 'bumperR'); else B.p(bumpR, 'bumperR');
   B.d(planBand(S, (x, z) => x < hwR * 0.75 && z < zR + 0.02, cl + 0.01, cl + 0.09, 0.045, 0, 0, 1), 0x0c0c0c, 'bumperR');
+  // [A2] spor difüzör kanatçıkları
+  if (sport) for (let i = -3; i <= 3; i++) B.d(bx(0.012, 0.085, 0.16, i * hwR * 0.2, cl + 0.045, zR + 0.04), 0x181818, 'bumperR');
   const ex = sport ? [-0.62, -0.5, 0.5, 0.62] : [-0.62];
   for (const k of ex) { B.c(cyl(0.04, 0.042, 0.12, 14, 'z', k * hwR, cl + 0.06, zR - 0.02)); B.d(cyl(0.03, 0.03, 0.01, 12, 'z', k * hwR, cl + 0.06, zR - 0.081), 0x050505); }
   // üçüncü stop
@@ -1133,6 +1160,27 @@ function buildFrontRear(B, S) {
   else if (S.grille !== 'sport') for (let i = 0; i < 3; i++) B.c(bx(gw * 0.94, 0.012, 0.02, 0, gy - gh * 0.3 + i * gh * 0.3, zG + 0.012));
   if (S.grille !== 'jeep' && S.grille !== 'bus') B.c(cyl(0.045, 0.045, 0.02, 14, 'z', 0, gy, zG + 0.02));
   if (S.st === 'sport') { B.d(bx(W * 0.8, 0.03, 0.2, 0, cl + 0.03, zFb + 0.02), 0x0a0a0a); B.d(bx(W * 0.6, 0.12, 0.12, 0, cl + 0.08, zRb - 0.02), 0x0a0a0a); }
+  // [A2] otobüs: hat tabelası (kehribar LED), LED far şeritleri, siyah ön panel; arka: dikey LED stop, motor panjuru
+  if (S.st === 'bus') {
+    const yS = S.H - 0.24, zS = S.frontZ(yS), hwS = S.hw(yS, zS - 0.05);
+    B.d(bx(hwS * 1.7, 0.26, 0.03, 0, yS, zS + 0.004), 0x050505);
+    B.l(bx(hwS * 1.3, 0.1, 0.02, 0, yS, zS + 0.02), 0xffa020, 0xffb030, 0);
+    const yP = cl + 0.5, zP = S.frontZ(yP), hwP = S.hw(yP, zP - 0.05);
+    B.d(bx(hwP * 1.15, 0.3, 0.02, 0, yP, zP + 0.004), 0x0a0a0a);
+    for (const s of [1, -1]) B.l(bx(0.42, 0.022, 0.02, s * (hwF - 0.35), yH + 0.1, zF + 0.012), 0xf4f8ff, 0xffffff, 0);
+    const yR = cl + 1.05, zRr = S.rearZ(yR), hwRr = S.hw(yR, zRr + 0.05);
+    for (const s of [1, -1]) B.l(bx(0.07, 1.0, 0.03, s * (hwRr - 0.07), yR, zRr - 0.004), 0x5a0808, 0xff1a0a, 1);
+    for (let i = 0; i < 6; i++) B.d(bx(hwRr * 1.2, 0.025, 0.03, 0, cl + 0.42 + i * 0.07, S.rearZ(cl + 0.5) - 0.006), 0x101010);
+  }
+  // [A2] kamyon: krom yatay ızgara, güneşlik, basamaklar
+  if (S.st === 'truck') {
+    const y0 = cl + 0.3, y1 = cl + 1.05, zT = S.frontZ((y0 + y1) / 2), hwT = S.hw((y0 + y1) / 2, zT - 0.05);
+    B.d(bx(hwT * 1.1, y1 - y0, 0.02, 0, (y0 + y1) / 2, zT + 0.004), 0x0b0b0b);
+    for (let i = 0; i < 7; i++) B.c(bx(hwT * 1.1, 0.03, 0.03, 0, y0 + 0.05 + i * (y1 - y0 - 0.1) / 6, zT + 0.016));
+    const yV = S.H - 0.08, zV = S.frontZ(yV - 0.3);
+    B.d(bx(hwT * 1.9, 0.04, 0.32, 0, yV, zV + 0.1), 0x151515);
+    for (const s of [1, -1]) B.d(bx(0.05, 0.04, 0.3, s * (W / 2 - 0.02), cl + 0.05, zT - 0.4), 0x2a2a2a);
+  }
   // egzoz
   const ex = S.st === 'sport' ? [-0.25, -0.15, 0.15, 0.25] : [-0.45 * W / 1.8];
   for (const x of ex) B.c(cyl(0.035, 0.035, 0.2, 10, 'z', x, cl + 0.06, zRb + 0.02));
@@ -2107,10 +2155,10 @@ export class Vehicle {
     if (!pt || !pt.fireSys || this.destroyed) { this.flameT = 0; return; }
     const d = this.def, h = this.heading, fx = Math.sin(h), fz = Math.cos(h), cx = Math.cos(h), cz = -Math.sin(h);
     const moto = this.kind === 'car' && this.mesh.userData.moto;
-    const back = moto ? d.len * 0.42 : d.len / 2 + 0.06, y = this.pos.y + (moto ? 0.42 : (d.cl || 0.15) + 0.08);
+    const back = moto ? 0.7 : d.len / 2 + 0.06, y = this.pos.y + (moto ? 0.56 : (d.cl || 0.15) + 0.06);
     const k = this.flameK || 1, twin = !moto && (this.P.snd === 'sport' || this.P.snd === 'v8');
     for (let s = 0; s < (twin ? 2 : 1); s++) {
-      const ox = moto ? 0.18 : twin ? (s ? 0.22 : -0.22) : -0.25 * d.wid;
+      const ox = moto ? -0.18 : twin ? (s ? 0.28 : -0.28) * d.wid : -0.31 * d.wid; // model: ±0.56 hwR (spor), -0.62 hwR
       const x = this.pos.x - fx * back + cx * ox, z = this.pos.z - fz * back + cz * ox;
       const sp = 5 + Math.random() * 4;
       // sıcak mavi-beyaz çekirdek + turuncu dil (arkaya doğru, aracın hızını taşır)

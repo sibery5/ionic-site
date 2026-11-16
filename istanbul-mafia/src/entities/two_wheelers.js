@@ -232,6 +232,12 @@ function buildMoto(def) {
   B.d(rbx(0.22, 0.07, 0.22, 0.03, 0, 0.95, -0.58), 0x121212);
   B.p(beam(0, 0.86, -0.4, 0, 0.98, -0.82, 0.22, 0.12, false));
   for (const s of [1, -1]) B.p(rbx(0.04, 0.2, 0.3, 0.02, s * 0.15, 0.83, -0.08));
+  // [A2] spor kaporta: yan paneller (boyalı) + koyu hava çıkışı, kuyrukta ince LED stop
+  for (const s of [1, -1]) {
+    B.p(beam(s * 0.165, 0.93, 0.4, s * 0.185, 0.42, 0.16, 0.3, 0.025, false));
+    B.d(beam(s * 0.2, 0.78, 0.3, s * 0.205, 0.56, 0.2, 0.12, 0.012, false), 0x0a0a0a);
+  }
+  B.l(bx(0.2, 0.015, 0.02, 0, 0.99, -0.83), 0x5a0808, 0xff1a0a, 1);
   B.p(rbx(0.3, 0.12, 0.42, 0.05, 0, 0.3, 0.12));
   // motor: blok + silindirler (soğutma kanatları) + radyatör + karter
   B.d(rbx(0.34, 0.22, 0.34, 0.04, 0, 0.47, 0.06), 0x2a2a2a);
@@ -286,6 +292,7 @@ function buildMoto(def) {
   SG.l(cyl(0.085, 0.085, 0.02, 14, 'z', 0, 0.0, 0.255), 0xdfe6ea, 0xfff2d8, 0);
   for (const s of [1, -1]) SG.l(rbx(0.05, 0.035, 0.05, 0.012, s * 0.15, -0.05, 0.16), 0xb06a10, 0xff8a10, s > 0 ? 3 : 4);
   SG.p(rbx(0.24, 0.16, 0.06, 0.03, 0, 0.12, 0.2));
+  for (const s of [1, -1]) SG.l(bx(0.08, 0.014, 0.02, s * 0.065, 0.075, 0.235), 0xf4f8ff, 0xffffff, 0); // [A2] ince LED gündüz farları
   SG.gl(beam(0, 0.18, 0.2, 0, 0.32, 0.12, 0.22, 0.01, false));
   finishTemplate(SG, SG);
   T.decorate = (root, chassis, ud) => {
