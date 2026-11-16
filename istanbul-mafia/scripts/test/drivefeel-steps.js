@@ -71,4 +71,11 @@ module.exports = async (p) => {
     return R;
   });
   console.log('drivefeel', JSON.stringify(r));
+  // [A2] gösterge görüntüsü: SPEEDO_SHOT=<yol> verilirse GT'de 3. viteste gösterge çekilir
+  if (process.env.SPEEDO_SHOT) {
+    await p.evaluate(() => { const g = game, pl = g.player; const v = g.vehicles.add('gt', pl.pos.x, pl.pos.z, 0); v.noCollide = true; g.enterVehicle(v, true);
+      v.fs = 24; v.gear = 2; v.rpm = 0.72; g.ui.update && g.ui.update(1 / 30); });
+    await p.waitForTimeout(400);
+    await p.locator('#speedo').screenshot({ path: process.env.SPEEDO_SHOT, type: 'jpeg', quality: 85 });
+  }
 };
