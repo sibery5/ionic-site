@@ -46,9 +46,10 @@ function teakTexture() {
 const MATS = {};
 export function yachtMats() {
   if (MATS.gel) return MATS;
-  MATS.gel = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.22, metalness: 0.05 });
+  MATS.gel = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.05, envMapIntensity: 0.8 });
   MATS.teak = new THREE.MeshStandardMaterial({ map: teakTexture(), roughness: 0.78, metalness: 0 });
-  MATS.glass = new THREE.MeshStandardMaterial({ color: 0x0b1620, roughness: 0.05, metalness: 0.9, envMapIntensity: 1.6 });
+  // [deniz] ayna gibi cam gökyüzünü yansıtıp teknenin 'içi boş, arkası görünüyor' gibi okunmasına yol açıyordu: koyu füme cam
+  MATS.glass = new THREE.MeshStandardMaterial({ color: 0x0a1218, roughness: 0.18, metalness: 0.35, envMapIntensity: 0.7 });
   MATS.steel = new THREE.MeshStandardMaterial({ color: 0xe2e4e6, roughness: 0.16, metalness: 1 });
   MATS.low = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.1 });
   return MATS;
