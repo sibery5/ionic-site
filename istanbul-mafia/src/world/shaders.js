@@ -554,7 +554,7 @@ export function grassField(maskTex, radius = 34, spacing = 0.55) {
   const pos = [], uv = [], nrm = [];
   const [u0, v0, u1, v1] = [576 / 2048, 1 - (1408 + 128) / 2048, (576 + 64) / 2048, 1 - 1408 / 2048];
   for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI, c = Math.cos(a) * 0.32, s = Math.sin(a) * 0.32, h = 0.55;
+    const a = (i / 3) * Math.PI, c = Math.cos(a) * 0.32, s = Math.sin(a) * 0.3, h = 0.24; // kısa, biçilmiş çim (eski 0.55: diz boyu)
     const q = [[-c, 0, -s, u0, v0], [c, 0, s, u1, v0], [c, h, s, u1, v1], [-c, h, -s, u0, v1]];
     for (const k of [0, 1, 2, 0, 2, 3]) { pos.push(q[k][0], q[k][1], q[k][2]); uv.push(q[k][3], q[k][4]); nrm.push(0, 1, 0); }
   }
@@ -581,11 +581,11 @@ export function grassField(maskTex, radius = 34, spacing = 0.55) {
         vec2 wpos = cell + (vec2(hsh(cell + 1.3), hsh(cell + 7.1)) - 0.5) * uSpacing;
         float gm = texture2D(tMask, (wpos + 1000.0) / 2000.0).b;
         float dist = length(wpos - uCam.xz);
-        float s = smoothstep(0.45, 0.7, gm) * (1.0 - smoothstep(uRadius * 0.55, uRadius, dist)) * (0.6 + rr * 0.8);
+        float s = smoothstep(0.45, 0.7, gm) * (1.0 - smoothstep(uRadius * 0.55, uRadius, dist)) * (0.75 + rr * 0.5);
         float ang = rr * 6.2831; float ca = cos(ang), sa = sin(ang);
         vec3 transformed = vec3(position.x * ca - position.z * sa, position.y, position.x * sa + position.z * ca) * s;
-        transformed.y *= 0.8 + hsh(cell + 3.3) * 0.7;
-        transformed.x += sin(uTime * 2.1 + wpos.x * 0.35 + wpos.y * 0.27) * 0.09 * position.y * s;
+        transformed.y *= 0.85 + hsh(cell + 3.3) * 0.35;
+        transformed.x += sin(uTime * 2.1 + wpos.x * 0.35 + wpos.y * 0.27) * 0.05 * position.y * s;
         transformed.xz += wpos;
         vShade = 0.75 + rr * 0.4;`)
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);');
