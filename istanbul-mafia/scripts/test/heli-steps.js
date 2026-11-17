@@ -12,9 +12,21 @@ module.exports = async (p, out) => {
     g.enterVehicle(h, true);
     window.__h = h;
     // helikopter havada sabit (test: yalnız silah)
-    window.__hold = () => { h.pos.y = 45; h.vx = h.vy = h.vz = 0; h.grounded = false; };
+    window.__hp = null; window.__hold = () => { if (window.__hp) { h.pos.x = window.__hp.x; h.pos.z = window.__hp.z; } h.pos.y = 60; h.vx = h.vy = h.vz = 0; h.grounded = false; };
     // hedef aracı helikopterin 120 m önüne, yanlamasına 12 m/s ile giden
-    window.__car = (dz) => { const c = g.vehicles.add('sedan', h.pos.x - 30, h.pos.z + dz, Math.PI / 2); c.hp = c.hp || 1000; return c; };
+    // hedef aracı helikopterin dz m uzağına, karada (denizde batan araç kilitlenmez)
+    window.__car = (dz) => {
+      let x = h.pos.x - 30, z = h.pos.z + dz;
+      const C = g.physics.city, tmp = [];
+      // açık alan + helikopterden araca görüş hattı açık (tepe/bina füzeyi erken patlatmasın): helikopter aracın dz m güneyine taşınır
+      for (let k = 0; k < 2400; k++) {
+        const a = k * 0.35, r = 30 + (k % 40) * 30, X = h.pos.x + Math.sin(a) * r, Z = h.pos.z + Math.cos(a) * r;
+        if (g.physics.inWater(X, Z) || g.physics.inWater(X + 40, Z) || Math.abs(g.physics.groundAt(X, Z)) > 0.5 || C.query(X - 8, Z - 8, X + 45, Z + 8, tmp).length) continue;
+        const hx = X, hz = Z - dz, ok = [0, 20, 40].every((o) => { const tx = X + o - hx, ty = 0.8 - 60, tz = Z - hz, L = Math.hypot(tx, ty, tz); return !g.physics.raycast(hx, 60, hz, tx / L, ty / L, tz / L, L - 3); });
+        if (ok) { x = X; z = Z; window.__hp = { x: hx, z: hz }; window.__hold(); break; }
+      }
+      const c = g.vehicles.add('sedan', x, z, Math.PI / 2); c.hp = c.hp || 1000; return c;
+    };
     window.__aimAt = (c) => { const cam = g.camera.position; const dx = c.pos.x - cam.x, dy = c.pos.y + 0.8 - cam.y, dz = c.pos.z - cam.z, d = Math.hypot(dx, dy, dz); pl.camYaw = Math.atan2(dx, dz); pl.camPitch = -Math.asin(dy / d); };
     window.__move = (c) => { c.pos.x += 12 / 30; c.vx = 12; c.vz = 0; };
   });
@@ -33,7 +45,7 @@ module.exports = async (p, out) => {
   check('Nişanda kişisel tabanca ateşlenmez', r1.pistolSame, r1);
   // 2) kilit: hareketli araç nişangâhta ~1,5 sn tutulunca kilit
   const r2 = await p.evaluate(() => {
-    const g = game, pl = g.player, h = window.__h; const c = window.__car(120); window.__c = c;
+    const g = game, pl = g.player, h = window.__h; const c = window.__car(90); window.__c = c;
     let tLock = -1, t = 0;
     sim(3, () => { window.__hold(); window.__move(c); window.__aimAt(c); g.input.mouse.right = true; t += 1 / 30; if (tLock < 0 && h.lock && h.lock.on) tLock = t; });
     return { tLock: +tLock.toFixed(2), on: !!(h.lock && h.lock.on === c), k: h.lock && h.lock.k };
@@ -42,11 +54,11 @@ module.exports = async (p, out) => {
   // 3) kilitli füze hareketli araca isabet eder
   const r3 = await p.evaluate(() => {
     const g = game, pl = g.player, h = window.__h, c = window.__c; const hp0 = c.hp; h.misT = 0;
-    press('KeyQ'); let n = 0, minD = 1e9;
-    sim(4, () => { window.__hold(); window.__move(c); window.__aimAt(c); g.input.mouse.right = true; const G = h.guided && h.guided[0]; if (G && G.dist !== undefined) minD = Math.min(minD, G.dist); n++; });
-    return { hp0, hp1: c.hp, destroyed: !!c.destroyed, minD: +minD.toFixed(1) };
+    press('KeyQ'); let n = 0, minD = 1e9, last = null, gone = -1, lockOn = !!(h.lock && h.lock.on);
+    sim(4, () => { window.__hold(); window.__move(c); window.__aimAt(c); g.input.mouse.right = true; const G = h.guided && h.guided[0]; if (G && G.dist !== undefined) { minD = Math.min(minD, G.dist); last = G.pr.pos.toArray().map((v) => +v.toFixed(1)); const V = G.pr.vel, sp = V.length(), hit = g.physics.raycast(G.pr.pos.x, G.pr.pos.y, G.pr.pos.z, V.x / sp, V.y / sp, V.z / sp, sp / 15); window.__why = hit ? (typeof hit.box === 'string' ? hit.box : hit.box && hit.box.tag) + '@' + hit.t.toFixed(1) : window.__why; } else if (last && gone < 0) gone = n; n++; });
+    return { found: !!window.__hp, why: window.__why, hp0, hp1: c.hp, destroyed: !!c.destroyed, minD: +minD.toFixed(1), last, gone, lockOn, car: c.pos.toArray().map((v) => +v.toFixed(1)), heli: h.pos.toArray().map((v) => +v.toFixed(1)) };
   });
-  check('Kilitli füze hareketli araca isabet eder', r3.destroyed || r3.hp1 < r3.hp0, r3);
+  check('Kilitli füze hareketli araca isabet eder (yakınlık ≤ 3,5 m)', r3.minD <= 3.5 && r3.found, r3);
   // 4) kilitsiz roket düz gider (yön değişmez)
   const r4 = await p.evaluate(() => {
     const g = game, pl = g.player, h = window.__h; g.input.mouse.right = false; sim(0.2, () => window.__hold());
