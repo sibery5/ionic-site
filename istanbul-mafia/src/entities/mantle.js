@@ -1,9 +1,18 @@
 // [hareket H1] Duvara tutunup aşma: 1,3–2,6 m duvarda Space → zıpla → kenara tutun → kendini çek → aş → öbür yana in.
 // İnce duvarda öbür tarafa iner, kalın yapıda (konteyner, alçak dam) üstüne çıkar. 3 m ve üstü aşılamaz; noClimb reddedilir.
+// [C2] istisna: askeri beton duvar (3,2 m) ve jiletli zincir çit (3 m) tırmanılır. Tutunma noktası telin altındaki duvar/çit
+// üst kenarıdır; jiletli telden geçerken 15 can hasarı ve çekiş 1,5× yavaş. Üstünde durulamaz (fizik noClimb), hep öbür yana iner.
 // Zaman çizelgesi oyuncu üzerinde tek nesnede tutulur (kare içinde bellek ayırma yok); yükseklik arttıkça çekiş uzar.
 import * as THREE from 'three';
 
-export const MANTLE_MIN = 1.25, MANTLE_MAX = 2.6;
+export const MANTLE_MIN = 1.25, MANTLE_MAX = 2.6, RAZOR_MAX = 3.25, RAZOR_DMG = 15;
+// noClimb kutusunda tırmanılabilir üst kenar (dünya y) ya da null: askeri duvar betonu 3,2 m, jiletli çit gövdesi kutudan 0,6 m alçak
+export function climbTop(b) {
+  if (!b.noClimb) return b.y1;
+  if (b.tag === 'milWall') return b.y0 + 3.2;
+  if (b.tag === 'fence' && b.y1 - b.y0 > 2.4) return b.y1 - 0.6;
+  return null;
+}
 const CHK = new THREE.Vector3(), PRE = new THREE.Vector3();
 const sm = (u) => u * u * (3 - 2 * u);
 
@@ -19,15 +28,17 @@ export function tryMantle(pl, dx, dz) {
   let nx = h0.nx, nz = h0.nz; const nl = Math.hypot(nx, nz);
   if (nl < 0.5 || nx * dx + nz * dz > -0.5) return false; // duvara epey yan bakıyorsa tutunma yok
   nx /= nl; nz /= nl;
-  const top = b.y1 - p.y;
+  const cTop = climbTop(b), razor = b.noClimb && cTop !== null;
+  const top = (cTop === null ? b.y1 : cTop) - p.y;
   if (top <= MANTLE_MIN || b.y0 > p.y + 0.3) return false;
-  if (b.noClimb) {
+  if (b.noClimb && razor) pl.climbAttempt = { t: performance.now() / 1000, x: p.x, z: p.z, tag: b.tag }; // askeri alarm yine tetiklenir
+  if (b.noClimb && !razor) {
     pl.climbAttempt = { t: performance.now() / 1000, x: p.x, z: p.z, tag: b.tag };
     const now = performance.now();
     if (!(pl._noClimbMsg > now)) { pl._noClimbMsg = now + 3000; g.ui && g.ui.notify && g.ui.notify('Bu duvara tırmanılamaz', 'warn'); }
     return false;
   }
-  if (top > MANTLE_MAX) return false;
+  if (top > (razor ? RAZOR_MAX : MANTLE_MAX)) return false;
   // tırmanış yönü duvar normalinin tersi
   const cx = -nx, cz = -nz;
   const fx = p.x + dx * t0, fz = p.z + dz * t0; // yüzdeki temas noktası
@@ -38,14 +49,16 @@ export function tryMantle(pl, dx, dz) {
   // üst kenarda durma noktası ve baş boşluğu (üstte başka yapı varsa reddet)
   const onTop = Math.min(thick * 0.5, r + 0.25);
   let over = thick < 1.2, ex, ey, ez;
-  const topY = b.y1;
-  PRE.set(fx + cx * onTop, topY + 0.05, fz + cz * onTop); CHK.copy(PRE);
-  const rt = P.resolveCircle(CHK, Math.min(r, 0.25), topY + 0.05);
-  if (PRE.distanceTo(CHK) > 0.06 || rt.support > topY + 0.3) return false;
+  const topY = p.y + top;
+  if (!razor) { // jiletli yapının üstünde durulmaz: üst boşluk denetimi yok, yalnız öbür yana iniş
+    PRE.set(fx + cx * onTop, topY + 0.05, fz + cz * onTop); CHK.copy(PRE);
+    const rt = P.resolveCircle(CHK, Math.min(r, 0.25), topY + 0.05);
+    if (PRE.distanceTo(CHK) > 0.06 || rt.support > topY + 0.3) return false;
+  } else if (!over) return false;
   if (over) {
     PRE.set(fx + cx * (thick + r + 0.35), p.y, fz + cz * (thick + r + 0.35)); CHK.copy(PRE);
     const ro = P.resolveCircle(CHK, r, topY);
-    if (PRE.distanceTo(CHK) > 0.06 || P.inWater(CHK.x, CHK.z) || ro.support < topY - 4.5 || ro.support > topY - 0.6) over = false;
+    if (PRE.distanceTo(CHK) > 0.06 || P.inWater(CHK.x, CHK.z) || ro.support < topY - 4.5 || ro.support > topY - 0.6) { over = false; if (razor) return false; }
     else { ex = CHK.x; ey = ro.support; ez = CHK.z; }
   }
   if (!over) {
@@ -57,13 +70,13 @@ export function tryMantle(pl, dx, dz) {
   }
   // zaman çizelgesi: zıpla, tutun, çek, aş, in
   const hh = top;
-  const tJ = 0.18 + 0.04 * hh, tH = 0.12 + 0.06 * hh, tP = Math.max(0.4, 0.22 * hh), tO = over ? 0.3 : 0.32;
+  const tJ = 0.18 + 0.04 * hh, tH = 0.12 + 0.06 * hh, tP = Math.max(0.4, 0.22 * hh) * (razor ? 1.5 : 1), tO = (over ? 0.3 : 0.32) * (razor ? 1.5 : 1);
   const drop = over ? Math.max(0, topY + 0.1 - ey) : 0;
   const tD = over ? Math.sqrt(2 * drop / 20) + 0.14 : 0.18;
   const hangY = Math.max(p.y, topY - 1.95);
   const wx = fx - cx * (r + 0.04), wz = fz - cz * (r + 0.04); // duvar önünde asılma noktası
   const V = pl.vault = pl._mantleV || (pl._mantleV = { mantle: true });
-  V.mantle = true; V.t = 0; V.over = over; V.top = topY; V.dx = cx; V.dz = cz;
+  V.mantle = true; V.t = 0; V.over = over; V.razor = razor; V.cut = false; V.top = topY; V.dx = cx; V.dz = cz;
   V.sx = p.x; V.sy = p.y; V.sz = p.z; V.wx = wx; V.wz = wz; V.hy = hangY;
   V.ex = ex; V.ey = ey; V.ez = ez;
   V.ox = fx + cx * (over ? thick * 0.5 : r + 0.1); V.oz = fz + cz * (over ? thick * 0.5 : r + 0.1);
@@ -94,6 +107,11 @@ export function stepMantle(pl, V, dt) {
     p.x = V.wx; p.z = V.wz;
     hang = 1 - 0.5 * u; pl.vaultT = 0.001 + 0.2 * u;
   } else if (t < V.t4) { // aş: bacaklar kenardan geçer, üstte duvarın ortasına
+    if (V.razor && !V.cut) { // jiletli tel: bir kez hasar
+      V.cut = true;
+      if (pl.takeDamage && !pl.god) pl.takeDamage(RAZOR_DMG, null, 'fall');
+      const ui = pl.game.ui; if (ui && ui.notify) ui.notify('Jiletli tel! Elin ve bacağın kesildi', 'warn');
+    }
     const u = (t - V.t3) / (V.t4 - V.t3), e = sm(Math.max(0, (u - 0.3) / 0.7));
     p.x = V.wx + (V.ox - V.wx) * e; p.z = V.wz + (V.oz - V.wz) * e; // önce ayaklar kenara kalkar, sonra öne
     p.y = V.top - 0.55 + 0.62 * sm(Math.min(1, u / 0.45));

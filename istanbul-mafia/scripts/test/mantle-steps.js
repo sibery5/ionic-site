@@ -65,7 +65,22 @@ module.exports = async (p, out) => {
     const mil = pl.mantle(0, 1), att = !!pl.climbAttempt; g.physics.city.remove(b);
     return { h3, mil, att };
   });
-  check('H1 3 m duvar aşılamaz, askeri duvar (noClimb) reddedilir', !rej.h3 && !rej.mil && rej.att, rej);
+  check('H1 3 m duvar aşılamaz, tırmanılamaz (noClimb) yapı reddedilir', !rej.h3 && !rej.mil && rej.att, rej);
+  // [C2] askeri beton duvar (kutu 4,05 m, beton 3,2 m + jiletli tel) ve jiletli zincir çit (3 m + 0,6 tel) aşılır; tel hasar verir
+  for (const [tag, h] of [['milWall', 4.05], ['fence', 3.6]]) {
+    const r = await p.evaluate(([tag, h]) => {
+      const g = game, pl = g.player, s = window.__spot;
+      const b = window.__wall(h, tag === 'fence' ? 0.1 : 0.64, 0.8, tag, { noClimb: true });
+      pl.pos.set(s.x, 0, s.z); pl.heading = 0; pl.vx = pl.vz = pl.vy = 0; pl.vault = null; pl.grounded = true; sim(0.1); pl.pos.set(s.x, 0, s.z);
+      pl.god = false; pl.armor = 0; pl.hp = pl.maxHp; const hp0 = pl.hp;
+      const ok = pl.mantle(0, 1); let t = 0, maxY = 0;
+      for (let i = 0; i < 200 && pl.vault; i++) { sim(1 / 30); t += 1 / 30; maxY = Math.max(maxY, pl.pos.y); }
+      sim(0.5); pl.god = true;
+      const r = { ok, t: +t.toFixed(2), z: +(pl.pos.z - s.z).toFixed(2), maxY: +maxY.toFixed(2), dmg: Math.round(hp0 - pl.hp) };
+      g.physics.city.remove(b); pl.pos.set(s.x, 0, s.z); pl.hp = pl.maxHp; sim(0.3); return r;
+    }, [tag, h]);
+    check(`C2 ${tag} jiletli yapı aşılır (öbür yana iner, tel hasarı)`, r.ok && r.z > 1.2 && r.dmg >= 10 && r.t <= 3.2, r);
+  }
 
   // ---- M6: kamera duvara yaslanınca near düzleminin dört köşesi duvarın önünde; dar sokakta titreme yok ----
   const cam = await p.evaluate(() => {
