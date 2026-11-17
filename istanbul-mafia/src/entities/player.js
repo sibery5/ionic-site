@@ -91,7 +91,11 @@ export class Player extends Actor {
     this.camPitch += dPitch;
     this.recoverRecoil(dt, dYaw, dPitch);
     this.camPitch = clamp(this.camPitch, PITCH_UP, PITCH_DOWN);
-    if (input.mouse.wheel && this.scoped && this.wdef.zoom2) { this.scopeLvl = this.scopeLvl ? 0 : 1; } // [C1] dürbün 2 kademe
+    // [C2] dürbün: fare tekeriyle kademesiz yakınlaştırma (GTA tarzı); hedef büyütme scopeZT, görünen scopeZ yumuşak izler
+    if (input.mouse.wheel && this.scoped && this.wdef.zoom2) {
+      const W = this.wdef, zMin = W.zoom * 0.5, zMax = W.zoom2 * 1.4;
+      this.scopeZT = clamp((this.scopeZT || W.zoom) * Math.pow(1.2, -input.mouse.wheel), zMin, zMax);
+    }
     else if (input.mouse.wheel && !input.down('ShiftLeft')) {
       if (!this.vehicle) this.cycleWeapon(input.mouse.wheel > 0 ? 1 : -1);
     }
@@ -511,14 +515,16 @@ export class Player extends Actor {
       this.cSide = A > 0.001 ? wantSide : damp(this.cSide, wantSide, 10, dt);
       this.cH = damp(this.cH, wantH, 8, dt);
       this.cSh = damp(this.cSh, this.shoulder, 9, dt);
-      const zoom = this.dead ? 1 : 1 + (((W.zoom2 && this.scopeLvl ? W.zoom2 : W.zoom) || 1.3) - 1) * Ae;
+      if (W.zoom2) { this.scopeZT = this.scopeZT || W.zoom; this.scopeZ = aimScope ? Math.exp(damp(Math.log(this.scopeZ || this.scopeZT), Math.log(this.scopeZT), 12, dt)) : this.scopeZT; }
+      const zoom = this.dead ? 1 : 1 + (((W.zoom2 ? this.scopeZ : W.zoom) || 1.3) - 1) * Ae;
       this.zoomNow = zoom;
       fov = fov / zoom;
       if (sprinting) fov += 6;
       // dürbün salınımı (nefes): Shift ile tutulur
       if (aimScope) {
         this.swayT = (this.swayT || 0) + dt;
-        const k = (this.holdBreath ? 0.15 : 1) * (this.crouch ? 0.6 : 1) * 0.0016;
+        // nefes tutulunca salınım durur; nefes bitince (dayanıklılık tükendi) bir süre daha güçlü sallanır
+        const k = (this.holdBreath ? 0.12 : this.stamina < 12 ? 1.8 : 1) * (this.crouch ? 0.6 : 1) * 0.0016 * Math.sqrt(zoom / 6);
         this.camYaw += Math.cos(this.swayT * 0.9) * k * dt * 6; this.camPitch += Math.sin(this.swayT * 1.7) * k * dt * 5;
       }
       const yaw = this.camYaw, lookPitch = this.dead ? 0.6 : this.camPitch;

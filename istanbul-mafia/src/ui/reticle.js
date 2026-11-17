@@ -39,13 +39,14 @@ export class Reticle {
       S.color = p.aimOnTarget ? COL.air : t && !t.dead && (t.faction !== 'civilian' || t.hostile) ? COL.enemy : COL.base;
       S.alpha = p.vehicle ? 1 : Math.max(0.55, Math.min(1, 0.55 + (p.adsK || 0)));
       S.zoom = p.zoomNow || 1;
+      S.breath = p.holdBreath ? 1 : 0; S.stam = Math.round((p.stamina || 0) / 5); S.zr = wd.zoom2 ? [wd.zoom * 0.5, wd.zoom2 * 1.4] : null;
     }
     // [C1] isabet işareti solması
     const hk = this.hitK, hd = hk === 'kill' ? 0.55 : 0.32;
     const ha = hk ? Math.max(0, 1 - (performance.now() - this.hitAt) / 1000 / hd) : 0;
     if (hk && ha <= 0) this.hitK = null;
     S.hitA = hud ? ha : 0;
-    const key = Math.round(S.hitA * 12) + (hk || '') + '|' + mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10);
+    const key = Math.round(S.hitA * 12) + (hk || '') + '|' + mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10) + '|' + (mode === 'scope' ? S.breath + ':' + S.stam : '');
     if (key === this.key) return;
     this.key = key;
     this.draw(W, H);
@@ -127,5 +128,21 @@ export class Reticle {
     // büyütme yazısı
     x.fillStyle = 'rgba(230,230,230,0.75)'; x.font = '600 13px sans-serif'; x.textAlign = 'right';
     x.fillText('×' + this.state.zoom.toFixed(1), cx + R * 0.68, cy + R * 0.72);
+    // [C2] GTA tarzı: sağda dikey yakınlaştırma çubuğu, altta nefes göstergesi ve tuş ipucu (siyah çerçeve üstünde)
+    const S = this.state, zr = S.zr;
+    if (zr) {
+      const bx = cx + R + Math.min(60, (W / 2 - R) * 0.4), by0 = cy + R * 0.4, by1 = cy - R * 0.4;
+      const k = Math.max(0, Math.min(1, Math.log(S.zoom / zr[0]) / Math.log(zr[1] / zr[0])));
+      x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 2; x.beginPath(); x.moveTo(bx, by0); x.lineTo(bx, by1); x.stroke();
+      for (let i = 0; i <= 4; i++) { const y = by0 + (by1 - by0) * i / 4; x.beginPath(); x.moveTo(bx - 5, y); x.lineTo(bx + 5, y); x.stroke(); }
+      x.fillStyle = '#f2c230'; const y = by0 + (by1 - by0) * k; x.fillRect(bx - 9, y - 2, 18, 4);
+    }
+    const st = Math.min(1, S.stam / 20), aw = R * 0.5, ay = cy + R + Math.min(26, (H / 2 - R) * 0.6 + 6);
+    if (ay < H - 4) {
+      x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(cx - aw / 2, ay - 2, aw, 4);
+      x.fillStyle = S.breath ? '#7ec8ff' : 'rgba(255,255,255,0.7)'; x.fillRect(cx - aw / 2, ay - 2, aw * st, 4);
+    }
+    x.fillStyle = 'rgba(230,230,230,0.6)'; x.font = '500 12px sans-serif'; x.textAlign = 'left';
+    x.fillText('Teker: yakınlaştır  ·  Shift: nefesini tut', 16, H - 16);
   }
 }
