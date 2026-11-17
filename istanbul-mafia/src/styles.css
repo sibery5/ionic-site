@@ -367,8 +367,8 @@ table.trade .cheap { color: var(--good); } table.trade .dear { color: var(--red2
 /* [C2] büyük yazı: GTA tarzı yarı saydam siyah yatay şerit + sarı/kırmızı yazı, yumuşak giriş/çıkış */
 .bigmsg { position: fixed; top: 34vh; left: 0; right: 0; text-align: center; opacity: 0; padding: 16px 0 18px; pointer-events: none;
   background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.62) 18%, rgba(0,0,0,0.62) 82%, rgba(0,0,0,0) 100%);
-  transform: scaleY(0.2); transition: opacity 0.45s ease, transform 0.45s ease; }
-.bigmsg.show { opacity: 1; transform: scaleY(1); }
+  transition: opacity 0.45s ease, visibility 0s linear 0.45s; visibility: hidden; }
+.bigmsg.show { opacity: 1; visibility: visible; transition: opacity 0.45s ease, visibility 0s; }
 .bigmsg h1 { margin: 0; font: 700 64px var(--display); letter-spacing: 0.12em; color: #f2c230; text-shadow: 0 2px 0 rgba(0,0,0,0.85), 0 0 18px rgba(0,0,0,0.6); }
 .bigmsg.show h1 { animation: stripText 0.6s ease; }
 .bigmsg.red h1 { color: #d8322a; }
