@@ -779,6 +779,9 @@ export class Combat {
         if (back && attacker.isPlayer) g.ui.notify && Math.random() < 0.3 && g.ui.notify('Arkadan bıçaklama!', 'good');
       } else {
         audio.punch(best.pos.x, best.pos.z, attacker.weapon === 'bat' ? 1.4 : 1);
+        // [C2] yumruk/sopa isabetinde baş savrulur (kroşe yana, düz geriye)
+        const mk = attacker.model && attacker.model.meleeKind;
+        if (best.model && best.model.hitZone && !best.dead) best.model.hitZone('head', mk === 'hook' || mk === 'bat' ? -1 : mk === 'L' ? -1 : 1, mk === 'hook' || mk === 'bat' ? 1.3 : 1, mk === 'hook' || mk === 'bat' ? f.z : f.x, mk === 'hook' || mk === 'bat' ? -f.x : f.z);
         if (attacker.weapon !== 'fists') g.particles.blood(tmp, 6, null, best.pos.y + 0.005);
       }
       const kb = def.knockback || 3;

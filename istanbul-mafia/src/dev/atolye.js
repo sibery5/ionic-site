@@ -9,7 +9,7 @@ import { CARS } from '../game/economy.js';
 import { buildCarModel, Vehicle, getTemplate } from '../entities/vehicles.js';
 import { buildAircraftModel, AIR_TYPES } from '../entities/aircraft.js';
 import { buildBoatModel, BOAT_TYPES } from '../entities/boats.js';
-import { buildWeaponModel, WEAPON_ORDER } from '../game/weapons.js';
+import { buildWeaponModel, WEAPON_ORDER, WEAPONS } from '../game/weapons.js';
 import { CharacterModel, defaultLook, randomLook } from '../entities/character.js';
 import { REIS_LOOK, KENAN_LOOK, LEYLA_LOOK, ALI_LOOK } from '../game/story_data.js';
 import { RNG } from '../core/util.js';
@@ -61,11 +61,14 @@ const zipla = (n) => posed(null, n, (i) => { const ta = (i - 30) / 60; const air
 CAT['poz:zipla-hazir'] = zipla(31); CAT['poz:zipla-yuksel'] = zipla(42); CAT['poz:zipla-tepe'] = zipla(56); CAT['poz:zipla-dus'] = zipla(72); CAT['poz:zipla-inis'] = zipla(84);
 // yumruk: vuruşun belirli anı (combo 1 = sol düz, 2 = sağ düz, 3 = kroşe)
 const yumruk = (k, frac) => posed(null, 60 + 1, () => ({}), (m, i) => { if (i === 60 - Math.round(frac * 22)) { m.combo = k - 1; m.punch(); } });
-CAT['poz:yumruk-sol'] = yumruk(1, 0.45); CAT['poz:yumruk-sag'] = yumruk(2, 0.45); CAT['poz:krose'] = yumruk(3, 0.5); CAT['poz:gard'] = yumruk(2, 0.05);
+CAT['poz:yumruk-sol'] = yumruk(1, 0.45); CAT['poz:yumruk-sag'] = yumruk(2, 0.45); CAT['poz:krose'] = yumruk(3, 0.5); CAT['poz:gard'] = posed(null, 70, () => ({}), (m, i) => { if (i === 10) { m.combo = 1; m.punch(); } }); // vuruştan 1 sn sonra gard
 // tırmanma (vault 0..1 evresi)
 // tırmanma (mantle.js evreleri: vaultT bacak salınımı, mantleHang kollar yukarı)
-const tirman = (u, h) => posed(null, 90, () => ({ vault: u }), (m) => { m.mantleHang = h; });
-CAT['poz:tirman-tutun'] = tirman(0.001, 1); CAT['poz:tirman-cek'] = tirman(0.12, 0.7); CAT['poz:tirman-bacak'] = tirman(0.5, 0.25);
+// kenar: duvar yüzü kökün 0,3 m önünde; top = kenarın köke göre yüksekliği (asılı 1,95, çekiş ortası 1,2, aşarken 0,45)
+const tirman = (u, h, top) => posed(null, 90, () => ({ vault: u }), (m) => { m.mantleHang = h; m.mantleEdge = { top, fx: 0, fz: 0.3, dx: 0, dz: 1 }; });
+CAT['poz:tirman-tutun'] = tirman(0.001, 1, 1.86); CAT['poz:tirman-cek'] = tirman(0.12, 0.7, 1.2); CAT['poz:tirman-bacak'] = tirman(0.5, 0.25, 0.45);
+// [C2] tüm ateşli silahlarda nişan tutuşu (tutus2:<silah>) ve boşta tutuş (tutus2:<silah>-bosta)
+for (const w of WEAPON_ORDER) { const d = WEAPONS[w]; if (!d || (d.type !== 'gun' && d.type !== 'launcher')) continue; CAT['tutus2:' + w] = holding(w, { aim: true, twoHanded: !d.oneHand }); if (!d.oneHand) CAT['tutus2:' + w + '-bosta'] = holding(w, { twoHanded: true }); }
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
 CAT['insan:reis'] = person(REIS_LOOK);
 CAT['insan:kenan'] = person(KENAN_LOOK);

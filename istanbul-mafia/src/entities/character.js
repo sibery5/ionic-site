@@ -547,6 +547,7 @@ export class CharacterModel {
     else if (id === 'fists') { const c = this.combo % 3; this.meleeKind = c === 1 ? 'L' : c === 2 ? 'R' : 'hook'; this.meleeDur = c === 0 ? 0.42 : 0.34; }
     else { this.meleeKind = 'R'; this.meleeDur = 0.36; }
     this.punchT = this.meleeDur;
+    if (id === 'fists') this.guardT = this.meleeDur + 1.4; // [C2] yumruk sonrası gard bir süre korunur
   }
   stab() { this.combo++; this.meleeKind = 'stab'; this.meleeDur = 0.38; this.punchT = this.meleeDur; }
   slash() { this.combo++; this.meleeKind = 'slash'; this.meleeDur = 0.42; this.punchT = this.meleeDur; }
@@ -749,9 +750,12 @@ export class CharacterModel {
     this.bank = dmp(this.bank, clamp(-this.yawRate * spB * 0.03, -0.22, 0.22), 10, dt);
     const leanT = (lean + accLean) * (back ? -0.35 : 1) + 0.13 * smR(0.3, 1, age);
     const pel = this.pel;
-    pel.x = swayV; pel.y = bobV - 0.33 * wc - 0.06 * W.cower; pel.z = -0.02 * run;
-    setJ(P, J.hips, leanT * 0.22 + 0.1 * wc, -yawP * nrm, rollV + this.bank);
-    setJ(P, J.spine, leanT * 0.42 + 0.06 * wc, yawP * nrm * 0.4, -rollV * 0.5);
+    // [C2] çömelme: kalça gerçekten alçalır (baş ayaktakinin ~%66'sı), kalça geri, gövde öne (denge: ağırlık ayak üstünde)
+    const wcr = W.crouch * (1 - W.cower);
+    pel.x = swayV; pel.y = bobV - 0.33 * wc - 0.125 * wcr - 0.06 * W.cower; pel.z = -0.02 * run - 0.05 * wcr;
+    setJ(P, J.hips, leanT * 0.22 + 0.1 * wc + 0.05 * wcr, -yawP * nrm, rollV + this.bank);
+    setJ(P, J.spine, leanT * 0.42 + 0.06 * wc - 0.1 * wcr, yawP * nrm * 0.4, -rollV * 0.5);
+    if (wcr > 0.01) addJ(P, J.head, -0.12 * wcr, 0, 0); // baş öne bakar (kambur değil)
     setJ(P, J.chest, leanT * 0.36, yawC * nrm, -rollV * 0.3 - this.bank * 0.3);
     // [savaş kancası] topallama: yaralı bacak az kalkar, üstüne basınca pelvis çöker ve gövde yana kayar
     if (this.limp > 0.01 && moving > 0.05) {
@@ -795,7 +799,7 @@ export class CharacterModel {
       Q.set(P);
       const up = clamp((st.vy || 0) / 5, -1, 1);
       const rise = clamp(up * 0.5 + 0.5, 0, 1), push = 1 - smR(0.05, 0.2, this.airT), fall = smR(0.1, -0.6, up);
-      const tk = rise * (1 - push);
+      const tk = clamp(rise + 0.45 * (1 - fall), 0, 1) * (1 - push); // [C2] tepede de dizler toplu, düşüşte yere uzanır
       setJ(Q, J.hipL, -0.95 * tk - 0.35 * fall - 0.15 * push, 0, 0.06); setJ(Q, J.knL, 1.35 * tk + 0.3 * fall + 0.12 * push, 0, 0); setJ(Q, J.anL, 0.2 + 0.35 * push, 0, 0);
       setJ(Q, J.hipR, 0.2 * tk - 0.2 * fall + 0.25 * push, 0, 0.06); setJ(Q, J.knR, 0.55 * tk + 0.25 * fall + 0.2 * push, 0, 0); setJ(Q, J.anR, 0.35 + 0.4 * push, 0, 0);
       setJ(Q, J.shL, -0.5 * tk - 1.2 * push, 0, 0.3 + 0.55 * fall); setJ(Q, J.shR, 0.25 * tk - 0.9 * push, 0, 0.3 + 0.55 * fall);
@@ -987,6 +991,18 @@ export class CharacterModel {
 
     // ---- 6) yakın dövüş ----
     let meleeW = 0;
+    // [C2] gard: yumruk dövüşünde iki el çene önünde, dirsekler gövdeye yakın, hafif öne eğik duruş
+    this.guardT = Math.max(0, (this.guardT || 0) - dt);
+    this.guardW = dmp(this.guardW || 0, this.guardT > 0 && !this.weaponMesh ? 1 : 0, 8, dt);
+    if (this.guardW > 0.01) {
+      const gw = this.guardW;
+      Q.set(P);
+      setJ(Q, J.shL, -1.0, 0, 0.18); setJ(Q, J.elL, -2.25, 0, 0); setJ(Q, J.wrL, 0.15, 0, 0);
+      setJ(Q, J.shR, -0.95, 0, 0.2); setJ(Q, J.elR, -2.3, 0, 0); setJ(Q, J.wrR, 0.15, 0, 0);
+      addJ(Q, J.spine, 0.06, 0, 0); addJ(Q, J.head, -0.05, 0, 0);
+      mixJ(P, Q, gw, ARMS); mixJ(P, Q, gw, [J.spine, J.head]);
+      fistW[0] = Math.max(fistW[0], gw); fistW[1] = Math.max(fistW[1], gw);
+    }
     if (this.punchT > 0) {
       this.punchT = Math.max(0, this.punchT - dt);
       const u = 1 - this.punchT / this.meleeDur;
@@ -996,18 +1012,25 @@ export class CharacterModel {
       const k = this.meleeKind;
       const ee = Math.max(0, e);
       if (k === 'R' || k === 'L') {
-        const [sh2, el, wr, osh, oel] = k === 'R' ? [J.shR, J.elR, J.wrR, J.shL, J.elL] : [J.shL, J.elL, J.wrL, J.shR, J.elR];
-        setJ(Q, sh2, -0.75 - 0.85 * ee + 0.3 * Math.min(0, e), 0, 0.25 - 0.2 * ee); setJ(Q, el, -1.9 + 1.75 * ee, 0, 0); setJ(Q, wr, 0, 0, 0);
-        setJ(Q, osh, -0.9, 0, 0.2); setJ(Q, oel, -2.0, 0, 0);
-        const tw = (k === 'R' ? 1 : -1) * (0.55 * e);
-        setJ(Q, J.chest, 0.08, tw, 0); setJ(Q, J.spine, 0.05, tw * 0.5, 0);
-        pel.z += 0.06 * ee; pel.y -= 0.025 * ee;
+        // [C2] düz yumruk: arka ayaktan kalça ve omuz dönüşü, ağırlık öne kayar, yumruk omuz hizasından düz gider
+        // (dirsek aşağıda, yumruk dönerek uzanır), diğer el çenede gard; çene omuzun arkasına gömülür
+        const [sh2, el, wr, osh, oel, owr] = k === 'R' ? [J.shR, J.elR, J.wrR, J.shL, J.elL, J.wrL] : [J.shL, J.elL, J.wrL, J.shR, J.elR, J.wrR];
+        const sd = k === 'R' ? 1 : -1, wind = Math.max(0, -e);
+        setJ(Q, sh2, -1.05 - 0.5 * ee + 0.15 * wind, 0, 0.32 - 0.24 * ee); setJ(Q, el, -2.1 + 1.98 * ee, 0, 0); setJ(Q, wr, 0, 0, -0.25 * ee * sd);
+        setJ(Q, osh, -1.0, 0, 0.18); setJ(Q, oel, -2.25, 0, 0); setJ(Q, owr, 0.15, 0, 0);
+        const tw = sd * (0.5 * e);
+        setJ(Q, J.hips, 0.06 + 0.08 * ee, tw * 0.4, 0); setJ(Q, J.spine, 0.1 + 0.14 * ee, tw * 0.3, 0); setJ(Q, J.chest, 0.08 + 0.08 * ee, tw * 0.4, -0.06 * sd * ee);
+        setJ(Q, J.head, -0.08 * ee, -tw * 0.6, 0);
+        pel.z += 0.05 * ee - 0.03 * wind; pel.y -= 0.035 * ee;
       } else if (k === 'hook') {
+        // [C2] kroşe: dirsek omuz hizasına kalkar (~90°), güç kalça ve gövdenin yay çizerek dönmesinden gelir; diğer el gardda
         const sw = u < 0.35 ? -sm(u / 0.35) : -1 + 2 * sm((u - 0.35) / 0.3);
-        setJ(Q, J.shR, -1.35, 0, 0.9 - 0.2 * ee); setJ(Q, J.elR, -1.6, 0, 0); setJ(Q, J.wrR, 0, 0, 0);
-        setJ(Q, J.shL, -0.9, 0, 0.2); setJ(Q, J.elL, -2.0, 0, 0);
-        setJ(Q, J.chest, 0.1, 0.7 * sw, 0); setJ(Q, J.spine, 0.06, 0.35 * sw, 0); setJ(Q, J.hips, 0, 0.2 * sw, 0);
-        pel.y -= 0.04 * ee;
+        const up = Math.max(0, Math.min(1, (u - 0.2) / 0.2)) * (1 - smR(0.75, 1, u));
+        setJ(Q, J.shR, -0.75 - 0.15 * up, 0, 0.4 + 0.45 * up); setJ(Q, J.elR, -1.65, 0, 0); setJ(Q, J.wrR, 0, 0, 0);
+        setJ(Q, J.shL, -1.0, 0, 0.18); setJ(Q, J.elL, -2.25, 0, 0); setJ(Q, J.wrL, 0.15, 0, 0);
+        setJ(Q, J.chest, 0.1, 0.75 * sw, -0.12 * up); setJ(Q, J.spine, 0.08, 0.4 * sw, 0); setJ(Q, J.hips, 0.05, 0.3 * sw, 0);
+        setJ(Q, J.head, -0.06, -0.4 * sw, 0);
+        pel.y -= 0.05 * ee; pel.z += 0.05 * ee; pel.x -= 0.04 * sw;
       } else if (k === 'stab') {
         setJ(Q, J.shR, -0.5 - 0.95 * ee, 0, 0.15); setJ(Q, J.elR, -1.6 + 1.45 * ee, 0, 0); setJ(Q, J.wrR, -1.3 + 0.2 * ee, 0, 0);
         setJ(Q, J.chest, 0.15 * ee, 0.4 * e, 0); setJ(Q, J.spine, 0.1 * ee, 0.2 * e, 0);
@@ -1119,6 +1142,20 @@ export class CharacterModel {
     const block = Math.max(W.swim, W.up, W.cower, W.sit * (1 - W.aim), W.dance, meleeW, rollW, st.vault > 0 ? 1 : 0);
     const gunW = wdef && wdef.type !== 'melee' ? 1 - block : 0;
     if (gunW > 0.01) this.solveWeaponIK(st, wid, wdef, twoH, gunW, pitch, yawO, rec);
+    // [C2] tırmanma: eller duvarın üst kenarında (dünya noktası), dirsekler dışa-aşağı; asılma ve çekişte tam, aşarken kenara basar
+    const ME = this.mantleEdge;
+    if (st.vault > 0 && ME && ME.top !== undefined) {
+      this.root.updateMatrixWorld(true);
+      const rx = ME.dz, rz = -ME.dx, wHand = clamp(0.25 + (this.mantleHang || 0) * 1.5, 0, 1);
+      for (let i = 0; i < 2; i++) {
+        const s2 = i === 0 ? 1 : -1, A = this.arms[i];
+        const sp = 0.24 + 0.04 * (this.mantleHang || 0);
+        WV.wT.set(ME.fx + ME.dx * 0.06 + rx * s2 * sp, ME.top + 0.03, ME.fz + ME.dz * 0.06 + rz * s2 * sp); // rx,rz: gövdenin solu
+        A.sh.getWorldPosition(WV.shL);
+        WV.pole.copy(WV.shL); WV.pole.x += rx * s2 * 0.6 - ME.dx * 0.4; WV.pole.y -= 0.8; WV.pole.z += rz * s2 * 0.6 - ME.dz * 0.4;
+        this.solveArm(A, WV.wT, WV.pole, null, wHand);
+      }
+    }
     // ---- eller ----
     const relaxed = 0.28 + 0.35 * run + 0.2 * wc;
     const cr = this._cr || (this._cr = [0, 0]);

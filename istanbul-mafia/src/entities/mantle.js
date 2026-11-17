@@ -73,12 +73,12 @@ export function tryMantle(pl, dx, dz) {
   const tJ = 0.18 + 0.04 * hh, tH = 0.12 + 0.06 * hh, tP = Math.max(0.4, 0.22 * hh) * (razor ? 1.5 : 1), tO = (over ? 0.3 : 0.32) * (razor ? 1.5 : 1);
   const drop = over ? Math.max(0, topY + 0.1 - ey) : 0;
   const tD = over ? Math.sqrt(2 * drop / 20) + 0.14 : 0.18;
-  const hangY = Math.max(p.y, topY - 1.95);
-  const wx = fx - cx * (r + 0.04), wz = fz - cz * (r + 0.04); // duvar önünde asılma noktası
+  const hangY = Math.max(p.y, topY - 1.86); // [C2] eller kenara yetişir (atölye: bilek 1,86 m)
+  const wx = fx - cx * 0.3, wz = fz - cz * 0.3; // duvar önünde asılma noktası ([C2] gövde duvara yakın: göğüs yüzden ~0,15 m)
   const V = pl.vault = pl._mantleV || (pl._mantleV = { mantle: true });
   V.mantle = true; V.t = 0; V.over = over; V.razor = razor; V.cut = false; V.top = topY; V.dx = cx; V.dz = cz;
   V.sx = p.x; V.sy = p.y; V.sz = p.z; V.wx = wx; V.wz = wz; V.hy = hangY;
-  V.ex = ex; V.ey = ey; V.ez = ez;
+  V.ex = ex; V.ey = ey; V.ez = ez; V.fx = fx; V.fz = fz; // fx/fz: yüzdeki temas (eller kenarda, model.mantleEdge)
   V.ox = fx + cx * (over ? thick * 0.5 : r + 0.1); V.oz = fz + cz * (over ? thick * 0.5 : r + 0.1);
   V.t1 = tJ; V.t2 = tJ + tH; V.t3 = V.t2 + tP; V.t4 = V.t3 + tO; V.dur = V.t4 + tD;
   pl.crouch = false; pl.aiming = false;
@@ -124,12 +124,12 @@ export function stepMantle(pl, V, dt) {
     p.y = V.over ? y0 + (V.ey - y0) * u * u : y0 + (V.ey - y0) * sm(u);
     pl.vaultT = 0.8 + 0.2 * u;
   }
-  if (m) m.mantleHang = hang;
+  if (m) { m.mantleHang = hang; m.mantleEdge = t < V.t4 ? V : null; }
   pl.vx = 0; pl.vz = 0; pl.vy = 0;
   if (t >= V.dur) {
     p.set(V.ex, V.ey, V.ez);
     pl.vault = null; pl.vaultT = 0; pl.grounded = true;
-    if (m) m.mantleHang = 0;
+    if (m) { m.mantleHang = 0; m.mantleEdge = null; }
     if (V.over && V.top + 0.07 - V.ey > 1.2) pl.camDip = Math.min(0.3, (V.top - V.ey) * 0.08);
   }
 }
