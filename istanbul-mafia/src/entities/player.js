@@ -404,7 +404,10 @@ export class Player extends Actor {
     // araçtan ateş (tabanca/uzi)
     this.computeAim();
     const def = this.wdef;
-    if (def.oneHand && input.mouse.right) {
+    // [C2] silahlı helikopter: sağ tık nişan kamerası (burun altı), ateşi helikopter silahları yapar (kişisel silah ateşlenmez)
+    this.heliAim = !!(v.heli && v.def.armed && input.mouse.right && !v.destroyed);
+    if (v.kind === 'air' && v.def.armed) { this.aiming = this.heliAim; }
+    else if (def.oneHand && input.mouse.right) {
       this.aiming = true;
       const wantFire = def.auto ? input.mouse.left : input.mouse.leftPressed;
       if (wantFire && !this.animalBlock(def)) {
@@ -442,14 +445,25 @@ export class Player extends Actor {
       const travel = fwdSpd >= -0.5 ? v.heading + angleWrap(velYaw - v.heading) * 0.45 : v.heading + Math.PI;
       const lead = clamp((v.yawRate || 0) * 0.22, -0.3, 0.3); // dönüşe doğru öne bakış
       const idle = this.carCamIdle;
-      if (idle > 1.0 && (Math.abs(fwdSpd) > 2 || this.carCam > 2)) {
+      this.zoomNow = 1;
+      if (idle > 1.0 && !this.heliAim && (Math.abs(fwdSpd) > 2 || this.carCam > 2)) {
         // fare bakışından sonra: yavaşça hızlanan dönüş (ani savrulma yok)
         const rate = 4.2 * Math.min(1, (idle - 1.0) / 0.7);
         this.camYaw = dampAngle(this.camYaw, travel + lead, rate, dt);
         this.camPitch = damp(this.camPitch, this.carCam > 2 ? 0.04 : 0.2 - Math.min(0.06, sp * 0.002), rate * 0.7, dt);
       }
       fov += Math.min(16, Math.max(0, Math.abs(fwdSpd) - 4) * (this.carCam > 2 ? 0.42 : 0.3));
-      if (this.carCam > 2) {
+      if (this.heliAim) {
+        // [C2] helikopter nişan kamerası: burun altı taret, bakış fareyle serbest, 3× yakınlaştırma
+        v.mesh.updateMatrixWorld();
+        const lp = v.mesh.localToWorld(tmp.set(0, 0.35, 3.6));
+        cam.position.copy(lp);
+        const yaw = this.camYaw, pitch = clamp(this.camPitch, -0.5, 1.2);
+        _look.set(lp.x + Math.sin(yaw) * Math.cos(pitch) * 10, lp.y - Math.sin(pitch) * 10, lp.z + Math.cos(yaw) * Math.cos(pitch) * 10);
+        cam.lookAt(_look);
+        fov = g.settings.fov / 3; this.zoomNow = 3;
+        this.camInit = false; this.camDistNow = 0.5;
+      } else if (this.carCam > 2) {
         // kaput / tampon kamerası: kasaya bağlı (yalpa ve burun dalışı hissedilir), bakış serbest
         const ch = v.mesh.userData.chassis, d = v.def;
         v.mesh.updateMatrixWorld();
