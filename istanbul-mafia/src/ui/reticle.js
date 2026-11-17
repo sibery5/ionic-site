@@ -2,6 +2,8 @@
 //  - Açıklık gerçek sapmayı gösterir (silahın anlık sapması -> ekran pikseli, görüş açısına göre).
 //  - Tüfek/tabanca: dört çizgi + nokta; pompalı: saçma halkası; düşman üstünde kırmızı, hava hedefinde turuncu.
 //  - Keskin nişancı (dürbün): siyah çerçeve, mil-nokta artı, kalın dış direkler, kırmızı merkez, mercek gölgesi.
+import * as THREE from 'three';
+const _pv = new THREE.Vector3();
 const COL = { base: '#f4f4f4', enemy: '#ff3b30', air: '#ffa21a' };
 
 export class Reticle {
@@ -30,8 +32,18 @@ export class Reticle {
     // [C1] silaha göre: tabanca küçük artı, pompalı halka, tüfek dinamik artı, keskin nişancı dürbün dışında nokta yok
     if (show) mode = p.scoped ? 'scope' : (wd.pellets || wd.xhair === 'ring') ? 'ring' : wd.xhair === 'scope' ? 'none' : wd.xhair === 'pistol' ? 'pistol' : 'cross';
     const S = this.state;
+    // [C2] helikopter nişanı: top nişangâhı + füze kilit çerçevesi (hedef ekranda izlenir)
+    if (hud && p.vehicle && p.heliAim && !p.dead) {
+      mode = 'heli';
+      const L = p.vehicle.lock, T = L && (L.on || L.cand);
+      S.lk = 0; S.lx = 0; S.ly = 0;
+      if (T && T.pos) {
+        _pv.set(T.pos.x, T.pos.y + (T.r ? 0 : 0.8), T.pos.z).project(cam);
+        if (_pv.z < 1) { S.lx = (_pv.x * 0.5 + 0.5) * W; S.ly = (-_pv.y * 0.5 + 0.5) * H; S.lk = L.on ? 2 : 1 + Math.min(0.99, L.k || 0); }
+      }
+    }
     S.mode = mode;
-    if (mode !== 'none') {
+    if (mode !== 'none' && mode !== 'heli') {
       const fovR = (cam.fov * Math.PI / 180) / 2;
       const sp = p.spreadNow ? p.spreadNow(wd) : wd.spread || 0;
       S.gap = Math.max(3, Math.min(H * 0.3, Math.tan(sp) / Math.tan(fovR) * (H / 2)));
@@ -39,13 +51,14 @@ export class Reticle {
       S.color = p.aimOnTarget ? COL.air : t && !t.dead && (t.faction !== 'civilian' || t.hostile) ? COL.enemy : COL.base;
       S.alpha = p.vehicle ? 1 : Math.max(0.55, Math.min(1, 0.55 + (p.adsK || 0)));
       S.zoom = p.zoomNow || 1;
+      S.breath = p.holdBreath ? 1 : 0; S.stam = Math.round((p.stamina || 0) / 5); S.zr = wd.zoom2 ? [wd.zoom * 0.5, wd.zoom2 * 1.4] : null;
     }
     // [C1] isabet işareti solması
     const hk = this.hitK, hd = hk === 'kill' ? 0.55 : 0.32;
     const ha = hk ? Math.max(0, 1 - (performance.now() - this.hitAt) / 1000 / hd) : 0;
     if (hk && ha <= 0) this.hitK = null;
     S.hitA = hud ? ha : 0;
-    const key = Math.round(S.hitA * 12) + (hk || '') + '|' + mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10);
+    const key = Math.round(S.hitA * 12) + (hk || '') + '|' + mode + '|' + Math.round(S.gap * 2) + '|' + S.color + '|' + Math.round(S.alpha * 20) + '|' + Math.round(S.zoom * 10) + '|' + (mode === 'scope' ? S.breath + ':' + S.stam : '') + (mode === 'heli' ? Math.round(S.lx / 2) + ',' + Math.round(S.ly / 2) + ',' + Math.round(S.lk * 20) : '');
     if (key === this.key) return;
     this.key = key;
     this.draw(W, H);
@@ -69,6 +82,7 @@ export class Reticle {
     x.clearRect(0, 0, W, H);
     const cx = Math.round(W / 2) + 0.5, cy = Math.round(H / 2) + 0.5;
     if (S.mode === 'none') { this.drawHit(x, cx, cy); return; }
+    if (S.mode === 'heli') { this.drawHeli(x, W, H, cx, cy); this.drawHit(x, cx, cy); return; }
     if (S.mode === 'scope') { this.drawScope(x, W, H, cx, cy); this.drawHit(x, cx, cy); return; }
     x.globalAlpha = S.alpha;
     x.lineCap = 'butt';
@@ -93,6 +107,28 @@ export class Reticle {
     x.fillStyle = S.color; x.beginPath(); x.arc(cx, cy, 1.5, 0, Math.PI * 2); x.fill();
     x.globalAlpha = 1;
     this.drawHit(x, cx, cy);
+  }
+  drawHeli(x, W, H, cx, cy) {
+    const S = this.state;
+    // taret görüntüsü: köşe parantezleri, merkez artı, menzil çizgileri, tuş ipucu
+    x.lineWidth = 1.5; x.strokeStyle = 'rgba(235,240,235,0.85)';
+    const b = Math.min(W, H) * 0.12, c = b * 0.3;
+    x.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { x.moveTo(cx + sx * b, cy + sy * (b - c)); x.lineTo(cx + sx * b, cy + sy * b); x.lineTo(cx + sx * (b - c), cy + sy * b); }
+    x.moveTo(cx - 22, cy); x.lineTo(cx - 6, cy); x.moveTo(cx + 6, cy); x.lineTo(cx + 22, cy); x.moveTo(cx, cy - 22); x.lineTo(cx, cy - 6); x.moveTo(cx, cy + 6); x.lineTo(cx, cy + 22);
+    x.stroke();
+    x.fillStyle = 'rgba(235,240,235,0.9)'; x.beginPath(); x.arc(cx, cy, 1.6, 0, Math.PI * 2); x.fill();
+    // kilit çerçevesi: arıyorken sarı, daralan kare; kilitliyken kırmızı kare + yazı
+    if (S.lk > 0) {
+      const on = S.lk >= 2, k = on ? 1 : S.lk - 1, r = on ? 18 : 46 - 26 * k;
+      x.strokeStyle = on ? '#ff3020' : '#f2c230'; x.lineWidth = on ? 2.4 : 1.6;
+      x.strokeRect(S.lx - r, S.ly - r, 2 * r, 2 * r);
+      if (on) { x.beginPath(); x.moveTo(S.lx - r - 8, S.ly); x.lineTo(S.lx - r, S.ly); x.moveTo(S.lx + r, S.ly); x.lineTo(S.lx + r + 8, S.ly); x.moveTo(S.lx, S.ly - r - 8); x.lineTo(S.lx, S.ly - r); x.moveTo(S.lx, S.ly + r); x.lineTo(S.lx, S.ly + r + 8); x.stroke(); }
+      x.font = '700 13px sans-serif'; x.textAlign = 'center'; x.fillStyle = on ? '#ff3020' : '#f2c230';
+      x.fillText(on ? 'KİLİTLİ' : 'KİLİTLENİYOR ' + Math.round(k * 100) + '%', S.lx, S.ly - r - 10);
+    }
+    x.fillStyle = 'rgba(230,230,230,0.75)'; x.font = '500 12px sans-serif'; x.textAlign = 'center'; // alt orta: mini harita sol altta
+    x.fillText('Sol tık: top  ·  Q: roket (kilitliyse güdümlü füze)  ·  Hedefi 1,5 sn nişangâhta tut: kilit', cx, H - 16);
   }
   drawScope(x, W, H, cx, cy) {
     const R = H * 0.47;
@@ -127,5 +163,21 @@ export class Reticle {
     // büyütme yazısı
     x.fillStyle = 'rgba(230,230,230,0.75)'; x.font = '600 13px sans-serif'; x.textAlign = 'right';
     x.fillText('×' + this.state.zoom.toFixed(1), cx + R * 0.68, cy + R * 0.72);
+    // [C2] GTA tarzı: sağda dikey yakınlaştırma çubuğu, altta nefes göstergesi ve tuş ipucu (siyah çerçeve üstünde)
+    const S = this.state, zr = S.zr;
+    if (zr) {
+      const bx = cx + R + Math.min(60, (W / 2 - R) * 0.4), by0 = cy + R * 0.4, by1 = cy - R * 0.4;
+      const k = Math.max(0, Math.min(1, Math.log(S.zoom / zr[0]) / Math.log(zr[1] / zr[0])));
+      x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 2; x.beginPath(); x.moveTo(bx, by0); x.lineTo(bx, by1); x.stroke();
+      for (let i = 0; i <= 4; i++) { const y = by0 + (by1 - by0) * i / 4; x.beginPath(); x.moveTo(bx - 5, y); x.lineTo(bx + 5, y); x.stroke(); }
+      x.fillStyle = '#f2c230'; const y = by0 + (by1 - by0) * k; x.fillRect(bx - 9, y - 2, 18, 4);
+    }
+    const st = Math.min(1, S.stam / 20), aw = R * 0.36, ay = cy + R * 0.86; // nefes göstergesi mercek içinde, altta
+    {
+      x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(cx - aw / 2, ay - 2, aw, 4);
+      x.fillStyle = S.breath ? '#7ec8ff' : 'rgba(255,255,255,0.7)'; x.fillRect(cx - aw / 2, ay - 2, aw * st, 4);
+    }
+    x.fillStyle = 'rgba(230,230,230,0.6)'; x.font = '500 12px sans-serif'; x.textAlign = 'left';
+    x.fillText('Teker: yakınlaştır  ·  Shift: nefesini tut', 16, H - 16);
   }
 }

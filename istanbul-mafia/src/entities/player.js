@@ -91,7 +91,11 @@ export class Player extends Actor {
     this.camPitch += dPitch;
     this.recoverRecoil(dt, dYaw, dPitch);
     this.camPitch = clamp(this.camPitch, PITCH_UP, PITCH_DOWN);
-    if (input.mouse.wheel && this.scoped && this.wdef.zoom2) { this.scopeLvl = this.scopeLvl ? 0 : 1; } // [C1] dürbün 2 kademe
+    // [C2] dürbün: fare tekeriyle kademesiz yakınlaştırma (GTA tarzı); hedef büyütme scopeZT, görünen scopeZ yumuşak izler
+    if (input.mouse.wheel && this.scoped && this.wdef.zoom2) {
+      const W = this.wdef, zMin = W.zoom * 0.5, zMax = W.zoom2 * 1.4;
+      this.scopeZT = clamp((this.scopeZT || W.zoom) * Math.pow(1.2, -input.mouse.wheel), zMin, zMax);
+    }
     else if (input.mouse.wheel && !input.down('ShiftLeft')) {
       if (!this.vehicle) this.cycleWeapon(input.mouse.wheel > 0 ? 1 : -1);
     }
@@ -400,7 +404,10 @@ export class Player extends Actor {
     // araçtan ateş (tabanca/uzi)
     this.computeAim();
     const def = this.wdef;
-    if (def.oneHand && input.mouse.right) {
+    // [C2] silahlı helikopter: sağ tık nişan kamerası (burun altı), ateşi helikopter silahları yapar (kişisel silah ateşlenmez)
+    this.heliAim = !!(v.heli && v.def.armed && input.mouse.right && !v.destroyed);
+    if (v.kind === 'air' && v.def.armed) { this.aiming = this.heliAim; }
+    else if (def.oneHand && input.mouse.right) {
       this.aiming = true;
       const wantFire = def.auto ? input.mouse.left : input.mouse.leftPressed;
       if (wantFire && !this.animalBlock(def)) {
@@ -438,14 +445,25 @@ export class Player extends Actor {
       const travel = fwdSpd >= -0.5 ? v.heading + angleWrap(velYaw - v.heading) * 0.45 : v.heading + Math.PI;
       const lead = clamp((v.yawRate || 0) * 0.22, -0.3, 0.3); // dönüşe doğru öne bakış
       const idle = this.carCamIdle;
-      if (idle > 1.0 && (Math.abs(fwdSpd) > 2 || this.carCam > 2)) {
+      this.zoomNow = 1;
+      if (idle > 1.0 && !this.heliAim && (Math.abs(fwdSpd) > 2 || this.carCam > 2)) {
         // fare bakışından sonra: yavaşça hızlanan dönüş (ani savrulma yok)
         const rate = 4.2 * Math.min(1, (idle - 1.0) / 0.7);
         this.camYaw = dampAngle(this.camYaw, travel + lead, rate, dt);
         this.camPitch = damp(this.camPitch, this.carCam > 2 ? 0.04 : 0.2 - Math.min(0.06, sp * 0.002), rate * 0.7, dt);
       }
       fov += Math.min(16, Math.max(0, Math.abs(fwdSpd) - 4) * (this.carCam > 2 ? 0.42 : 0.3));
-      if (this.carCam > 2) {
+      if (this.heliAim) {
+        // [C2] helikopter nişan kamerası: burun altı taret, bakış fareyle serbest, 3× yakınlaştırma
+        v.mesh.updateMatrixWorld();
+        const lp = v.mesh.localToWorld(tmp.set(0, 0.35, 3.6));
+        cam.position.copy(lp);
+        const yaw = this.camYaw, pitch = clamp(this.camPitch, -0.5, 1.2);
+        _look.set(lp.x + Math.sin(yaw) * Math.cos(pitch) * 10, lp.y - Math.sin(pitch) * 10, lp.z + Math.cos(yaw) * Math.cos(pitch) * 10);
+        cam.lookAt(_look);
+        fov = g.settings.fov / 3; this.zoomNow = 3;
+        this.camInit = false; this.camDistNow = 0.5;
+      } else if (this.carCam > 2) {
         // kaput / tampon kamerası: kasaya bağlı (yalpa ve burun dalışı hissedilir), bakış serbest
         const ch = v.mesh.userData.chassis, d = v.def;
         v.mesh.updateMatrixWorld();
@@ -511,14 +529,16 @@ export class Player extends Actor {
       this.cSide = A > 0.001 ? wantSide : damp(this.cSide, wantSide, 10, dt);
       this.cH = damp(this.cH, wantH, 8, dt);
       this.cSh = damp(this.cSh, this.shoulder, 9, dt);
-      const zoom = this.dead ? 1 : 1 + (((W.zoom2 && this.scopeLvl ? W.zoom2 : W.zoom) || 1.3) - 1) * Ae;
+      if (W.zoom2) { this.scopeZT = this.scopeZT || W.zoom; this.scopeZ = aimScope ? Math.exp(damp(Math.log(this.scopeZ || this.scopeZT), Math.log(this.scopeZT), 12, dt)) : this.scopeZT; }
+      const zoom = this.dead ? 1 : 1 + (((W.zoom2 ? this.scopeZ : W.zoom) || 1.3) - 1) * Ae;
       this.zoomNow = zoom;
       fov = fov / zoom;
       if (sprinting) fov += 6;
       // dürbün salınımı (nefes): Shift ile tutulur
       if (aimScope) {
         this.swayT = (this.swayT || 0) + dt;
-        const k = (this.holdBreath ? 0.15 : 1) * (this.crouch ? 0.6 : 1) * 0.0016;
+        // nefes tutulunca salınım durur; nefes bitince (dayanıklılık tükendi) bir süre daha güçlü sallanır
+        const k = (this.holdBreath ? 0.12 : this.stamina < 12 ? 1.8 : 1) * (this.crouch ? 0.6 : 1) * 0.0016 * Math.sqrt(zoom / 6);
         this.camYaw += Math.cos(this.swayT * 0.9) * k * dt * 6; this.camPitch += Math.sin(this.swayT * 1.7) * k * dt * 5;
       }
       const yaw = this.camYaw, lookPitch = this.dead ? 0.6 : this.camPitch;

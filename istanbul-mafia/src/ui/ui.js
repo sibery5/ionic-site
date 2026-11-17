@@ -156,7 +156,8 @@ export class UI {
   showClickToResume(v) { this.clickEl.classList.toggle('show', !!v); }
   bigMessage(title, sub = '', color = 'gold', dur = 3) {
     const b = this.h.bigmsg;
-    b.className = 'bigmsg show ' + color;
+    b.className = 'bigmsg show ' + color + (title.length > 30 ? ' long2' : title.length > 18 ? ' long' : '');
+    const h1 = this.h.bigTitle; h1.style.animation = 'none'; void h1.offsetWidth; h1.style.animation = ''; // üst üste gelen yazı yeniden girer
     this.h.bigTitle.textContent = title;
     this.h.bigSub.textContent = sub;
     this.bigT = dur;
@@ -1293,9 +1294,11 @@ export class UI {
   // ======================= ÖLÜM / TUTUKLANMA =======================
   wasted(title, sub, done) {
     const o = this.overlayEl;
-    o.innerHTML = `<h1>${title}</h1><p>${sub}</p>`;
-    o.className = 'overlay show ' + (title === 'TUTUKLANDIN' ? 'blue' : 'red');
+    o.innerHTML = `<div class="strip"><h1>${title}</h1><p>${sub}</p></div>`; // [C2] GTA tarzı şerit
+    const cls = 'overlay show ' + (title === 'TUTUKLANDIN' ? 'blue' : 'red');
+    o.className = cls;
     document.body.classList.add('desat'); this.game._desat = true;
+    setTimeout(() => { o.className = cls + ' out'; }, 3900); // yumuşak çıkış
     setTimeout(() => { o.className = 'overlay hidden'; document.body.classList.remove('desat'); this.game._desat = false; done && done(); }, 4500);
   }
 }

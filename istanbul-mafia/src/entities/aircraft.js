@@ -222,6 +222,13 @@ const _dir = new THREE.Vector3(), _d2 = new THREE.Vector3(), _o = new THREE.Vect
 const GUN_HELI = { name: 'Burun Topu', type: 'rifle', range: 420, dmg: 55, sound: 'ak', flash: 2.5, shell: false };
 const GUN_JET = { name: 'Uçak Topu', type: 'rifle', range: 650, dmg: 60, sound: 'm4', flash: 3, shell: false };
 const ROCKET_HELI = { name: 'Roket', type: 'launcher', dmg: 220, radius: 7 };
+const MISSILE_HELI = { name: 'Güdümlü Füze', type: 'launcher', dmg: 260, radius: 7 };
+// [C2] füze kilidi: hedef nişangâh konisinde LOCK_T sn tutulunca kilit; füze dönüş hızı sınırlı (sert manevrayla kaçılabilir)
+export const LOCK_T = 1.5, LOCK_CONE = 0.9985, LOCK_KEEP = 0.995, LOCK_RANGE = 650, MIS_TURN = 1.7, MIS_SPEED = 75;
+const _lt = new THREE.Vector3(), _ld = new THREE.Vector3(), _lq = new THREE.Quaternion(), _lq0 = new THREE.Quaternion();
+// hedefin dünya konumu (araç gövde ortası / hava hedefi) ve hızı
+function lockPos(T, out) { const P = T.pos; out.set(P.x, P.y + (T.r ? 0 : T.kind === 'air' ? 0.5 : 0.8), P.z); return out; }
+function lockAlive(T) { return T && !T.dead && !T.destroyed && !(T.sinking > 0); }
 const MISSILE_JET = { name: 'Füze', type: 'launcher', dmg: 380, radius: 10 };
 export class Aircraft extends Vehicle {
   constructor(game, type, x, z, heading, color) {
@@ -254,7 +261,9 @@ export class Aircraft extends Vehicle {
     this.mesh.updateMatrixWorld();
     const q = this.mesh.quaternion;
     const nose = _dir.set(0, 0, 1).applyQuaternion(q);
-    if (m.left && !m.right && this.gunT <= 0) {
+    // [C2] helikopter: sağ tık nişan kamerası (player.heliAim); sol tık her durumda burun topu (sağ tıkta tabanca ateşi yok)
+    if (this.heli) this.updateLock(pl, dt);
+    if (m.left && this.gunT <= 0) {
       this.gunT = this.heli ? 0.09 : 0.05;
       const o = this.mesh.localToWorld(_o.set(0, this.heli ? 0.9 : 2.1, this.heli ? 4.2 : 6.5));
       const d = _d2.copy(this.heli && pl.aimDir ? pl.aimDir : nose);
@@ -270,18 +279,80 @@ export class Aircraft extends Vehicle {
       this.side = -(this.side || 1);
       const o = this.mesh.localToWorld(_o.set(this.side * (this.heli ? 1.75 : this.def.span * 0.31), this.heli ? 1.45 : 1.6, this.heli ? 0.6 : -0.5));
       const d = _d2.copy(nose);
-      if (this.heli && pl.aimDir && pl.aimDir.dot(nose) > 0.8) d.lerp(pl.aimDir, 0.5).normalize();
-      g.combat.rocket(pl, o.clone(), d.clone(), this.heli ? ROCKET_HELI : MISSILE_JET);
+      const lk = this.heli && this.lock && this.lock.on && lockAlive(this.lock.on) ? this.lock.on : null;
+      // nişanda roket nişangâha gider (burun yönüne yakınsa tam, değilse yarı); kilitliyken füze hedefe döner
+      if (this.heli && pl.aimDir && (pl.heliAim || lk) && pl.aimDir.dot(nose) > 0.5) d.copy(pl.aimDir);
+      else if (this.heli && pl.aimDir && pl.aimDir.dot(nose) > 0.8) d.lerp(pl.aimDir, 0.5).normalize();
+      g.combat.rocket(pl, o.clone(), d.clone(), this.heli ? (lk ? MISSILE_HELI : ROCKET_HELI) : MISSILE_JET);
       // [araç silahı] füze hızı = platform hızı + itki (combat.rocket sabit 55 m/s verir)
       const pr = g.combat.projectiles && g.combat.projectiles[g.combat.projectiles.length - 1];
-      if (pr && pr.vel) { pr.vel.copy(d).multiplyScalar(this.heli ? 80 : 130); pr.vel.x += this.vx; pr.vel.y += this.vy; pr.vel.z += this.vz; pr.life = 6; }
+      if (pr && pr.vel) { pr.vel.copy(d).multiplyScalar(this.heli ? (lk ? MIS_SPEED : 80) : 130); pr.vel.x += this.vx; pr.vel.y += this.vy; pr.vel.z += this.vz; pr.life = 6; }
+      if (pr && lk) { (this.guided || (this.guided = [])).push({ pr, T: lk }); if (g.ui && g.ui.notify) g.ui.notify('Füze ateşlendi — hedef kilitli', 'info'); }
       audio.gunshot('rpg', o.x, o.z);
       if (g.particles.backblast) g.particles.backblast(o, _d2.copy(d).negate());
+    }
+  }
+  // [C2] kilit: nişandayken konideki en yakın hedef LOCK_T sn tutulursa kilitlenir. lock.k 0..1 ilerleme, lock.on kilitli hedef
+  updateLock(pl, dt) {
+    const L = this.lock || (this.lock = { cand: null, on: null, t: 0, lost: 0, beep: 0, k: 0 });
+    const g = this.game;
+    if (!pl.heliAim || !pl.aimDir) { L.cand = null; L.on = null; L.t = 0; L.k = 0; return; }
+    const o = this.pos, a = pl.aimDir;
+    // kilitli hedef konide kalıyor mu (biraz daha geniş koni)
+    if (L.on) {
+      const ok = lockAlive(L.on) && this.lockDot(L.on, o, a) > LOCK_KEEP;
+      L.lost = ok ? 0 : L.lost + dt;
+      if (L.lost > 0.6) { L.on = null; L.t = 0; L.k = 0; }
+      return;
+    }
+    let best = null, bd = LOCK_CONE;
+    const scan = (T) => { if (T === this || !lockAlive(T)) return; const k = this.lockDot(T, o, a); if (k > bd) { bd = k; best = T; } };
+    for (const v of g.vehicles.list) scan(v);
+    if (g.combat.targets) for (const T of g.combat.targets) if (T.owner !== pl && T.pos) scan(T);
+    if (best && best === L.cand) L.t += dt;
+    else if (best) { L.cand = best; L.t = 0; }
+    else { L.t = Math.max(0, L.t - dt * 2); if (L.t <= 0) L.cand = null; }
+    L.k = Math.min(1, L.t / LOCK_T);
+    L.beep -= dt;
+    if (L.cand && L.k < 1 && L.beep <= 0) { L.beep = 0.32 - 0.2 * L.k; audio.tone && audio.tone({ freq: 880, dur: 0.06, type: 'square', gain: 0.07 }); }
+    if (L.cand && L.k >= 1) { L.on = L.cand; L.lost = 0; audio.tone && audio.tone({ freq: 1320, dur: 0.35, type: 'square', gain: 0.09 }); }
+  }
+  lockDot(T, o, a) {
+    lockPos(T, _lt).sub(o);
+    const d = _lt.length();
+    if (d < 15 || d > LOCK_RANGE) return -1;
+    return _lt.dot(a) / d;
+  }
+  // [C2] güdüm: füze hedefe (öngörülü) döner, dönüş hızı MIS_TURN rad/s ile sınırlı; 3 m yakınlık tapası
+  updateGuided(dt) {
+    const G = this.guided, P = this.game.combat && this.game.combat.projectiles;
+    if (!G || !G.length || !P) return;
+    for (let i = G.length - 1; i >= 0; i--) {
+      const m = G[i], pr = m.pr;
+      if (P.indexOf(pr) < 0 || !lockAlive(m.T)) { G.splice(i, 1); continue; }
+      const sp = pr.vel.length();
+      lockPos(m.T, _lt);
+      const dist = _lt.distanceTo(pr.pos);
+      if (dist < 3) { pr.life = 0; G.splice(i, 1); continue; }
+      const tgo = Math.min(2, dist / Math.max(20, sp));
+      _lt.x += (m.T.vx || 0) * tgo; _lt.y += (m.T.vy || 0) * tgo; _lt.z += (m.T.vz || 0) * tgo;
+      _ld.copy(_lt).sub(pr.pos).normalize();
+      _lt.copy(pr.vel).divideScalar(sp || 1);
+      const ang = Math.acos(clamp(_lt.dot(_ld), -1, 1));
+      if (ang > 1e-4) {
+        _lq.setFromUnitVectors(_lt, _ld);
+        _lq0.identity().slerp(_lq, Math.min(1, MIS_TURN * dt / ang));
+        _lt.applyQuaternion(_lq0);
+      }
+      pr.vel.copy(_lt).multiplyScalar(Math.min(MIS_SPEED * 1.4, sp + 12 * dt));
+      pr.mesh.lookAt(pr.pos.x + _lt.x, pr.pos.y + _lt.y, pr.pos.z + _lt.z);
+      m.dist = dist;
     }
   }
   update(dt) {
     const g = this.game, d = this.def, ud = this.mesh.userData, phys = g.physics;
     this.updateFire(dt);
+    this.updateGuided(dt);
     const c = this.controls;
     const live = !!this.driver && !this.destroyed && this.sinking <= 0;
     const isPlayer = live && this.driver.isPlayer;

@@ -43,6 +43,7 @@ const [W, H] = opt('--boyut', '1600x900').split('x').map(Number);
       console.log(JSON.stringify(await p.evaluate((i) => atolye.bilgi(i), id)));
       if (flag('--arac')) { console.log(JSON.stringify(await p.evaluate((i) => atolye.aracOlcu(i), id))); if (!views.length || flag('--resimsiz')) continue; }
       if (flag('--olcu')) console.log(JSON.stringify(await p.evaluate((i) => atolye.olcu(i), id)));
+      if (flag('--poz')) console.log('poz', id, JSON.stringify(await p.evaluate((i) => atolye.pozOlc(i), id)));
       if (flag('--tutus')) console.log('tutus', id, JSON.stringify(await p.evaluate((i) => atolye.tutusOlc(i), id)));
       for (const v of views) {
         const url = await p.evaluate(([i, vv]) => atolye.shot(i, vv), [id, v]);

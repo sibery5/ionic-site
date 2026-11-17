@@ -9,7 +9,7 @@ import { CARS } from '../game/economy.js';
 import { buildCarModel, Vehicle, getTemplate } from '../entities/vehicles.js';
 import { buildAircraftModel, AIR_TYPES } from '../entities/aircraft.js';
 import { buildBoatModel, BOAT_TYPES } from '../entities/boats.js';
-import { buildWeaponModel, WEAPON_ORDER } from '../game/weapons.js';
+import { buildWeaponModel, WEAPON_ORDER, WEAPONS } from '../game/weapons.js';
 import { CharacterModel, defaultLook, randomLook } from '../entities/character.js';
 import { REIS_LOOK, KENAN_LOOK, LEYLA_LOOK, ALI_LOOK } from '../game/story_data.js';
 import { RNG } from '../core/util.js';
@@ -40,6 +40,35 @@ CAT['tutus:ak-bosta'] = holding('ak', { twoHanded: true });
 CAT['tutus:bicak'] = holding('knife', {});
 CAT['tutus:eskisilah'] = () => { window.__noProps = true; return holding('pistol', { aim: true })(); };
 CAT['tutus:yumruk'] = () => { const root = holding('pistol', { aim: true })(); const m = root.userData.model; if (m) for (const A of m.arms) { A.fi.rotation.set(0, 0, -A.s * 1.5); A.fd.rotation.set(0, 0, -A.s * 1.45); } root.updateMatrixWorld(true); return root; };
+// [poz] hareket pozları denetimi (C2): koşu döngüsünün belirli anında dondurulmuş kare. f(i) -> animate durumu; n kare; sonra isteğe bağlı fn(m)
+const posed = (wid, n, f, fn) => () => {
+  const mr = Math.random, r = new RNG(11); Math.random = () => r.next();
+  try {
+    const m = new CharacterModel(defaultLook('m')); m.seed = 0.5; m.forceLod = 0; m.setLod(0); if (wid) m.setWeapon(wid);
+    for (let i = 0; i < n; i++) { if (fn) fn(m, i); m.animate(1 / 60, { force: true, speed: 0, ...f(i) }); }
+    m.root.userData.model = m; return m.root;
+  } finally { Math.random = mr; }
+};
+const yuru = (v, extra) => (i) => ({ speed: v, moveZ: 1, ...extra });
+CAT['poz:ayakta'] = posed(null, 90, () => ({}));
+CAT['poz:yuru'] = posed(null, 97, yuru(1.4));
+CAT['poz:kos'] = posed(null, 97, yuru(3.6));
+CAT['poz:depar'] = posed(null, 97, yuru(6.5));
+CAT['poz:comel'] = posed(null, 90, () => ({ crouch: true }));
+CAT['poz:comel-yuru'] = posed(null, 97, yuru(1.5, { crouch: true }));
+// zıplama: 0-20 yerde koşu, sonra havada; kare sayısı evreyi seçer (yükseliş / tepe / düşüş / iniş)
+const zipla = (n) => posed(null, n, (i) => { const ta = (i - 30) / 60; const air = i >= 30 && ta < 0.8; return { speed: 3, moveZ: 1, air, vy: air ? 4.2 - 9.8 * ta : 0 }; });
+CAT['poz:zipla-hazir'] = zipla(31); CAT['poz:zipla-yuksel'] = zipla(42); CAT['poz:zipla-tepe'] = zipla(56); CAT['poz:zipla-dus'] = zipla(72); CAT['poz:zipla-inis'] = zipla(84);
+// yumruk: vuruşun belirli anı (combo 1 = sol düz, 2 = sağ düz, 3 = kroşe)
+const yumruk = (k, frac) => posed(null, 60 + 1, () => ({}), (m, i) => { if (i === 60 - Math.round(frac * 22)) { m.combo = k - 1; m.punch(); } });
+CAT['poz:yumruk-sol'] = yumruk(1, 0.45); CAT['poz:yumruk-sag'] = yumruk(2, 0.45); CAT['poz:krose'] = yumruk(3, 0.5); CAT['poz:gard'] = posed(null, 70, () => ({}), (m, i) => { if (i === 10) { m.combo = 1; m.punch(); } }); // vuruştan 1 sn sonra gard
+// tırmanma (vault 0..1 evresi)
+// tırmanma (mantle.js evreleri: vaultT bacak salınımı, mantleHang kollar yukarı)
+// kenar: duvar yüzü kökün 0,3 m önünde; top = kenarın köke göre yüksekliği (asılı 1,95, çekiş ortası 1,2, aşarken 0,45)
+const tirman = (u, h, top) => posed(null, 90, () => ({ vault: u }), (m) => { m.mantleHang = h; m.mantleEdge = { top, fx: 0, fz: 0.3, dx: 0, dz: 1 }; });
+CAT['poz:tirman-tutun'] = tirman(0.001, 1, 1.86); CAT['poz:tirman-cek'] = tirman(0.12, 0.7, 1.2); CAT['poz:tirman-bacak'] = tirman(0.5, 0.25, 0.45);
+// [C2] tüm ateşli silahlarda nişan tutuşu (tutus2:<silah>) ve boşta tutuş (tutus2:<silah>-bosta)
+for (const w of WEAPON_ORDER) { const d = WEAPONS[w]; if (!d || (d.type !== 'gun' && d.type !== 'launcher')) continue; CAT['tutus2:' + w] = holding(w, { aim: true, twoHanded: !d.oneHand }); if (!d.oneHand) CAT['tutus2:' + w + '-bosta'] = holding(w, { twoHanded: true }); }
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
 CAT['insan:reis'] = person(REIS_LOOK);
 CAT['insan:kenan'] = person(KENAN_LOOK);
@@ -218,5 +247,16 @@ export function tutusOlc(id) {
     }
     if (n) out[bn] = acc.divideScalar(n).toArray().map((x) => +x.toFixed(3));
   }
+  return out;
+}
+
+// [poz] kemik yükseklikleri (m): baş, kalça, diz, ayak; çömelme oranı = baş / ayakta baş
+export function pozOlc(id) {
+  const { obj } = place(id);
+  obj.updateMatrixWorld(true);
+  let mesh = null; obj.traverse((o) => { if (o.isSkinnedMesh && !mesh) mesh = o; });
+  if (!mesh) return null;
+  const out = {}, v = V(0, 0, 0);
+  for (const b of mesh.skeleton.bones) if (/^(head|hips|knL|knR|anL|anR|wrL|wrR|shL|shR|chest)$/.test(b.name)) { b.getWorldPosition(v); out[b.name] = v.toArray().map((x) => +x.toFixed(3)); }
   return out;
 }
