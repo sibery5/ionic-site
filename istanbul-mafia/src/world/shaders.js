@@ -248,10 +248,19 @@ export function facadeMaterial(quality) {
         vec3 lp = vLP * vDim; float H = vDim.y;
         if (vLN.y > 0.5) {
           // düz çatı yüzeyi: çakıl/zift
+          // [V2] çatı kaplaması binaya göre değişir: beton karo (derz), zift membran (bindirme şeritleri) ya da çakıl;
+          // kenarlara doğru kir/yağmur izi. Kuşbakışında tek düze gri "karton" yüzey yerine malzeme okunur.
           vec4 pa = texture2D(tPA, vWP.xz / 3.0);
-          float n = texture2D(tNoise, vWP.xz / 17.0).g;
-          diffuseColor.rgb = vec3(0.36, 0.35, 0.33) * (0.7 + pa.r * 0.4) * (0.8 + n * 0.4) * (1.0 - uWet * 0.35);
-          fRough = mix(0.9, 0.3, uWet);
+          float n = texture2D(tNoise, vWP.xz / 17.0).g, n2 = texture2D(tNoise, vWP.xz / 4.3).r;
+          float kindR = fract(seed * 7.13);
+          vec3 rc = kindR < 0.4 ? vec3(0.52, 0.5, 0.47) : kindR < 0.75 ? vec3(0.24, 0.24, 0.25) : vec3(0.43, 0.41, 0.37);
+          float pat = 1.0;
+          if (kindR < 0.4) { vec2 g2 = fract(vWP.xz / 0.6); pat = 1.0 - 0.28 * (step(g2.x, 0.04) + step(g2.y, 0.04)); }
+          else if (kindR < 0.75) { float sx = fract((st == 4.0 ? vWP.z : vWP.x) / 1.0); pat = 1.0 - 0.22 * step(0.94, sx); }
+          vec2 ed = min(lp.xz + vDim.xz * 0.5, vDim.xz * 0.5 - lp.xz);
+          float edge = smoothstep(0.0, 1.6, min(ed.x, ed.y));
+          diffuseColor.rgb = rc * pat * (0.72 + pa.r * 0.35) * (0.78 + n * 0.3 + n2 * 0.12) * mix(0.7, 1.0, edge) * (1.0 - uWet * 0.35);
+          fRough = mix(kindR < 0.75 && kindR >= 0.4 ? 0.7 : 0.92, 0.3, uWet);
         } else if (vLN.y < -0.5) {
           diffuseColor.rgb = base * 0.4;
         } else {

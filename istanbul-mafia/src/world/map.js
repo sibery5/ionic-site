@@ -391,7 +391,7 @@ export class CityMap {
         const inset = r.float(0, 1.2);
         const bz0 = rz0 + (face === -1 ? inset : 0.4), bz1 = rz1 - (face === 1 ? inset : 0.4);
         let floors = r.int(d.floors[0], d.floors[1]);
-        if (towerZone) floors = r.int(12, 40);
+        if (towerZone) { floors = r.int(14, 44); if ((this.buildings.length * 7919) % 5 === 0) floors += 10; } // [V2] mega şehir: daha yüksek ve çeşitli kuleler (eski 12-40)
         else if (r.chance(0.04)) floors += r.int(2, 6);
         const h = floors * 3.2 + 0.6;
         const doorX = (x0 + x1) / 2;

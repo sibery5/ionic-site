@@ -182,10 +182,53 @@ export function buildBuildings(city) {
       roofs.add(boxG(t, ph, d - 2 * t, b.x1 - t / 2, b.h, cz, style === 4 ? 2 : 1, pc), cx, cz);
       if (style !== 4) roofs.add(boxG(w + 0.5, 0.35, d + 0.5, cx, b.h - 0.4, cz, 1, trimCol), cx, cz); // korniş
       if (style === 4) {
-        // kule tepesi: geri çekilmiş makine katı + anten
-        roofs.add(boxG(w * 0.5, 4, d * 0.5, cx, b.h, cz, 2, [0.4, 0.45, 0.5]), cx, cz);
-        if (b.floors > 25) roofs.add(boxG(0.4, 14, 0.4, cx, b.h + 4, cz, 1, [0.8, 0.8, 0.8]), cx, cz);
+        // [V2] kule tepesi: kule biçimine göre (b.id) kademeli taç, eğik/kesik tepe ya da helipad; makine katı, anten,
+        // uçak ikaz ışıkları (gece kırmızı) ve gece yanan taç ışık bandı. Taç cam cephe gövdesiyle aynı şaderi kullanır.
+        const kind = b.id % 4, crownH = 3 * 3.2;
+        let topY = b.h, tw = w, td = d;
+        if (b.floors >= 18 && kind !== 3) {
+          const k1 = kind === 0 ? 0.78 : 0.68;
+          tw = w * k1; td = d * k1;
+          m.compose(v3.set(cx, b.h, cz), q.identity(), s3.set(tw, crownH, td));
+          shells.add(m, col, { aStyle: [style, ((b.colorIdx * 13) % 997) / 997, fcode, flags], aInfo: [0, 0.2, 3.2, age] });
+          roofs.add(boxG(w, 0.6, d, cx, b.h - 0.2, cz, 2, pc), cx, cz); // kademe silmesi
+          topY = b.h + crownH;
+          if (kind === 1 && b.floors >= 28) { // ikinci kademe: ince sivri taç
+            m.compose(v3.set(cx, topY, cz), q.identity(), s3.set(tw * 0.6, crownH * 0.8, td * 0.6));
+            shells.add(m, col, { aStyle: [style, ((b.colorIdx * 17) % 997) / 997, fcode, flags], aInfo: [0, 0.2, 3.2, age] });
+            topY += crownH * 0.8; tw *= 0.6; td *= 0.6;
+          }
+        }
+        if (topY > b.h) cols.add(cx - tw / 2, cz - td / 2, cx + tw / 2, cz + td / 2, b.h, topY + 3.6, 'crown');
+        // taç ışık bandı (gece yanar; gündüz koyu cam şerit)
+        for (const [sx, sz, ry, ln] of [[0, td / 2 + 0.06, 0, tw], [0, -td / 2 - 0.06, 0, tw], [tw / 2 + 0.06, 0, Math.PI / 2, td], [-tw / 2 - 0.06, 0, Math.PI / 2, td]]) P.crownband.addTRS(cx + sx, topY - 1.1, cz + sz, ry, ln + 0.1, 1, 1);
+        if (kind === 3) { // helipadli düz tepe
+          roofs.add(boxG(Math.min(tw, td) * 0.8, 0.5, Math.min(tw, td) * 0.8, cx, topY, cz, 1, [0.32, 0.34, 0.36]), cx, cz);
+          P.avlight.addTRS(cx + tw / 2 - 0.6, topY + 0.9, cz + td / 2 - 0.6, 0); P.avlight.addTRS(cx - tw / 2 + 0.6, topY + 0.9, cz - td / 2 + 0.6, 0);
+        } else {
+          roofs.add(boxG(tw * 0.55, 3.6, td * 0.55, cx, topY, cz, 2, [0.4, 0.45, 0.5]), cx, cz); // makine katı
+          roofs.add(boxG(tw * 0.58, 0.3, td * 0.58, cx, topY + 3.6, cz, 1, [0.62, 0.64, 0.66]), cx, cz);
+          // soğutma kuleleri / fanlar
+          for (const sx of [-1, 1]) roofs.add(boxG(2.2, 1.6, 2.2, cx + sx * tw * 0.36, topY, cz - td * 0.3, 1, [0.55, 0.57, 0.58]), cx, cz);
+          const ah = b.floors > 25 ? 16 : 7;
+          roofs.add(boxG(0.45, ah, 0.45, cx, topY + 3.9, cz, 1, [0.82, 0.82, 0.84]), cx, cz);
+          roofs.add(boxG(0.2, ah * 0.6, 0.2, cx + 1.4, topY + 3.9, cz + 0.8, 1, [0.82, 0.82, 0.84]), cx, cz);
+          P.avlight.addTRS(cx, topY + 3.9 + ah + 0.3, cz, 0);
+          P.avlight.addTRS(cx + tw / 2 - 0.4, topY + 0.85, cz + td / 2 - 0.4, 0); P.avlight.addTRS(cx - tw / 2 + 0.4, topY + 0.85, cz - td / 2 + 0.4, 0);
+        }
       } else {
+        // [V2] kuşbakışı "karton" görüntüye karşı: merdiven/asansör makine dairesi (kapılı), havalandırma bacaları,
+        // klima öbeği; hepsi çatı birleşik geometrisinde (yeni çizim çağrısı yok)
+        const rr = new RNG(b.id * 9973 + 7); // ayrı tohum: genel RNG sırası (renk, balkon) değişmesin
+        if (w > 7 && d > 7 && rr.chance(0.75)) {
+          const mx = b.x0 + rr.float(1.6, w - 4.2), mz = b.z0 + rr.float(1.6, d - 3.8), mw = rr.float(2.4, 3.2), md = rr.float(2.2, 2.8);
+          roofs.add(boxG(mw, 2.5, md, mx + mw / 2, b.h, mz + md / 2, 1, trimCol.map((c) => c * 0.92)), cx, cz);
+          roofs.add(boxG(mw + 0.3, 0.15, md + 0.3, mx + mw / 2, b.h + 2.5, mz + md / 2, 1, [0.5, 0.5, 0.5]), cx, cz);
+          roofs.add(boxG(0.9, 2.0, 0.06, mx + mw / 2, b.h, mz + md + 0.02, 1, [0.35, 0.3, 0.26]), cx, cz); // kapı
+          cols.add(mx, mz, mx + mw, mz + md, b.h, b.h + 2.65, 'roofProp');
+        }
+        for (let k = rr.int(0, 3); k > 0; k--) roofs.add(boxG(0.35, 1.1, 0.35, b.x0 + rr.float(0.8, w - 0.8), b.h, b.z0 + rr.float(0.8, d - 0.8), 1, [0.55, 0.52, 0.5]), cx, cz);
+        if (rr.chance(0.4)) { const ax = b.x0 + rr.float(1.5, Math.max(1.6, w - 2.5)), az = b.z0 + rr.float(1.2, Math.max(1.3, d - 2)); for (let k = 0; k < 3; k++) roofs.add(boxG(0.9, 0.7, 0.6, ax + k * 1.05, b.h, az, 1, [0.82, 0.82, 0.8]), cx, cz); }
         // güneş enerjili su ısıtıcısı / su deposu / çanak anten
         if (r.chance(0.45)) { const sx = b.x0 + r.float(2, Math.max(2.1, w - 3)), sz = b.z0 + r.float(2, Math.max(2.1, d - 3)); P.solar.addTRS(sx, b.h, sz, r.chance(0.5) ? 0 : Math.PI, 1, 1, 1); cols.add(sx - 1, sz - 0.75, sx + 1, sz + 0.75, b.h, b.h + 1.85, 'roofProp'); }
         if (r.chance(0.3)) { P.watertank.addTRS(b.x0 + 1.6, b.h, b.z1 - 1.6, 0); cols.addCircle(b.x0 + 1.6, b.z1 - 1.6, 0.7, b.h, b.h + 1.7, 'roofProp'); }
@@ -208,6 +251,13 @@ export function buildBuildings(city) {
     let signA0 = 1e9, signA1 = -1e9, signLow = false;
     if (key && fcode < 2) { const sxw = dd.x + (nz > 0 ? signOff : -signOff), a = fcode === 0 ? sxw - b.x0 : b.x1 - sxw; signA0 = a - sw / 2 - 0.3; signA1 = a + sw / 2 + 0.3; }
     const overSign = (a0, a1) => a1 > signA0 && a0 < signA1;
+    // [V2] cephe derinliği: zemin kat üstünde silme bandı (dükkân katını ayırır), çatı altında ikinci ince silme
+    if (style !== 4 && style !== 3 && b.floors >= 2) {
+      for (const yb of [3.65, b.h - 1.0]) {
+        roofs.add(boxG(w + 0.24, 0.22, 0.12, cx, yb, b.z1 + 0.06, 1, trimCol), cx, cz); roofs.add(boxG(w + 0.24, 0.22, 0.12, cx, yb, b.z0 - 0.06, 1, trimCol), cx, cz);
+        roofs.add(boxG(0.12, 0.22, d, b.x1 + 0.06, yb, cz, 1, trimCol), cx, cz); roofs.add(boxG(0.12, 0.22, d, b.x0 - 0.06, yb, cz, 1, trimCol), cx, cz);
+      }
+    }
     // ---- cumba (çıkma) ----
     if (!b.tower && b.floors >= 2 && fcode < 2 && (style === 3 || ((style === 0 || style === 1) && CUMBA_K[b.district.id] && b.floors <= 6 && r.chance(CUMBA_K[b.district.id])))) {
       const span = Math.min(ncol, ncol >= 3 ? 2 : 1);
@@ -318,6 +368,9 @@ export function buildSmallMosqueTop(b) { return smallMosqueTop(b); }
 
 // ---- Cephe/çatı ayrıntı geometrileri (GeoBuilder, eşya malzemesi) ----
 export const FACADE_PROP_DEFS = {
+  // [V2] kule tepesi: uçak ikaz ışığı (kırmızı, gece parlar) ve taç ışık bandı (gece sıcak beyaz)
+  avlight: () => new GeoBuilder().box(0.5, 0.5, 0.5, { color: 0xff2a14, emis: 2.2, rough: 0.4 }).box(0.6, 0.12, 0.6, { y: -0.12, color: 0x333333 }).build(),
+  crownband: () => new GeoBuilder().box(1, 0.7, 0.08, { color: 0xffe6c0, emis: 0.9, rough: 0.3 }).build(),
   balcony: () => new GeoBuilder().box(1, 0.16, 1.15, { z: 0.575, rough: 0.8 }).build(),
   railing: () => new GeoBuilder()
     .plane(1, 1, { x: 0, y: 0.58, z: 1.12, uv: 'railing', color: 0x222222, metal: 0.6, rough: 0.5 })
@@ -372,6 +425,7 @@ export const FACADE_PROP_DEFS = {
 };
 // LOD yarıçapı, gölge, çift yüz
 export const FACADE_PROP_OPTS = {
+  avlight: { radius: 2400 }, crownband: { radius: 2400 }, // [V2]
   balcony: { radius: 320, shadow: true }, railing: { radius: 220, double: true }, glassrail: { radius: 260, double: true },
   sill: { radius: 160 }, ac: { radius: 140 }, dish: { radius: 260 }, solar: { radius: 300, shadow: true }, watertank: { radius: 280 },
   door: { radius: 220 }, awning: { radius: 260, double: true, shadow: true }, atm: { radius: 120 }, forsale: { radius: 300, double: true },
