@@ -269,6 +269,8 @@ const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
 const NO_STYLE = { zone: 'torso', heavy: false };
+const GRIP_OFF = { shotgun: 0.33, sniper: 0.32, ak: 0.27, m4: 0.28, rpg: 0.24, cifte: 0.3 };
+const GRIP_UP = { cifte: 0.045 };
 export const SOCK = { x: 0.028, y: 0.07, z: 0.036 }; // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
@@ -1570,10 +1572,11 @@ export class CharacterModel {
     let leftW = 0;
     const F = V.F;
     if (twoH) {
-      const off = { shotgun: 0.33, sniper: 0.32, ak: 0.27, m4: 0.28, rpg: 0.24 }[wid] || 0.27;
-      F.copy(G).addScaledVector(dir, off * bs).addScaledVector(U, -0.025 * bs);
+      // [C2] destek eli ön tutamakta: silah başına kabzadan uzaklık (namlu ekseni) ve yükseklik (atölye tutus2:<silah> silahic)
+      const off = GRIP_OFF[wid] || 0.27, up = GRIP_UP[wid] || -0.025;
+      F.copy(G).addScaledVector(dir, off * bs).addScaledVector(U, up * bs);
       leftW = gunW;
-    } else if (wid !== 'uzi' && wid !== 'grenade') {
+    } else if (wid !== 'grenade') { // [C2] uzi de iki elle (destek eli tetik elini sarar)
       F.copy(G).addScaledVector(dir, -0.03 * bs).addScaledVector(U, -0.035 * bs).addScaledVector(R, -0.015 * bs);
       leftW = gunW * W.aim;
     }
