@@ -178,6 +178,9 @@ export function buildMilitary(city) {
     const f = city.fenceLine(a, b2, c, d, 'chain', H, 'razor');
     if (f) f.noClimb = true;
   }
+  // ---- [V2] kuzey kıyı: deniz (z=-1000 kıyı çizgisi) ile kuzey caddesi (z=-985, 11 m) arasında yol boyunca zincir çit.
+  // Yolun kenarı z=-990,5; çit kıyıdan 1,2 m içeride, kaldırımı yola bırakır. Çarpışmalı; tırmanılabilir (askeri çit değil).
+  city.fenceLine(-999, -998.8, -700, -998.8, 'chain', 2.0);
   // ---- nizamiye: dış + iç bariyer, kulübe, kapı direkleri, kum torbası mevzileri, uyarı tabelaları ----
   P.booth.addTRS(gx + 9, 0, MB.z1 - 2.8, Math.PI); cols.add(gx + 8.2, MB.z1 - 3.6, gx + 9.8, MB.z1 - 2.0, 0, 2.6, 'booth');
   P.barrier.addTRS(gx - 5, 0, MB.z1, 0); addBarrier(city, gx - 5, MB.z1, 0, 0);

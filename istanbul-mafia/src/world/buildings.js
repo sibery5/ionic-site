@@ -199,6 +199,15 @@ export function buildBuildings(city) {
       P.dish.addTRS(ax, b.h + (b.roof === 'flat' ? 0 : Math.min(w, d) * 0.1), az, r.float(0, 6.28), 1, 1, 1);
     }
 
+    // ---- [V2] tabela yeri (balkon/çıkma denetimi için önce hesaplanır): tabela 3,42 m'de, üst kenarı ~3,97 m —
+    // birinci kat balkon döşemesi 3,72 m'de 1,15 m dışarı çıkar; aynı sütunlarda ikisi iç içe geçiyordu.
+    let key = null, sw = 4.2, sh = 0.8;
+    if (special && SPECIAL_INFO[b.type] && SPECIAL_INFO[b.type].label) { key = 'sp:' + b.type; sw = Math.min(b.type === 'police' ? 7.5 : b.type === 'avm' ? 12 : 5.5, L - 1); sh = b.type === 'police' ? 1.1 : 1.1; }
+    else if (b.sign >= 0 && b.type === 'apartment') key = 'shop:' + SHOP_SIGNS[b.sign % SHOP_SIGNS.length];
+    const signOff = b.type === 'apartment' && L > 9 ? 3.2 : 0;
+    let signA0 = 1e9, signA1 = -1e9, signLow = false;
+    if (key && fcode < 2) { const sxw = dd.x + (nz > 0 ? signOff : -signOff), a = fcode === 0 ? sxw - b.x0 : b.x1 - sxw; signA0 = a - sw / 2 - 0.3; signA1 = a + sw / 2 + 0.3; }
+    const overSign = (a0, a1) => a1 > signA0 && a0 < signA1;
     // ---- cumba (çıkma) ----
     if (!b.tower && b.floors >= 2 && fcode < 2 && (style === 3 || ((style === 0 || style === 1) && CUMBA_K[b.district.id] && b.floors <= 6 && r.chance(CUMBA_K[b.district.id])))) {
       const span = Math.min(ncol, ncol >= 3 ? 2 : 1);
@@ -207,6 +216,7 @@ export function buildBuildings(city) {
       const [px, pz] = frontPos(along0 + wid / 2, 0.45);
       const ch = b.h - 0.5 - 3.8;
       if (ch > 2.5) {
+        if (overSign(along0, along0 + wid)) signLow = true;
         m.compose(v3.set(px, 3.8, pz), q.identity(), s3.set(fcode < 2 ? wid : 0.9, ch, fcode < 2 ? 0.9 : wid));
         shells.add(m, col, { aStyle: [style, ((b.colorIdx * 7) % 997) / 997, fcode, 2], aInfo: [0, 0, 3.2, age * 0.6] });
         { const hw = (fcode < 2 ? wid : 0.9) / 2, hd = (fcode < 2 ? 0.9 : wid) / 2; cols.add(px - hw, pz - hd, px + hw, pz + hd, 3.45, 3.8 + ch + 0.2, 'cumba'); }
@@ -222,6 +232,7 @@ export function buildBuildings(city) {
       for (let f = 1; f < b.floors; f++) for (let i = 0; i < Math.min(ncol, 15); i++) {
         if (!(bmask & (1 << i))) continue;
         const bw = Math.min(cw - 0.3, style === 5 ? 3.2 : 2.6);
+        if (f === 1 && overSign((i + 0.5) * cw - bw / 2, (i + 0.5) * cw + bw / 2)) continue; // [V2] tabelanın üstündeki 1. kat balkonu yok
         const [px, pz] = frontPos((i + 0.5) * cw, 0);
         const y = 3.8 + (f - 1) * 3.2;
         P.balcony.addTRS(px, y - 0.08, pz, rotY, bw, 1, 1, col.clone().lerp(new THREE.Color(1, 1, 1), 0.3));
@@ -243,16 +254,14 @@ export function buildBuildings(city) {
     P.door.addTRS(dd.x, 0.15, dd.z, rotY, 1, 1, 1, new THREE.Color(special ? '#6a4a1a' : ['#4a2c1a', '#2a3a4a', '#3a2a1a', '#5a1a1a', '#1a3a2a', '#e8e4dc'][b.colorIdx % 6]));
     city.doors.push({ x: dd.x + nx * 0.8, z: dd.z + nz * 0.8, building: b });
     // ---- tabela ve tente ----
-    let key = null, sw = 4.2, sh = 0.8;
-    if (special && SPECIAL_INFO[b.type] && SPECIAL_INFO[b.type].label) { key = 'sp:' + b.type; sw = Math.min(b.type === 'police' ? 7.5 : b.type === 'avm' ? 12 : 5.5, L - 1); sh = b.type === 'police' ? 1.1 : 1.1; }
-    else if (b.sign >= 0 && b.type === 'apartment') key = 'shop:' + SHOP_SIGNS[b.sign % SHOP_SIGNS.length];
     if (key && fcode < 2) {
-      const off = b.type === 'apartment' && L > 9 ? 3.2 : 0;
-      const [px, pz] = [dd.x + (nz > 0 ? off : -off), dd.z + nz * 0.13];
+      const [px, pz] = [dd.x + (nz > 0 ? signOff : -signOff), dd.z + nz * 0.13];
+      // [V2] çıkma (cumba konsolu 3,45 m) tabelanın üstündeyse tabela ve tente konsolun altına iner
+      const dy = signLow ? Math.min(0, 3.4 - (3.42 + sh / 2)) : 0;
       q.setFromAxisAngle(up, rotY);
-      m.compose(v3.set(px, 3.42, pz), q, s3.set(sw, sh, 1));
+      m.compose(v3.set(px, 3.42 + dy, pz), q, s3.set(sw, sh, 1));
       signs.add(m, null, { aUV: atlas.uv(key) });
-      if (b.type === 'apartment' || SHOP_TYPES.has(b.type)) P.awning.addTRS(px, 2.95, dd.z + nz * 0.05, rotY, sw / 4.2, 1, 1, new THREE.Color(['#a01818', '#1d5a2d', '#1d3d6e', '#c98a1a', '#6e1d5a', '#e0e0e0'][b.colorIdx % 6]));
+      if (b.type === 'apartment' || SHOP_TYPES.has(b.type)) P.awning.addTRS(px, 2.95 + dy, dd.z + nz * 0.05, rotY, sw / 4.2, 1, 1, new THREE.Color(['#a01818', '#1d5a2d', '#1d3d6e', '#c98a1a', '#6e1d5a', '#e0e0e0'][b.colorIdx % 6]));
     }
     if (b.type === 'bank' || (b.sign >= 0 && b.colorIdx % 9 === 0)) { const [ax, az] = frontPos(Math.min(L - 1, 1.2), 0.02); P.atm.addTRS(ax, 0.15, az, rotY); cols.addLocal(ax, az, rotY, 0, 0.18, 0.95, 0.38, 0, 1.85, 'atm'); }
     if (b.forSale && fcode < 2) { const [px, pz] = frontPos(L / 2, 0.06); P.forsale.addTRS(px, 4.6, pz, rotY); }
