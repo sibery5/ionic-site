@@ -127,8 +127,8 @@ export class Reticle {
       x.font = '700 13px sans-serif'; x.textAlign = 'center'; x.fillStyle = on ? '#ff3020' : '#f2c230';
       x.fillText(on ? 'KİLİTLİ' : 'KİLİTLENİYOR ' + Math.round(k * 100) + '%', S.lx, S.ly - r - 10);
     }
-    x.fillStyle = 'rgba(230,230,230,0.7)'; x.font = '500 12px sans-serif'; x.textAlign = 'left';
-    x.fillText('Sol tık: top  ·  Q: roket (kilitliyse güdümlü füze)  ·  Hedefi 1,5 sn nişangâhta tut: kilit', 16, H - 16);
+    x.fillStyle = 'rgba(230,230,230,0.75)'; x.font = '500 12px sans-serif'; x.textAlign = 'center'; // alt orta: mini harita sol altta
+    x.fillText('Sol tık: top  ·  Q: roket (kilitliyse güdümlü füze)  ·  Hedefi 1,5 sn nişangâhta tut: kilit', cx, H - 16);
   }
   drawScope(x, W, H, cx, cy) {
     const R = H * 0.47;
@@ -172,8 +172,8 @@ export class Reticle {
       for (let i = 0; i <= 4; i++) { const y = by0 + (by1 - by0) * i / 4; x.beginPath(); x.moveTo(bx - 5, y); x.lineTo(bx + 5, y); x.stroke(); }
       x.fillStyle = '#f2c230'; const y = by0 + (by1 - by0) * k; x.fillRect(bx - 9, y - 2, 18, 4);
     }
-    const st = Math.min(1, S.stam / 20), aw = R * 0.5, ay = cy + R + Math.min(26, (H / 2 - R) * 0.6 + 6);
-    if (ay < H - 4) {
+    const st = Math.min(1, S.stam / 20), aw = R * 0.36, ay = cy + R * 0.86; // nefes göstergesi mercek içinde, altta
+    {
       x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(cx - aw / 2, ay - 2, aw, 4);
       x.fillStyle = S.breath ? '#7ec8ff' : 'rgba(255,255,255,0.7)'; x.fillRect(cx - aw / 2, ay - 2, aw * st, 4);
     }

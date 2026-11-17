@@ -365,7 +365,7 @@ table.trade .cheap { color: var(--good); } table.trade .dear { color: var(--red2
 .prompt.show { opacity: 1; }
 .prompt kbd { margin-right: 8px; border-color: var(--gold); color: var(--gold2); }
 /* [C2] büyük yazı: GTA tarzı yarı saydam siyah yatay şerit + sarı/kırmızı yazı, yumuşak giriş/çıkış */
-.bigmsg { position: fixed; top: 34vh; left: 0; right: 0; text-align: center; opacity: 0; padding: 16px 0 18px; pointer-events: none;
+.bigmsg { position: fixed; z-index: 30; top: 34vh; left: 0; right: 0; text-align: center; opacity: 0; padding: 16px 0 18px; pointer-events: none;
   background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.62) 18%, rgba(0,0,0,0.62) 82%, rgba(0,0,0,0) 100%);
   transition: opacity 0.45s ease, visibility 0s linear 0.45s; visibility: hidden; }
 .bigmsg.show { opacity: 1; visibility: visible; transition: opacity 0.45s ease, visibility 0s; }
