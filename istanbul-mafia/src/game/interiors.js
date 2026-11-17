@@ -10,6 +10,7 @@ import { GANGS } from './economy.js';
 import { buildBakkal, buildMarket, buildKafe, decorateGunShop } from './shop_interiors.js'; // [şehir]
 import { buildMall } from './mall.js'; // [şehir]
 import { buildApartment, safehouseSeats } from './home_interior.js'; // [şehir]
+import { captureOutside, windowMaterial } from './outside_view.js'; // [V2]
 import { Kit } from './interior_kit.js'; // [şehir]
 
 const NAMES = {
@@ -40,6 +41,15 @@ export class Interiors {
       npcGroup: new THREE.Group(), pickupGroup: new THREE.Group(), name: placeName(type, b), peaceful: false,
     };
     scene.add(ctx.npcGroup); scene.add(ctx.pickupGroup);
+    // [V2] camlardan dışarısı: şehir henüz kapının önündeki hâliyle duruyorken bina içinden küp görüntü (outside_view.js)
+    {
+      const dn = b.door || { nx: 0, nz: 1 };
+      let at = b.view;
+      if (!at && b.x0 !== undefined) { const h = b.h || 6; at = { x: (b.x0 + b.x1) / 2, y: Math.max(1.8, Math.min(h * 0.35, h - 1)), z: (b.z0 + b.z1) / 2 }; }
+      if (!at) at = { x: door.x - (dn.nx || 0) * 3, y: 2, z: door.z - (dn.nz || 0) * 3 };
+      ctx.outside = captureOutside(g, at, Math.atan2(dn.nx || 0, dn.nz === undefined ? 1 : dn.nz));
+      ctx.outsideMs = captureOutside.lastMs;
+    }
     this.current = ctx;
     // şehir NPC'lerini dondur
     g.npcs.stash(ctx.npcGroup);
@@ -86,6 +96,8 @@ export class Interiors {
     if (ctx.onExit) ctx.onExit(); // [şehir] AVM: silah sesi kancasını geri al
     if (ctx.mall) ctx.mall.crowd.clear(); // [şehir]
     ctx.scene.traverse((o) => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); });
+    if (ctx.winMat) ctx.winMat.dispose();
+    if (ctx.dispose) ctx.dispose(); // [V2] villa: güvenlik kamerası hedefi
   }
 
   // ---------- yapı yardımcıları ----------
@@ -112,12 +124,28 @@ export class Interiors {
     const sconce = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
     for (const sx of [-1.05, 1.05]) { const a = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.1), sconce); a.position.set(sx, 2.15, d / 2 - 0.06); s.add(a); }
     const dl = new THREE.PointLight(0xffdcae, 5, 7, 1.6); dl.position.set(0, 2.6, d / 2 - 1.2); s.add(dl);
+    // [V2] kapı duvarında iki pencere (sokağa bakar): dış görüntü küpünü gösterir
+    if (ctx.outside && !ctx.noWindows && w >= 6) this.windows(ctx, [[-w / 4 - 0.4, Math.min(2.2, w / 4)], [w / 4 + 0.4, Math.min(2.2, w / 4)]], d / 2, Math.PI, Math.min(1.0, h - 2.2), Math.min(1.5, h - 1.6));
     // çıkış kapısı
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.3, 0.08), new THREE.MeshStandardMaterial({ color: 0x4a2c1a }));
     door.position.set(0, 1.15, d / 2 - 0.05); s.add(door);
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 }));
     knob.position.set(0.5, 1.05, d / 2 - 0.12); s.add(knob);
     ctx.interact.push({ x: 0, z: d / 2 - 0.6, r: 1.3, label: 'Dışarı çık', action: () => this.exit() });
+  }
+  // [V2] Duvar penceresi: list = [[merkez (duvar boyunca), genişlik]], wz duvar düzlemi (z), rotY cam yüzünün dönüşü,
+  // y0 denizlik yüksekliği, wh pencere yüksekliği. Cam düzlemi dış görüntüyü (ctx.outside) bakış yönüyle örnekler.
+  windows(ctx, list, wz, rotY, y0, wh) {
+    const s = ctx.scene, mat = ctx.winMat || (ctx.winMat = windowMaterial(ctx.outside));
+    const frame = ctx.winFrame || (ctx.winFrame = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.6 }));
+    const sg = Math.sign(wz) || 1, iz = wz - sg * 0.012;
+    for (const [cx, ww] of list) {
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), mat); pane.position.set(cx, y0 + wh / 2, iz); pane.rotation.y = rotY; s.add(pane);
+      for (const [bw, bh, x, y] of [[ww + 0.16, 0.08, cx, y0 - 0.04], [ww + 0.16, 0.08, cx, y0 + wh + 0.04], [0.08, wh, cx - ww / 2 - 0.04, y0 + wh / 2], [0.08, wh, cx + ww / 2 + 0.04, y0 + wh / 2], [0.05, wh, cx, y0 + wh / 2], [ww, 0.05, cx, y0 + wh * 0.62]]) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.06), frame); f.position.set(x, y, iz - sg * 0.02); s.add(f);
+      }
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.3, 0.05, 0.22), frame); sill.position.set(cx, y0 - 0.1, wz - sg * 0.11); s.add(sill);
+    }
   }
   box(ctx, w, h, d, x, y, z, mat, collide = true, rotY = 0) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
