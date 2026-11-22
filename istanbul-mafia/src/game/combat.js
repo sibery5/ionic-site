@@ -96,6 +96,7 @@ function tracerGeometry() {
   return g;
 }
 
+const KD_KNEE = { mode: 'knee', k: 0.7 }, _kdBlast = { mode: 'blast', k: 0.6 }; // [tepki] devrilme kipleri (model.kdNext)
 export class Combat {
   constructor(game) {
     this.game = game;
@@ -606,12 +607,12 @@ export class Combat {
       // başa isabet (kask/zırh sayesinde hayatta): ağır sersemleme, geriye savrulma; güçlü darbede yere düşer
       target.knock = { x: dir.x * 1.8 * strong, z: dir.z * 1.8 * strong, t: 0.3 };
       target.stunT = Math.max(target.stunT || 0, 0.7 + 0.3 * strong);
-      if (strong > 1.1 && Math.random() < 0.45 && target.knockdown) target.knockdown(dir.x, dir.z, 2.2);
+      if (strong > 1.1 && Math.random() < 0.45 && target.knockdown) target.knockdown(dir.x, dir.z, 2.9);
     }
     if (zone === 'leg' && strong > 1.1) {
       target.knock = { x: dir.x * 0.6, z: dir.z * 0.6, t: 0.2 };
       // ağır bacak isabeti: dizinin üstüne çöker
-      if (target.limp > 0.9 && Math.random() < 0.3 && target.knockdown) target.knockdown(dir.x, dir.z, 1.7);
+      if (target.limp > 0.5 && Math.random() < 0.45 && target.knockdown) { M.kdNext = KD_KNEE; target.knockdown(dir.x, dir.z, 2.4 + Math.random()); M.kdNext = null; }
     }
     const pb = zone === 'head' ? 1 : zone === 'torso' ? 0.65 : 0.45;
     if (Math.random() < pb) this.applyBleed(target, attacker, 0.8 + Math.random() * 1.6, 8 + Math.random() * 8);
@@ -845,8 +846,11 @@ export class Combat {
           a.knock = { x: ux * 8 * k, z: uz * 8 * k, t: 0.3 };
           // [mekanik tepki] patlama dalgası: yakındakiler yere savrulur
           // oyuncu: yalnız yakın patlamada ve kalktıktan sonra kısa dokunulmazlıkla (art arda yere kilitlenmesin)
-          if (a.isPlayer) { if (k > 0.45 && !(a.kdImmT > 0)) a.knockdown(ux, uz, 1.1 + 1.1 * k); }
-          else if (k > 0.25 && a.knockdown) a.knockdown(ux, uz, 1.8 + 1.6 * k);
+          // savrulma kipi: havaya kalkar, döner, yere çarpar, yuvarlanır; kalkış (en az 1,2 sn) bu sürenin içinde
+          const KB = a.model && (a.model.kdNext = _kdBlast); if (KB) KB.k = k;
+          if (a.isPlayer) { if (k > 0.45 && !(a.kdImmT > 0)) a.knockdown(ux, uz, 2.5 + 1.0 * k); }
+          else if (k > 0.25 && a.knockdown) a.knockdown(ux, uz, 2.8 + 1.6 * k);
+          if (a.model) a.model.kdNext = null;
         } else {
           tmp.set(a.pos.x, a.pos.y + 1, a.pos.z);
           _a.set(a.pos.x - x, 0.6, a.pos.z - z).normalize();

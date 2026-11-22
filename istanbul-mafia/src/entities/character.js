@@ -226,7 +226,7 @@ const dmp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const sm = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
 const smR = (a, b, x) => sm((x - a) / (b - a));
 const fract = (x) => x - Math.floor(x);
-function setJ(P, j, x, y, z) { P[j * 3] = x; P[j * 3 + 1] = y; P[j * 3 + 2] = z; }
+function setJ(P, j, x, y = 0, z = 0) { P[j * 3] = x; P[j * 3 + 1] = y; P[j * 3 + 2] = z; }
 function addJ(P, j, x, y, z) { P[j * 3] += x; P[j * 3 + 1] += y; P[j * 3 + 2] += z; }
 function mixP(P, Q, w, from = 0, to = NCH) { if (w <= 0) return; if (w >= 1) { for (let i = from; i < to; i++) P[i] = Q[i]; return; } for (let i = from; i < to; i++) P[i] += (Q[i] - P[i]) * w; }
 function mixJ(P, Q, w, list) { if (w <= 0) return; for (const j of list) for (let k = 0; k < 3; k++) P[j * 3 + k] += (Q[j * 3 + k] - P[j * 3 + k]) * Math.min(1, w); }
@@ -269,6 +269,51 @@ const TWQ = q4(), TWQ2 = q4(), TWQI = q4();
 const WOUND = { geo: null, mat: null, mat2: null, n: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1), prone: { x: 0, z: 1 } };
 const LEN_T = 0.43, LEN_S = 0.41;
 const NO_STYLE = { zone: 'torso', heavy: false };
+let ANK_PRONE = 1.0; export const _setAnk = (v) => { ANK_PRONE = v; }; // [tepki] yüzüstü ayak bileği uzanması
+// [tepki] kalkış ve dize çökme anahtar pozları (yükleme anında bir kez; kare içinde bellek ayırma yok).
+// kp(hipsRot, hipsYmutlak, hipsZ, eklemler): eklem değerleri sol taraf için; R için ayna = kanal takası (SIDE y/z'yi çevirir)
+function kp(hx, hy, hz, yAbs, oz, js) {
+  const A = new Float32Array(NCH);
+  setJ(A, J.hips, hx, hy, hz);
+  for (const k in js) { const v = js[k]; setJ(A, J[k], v[0], v[1] || 0, v[2] || 0); }
+  A[HP + 1] = yAbs - RIG.hips; A[HP + 2] = oz;
+  return A;
+}
+const LR = [[J.shL, J.shR], [J.elL, J.elR], [J.wrL, J.wrR], [J.hipL, J.hipR], [J.knL, J.knR], [J.anL, J.anR], [J.toeL, J.toeR]];
+function mirrorKP(A) { const B = Float32Array.from(A); for (const [l, r] of LR) for (let c = 0; c < 3; c++) { B[l * 3 + c] = A[r * 3 + c]; B[r * 3 + c] = A[l * 3 + c]; } B[J.hips * 3 + 1] *= -1; B[J.hips * 3 + 2] *= -1; B[J.spine * 3 + 1] *= -1; B[J.spine * 3 + 2] *= -1; B[J.chest * 3 + 1] *= -1; B[J.chest * 3 + 2] *= -1; for (const j of [J.neck, J.head]) { B[j * 3 + 1] *= -1; B[j * 3 + 2] *= -1; } B[HP] *= -1; return B; }
+const STAND = kp(0, 0, 0, RIG.hips, 0, { shL: [0, 0, 0.08], shR: [0, 0, 0.08], elL: [-0.15], elR: [-0.15] });
+// yarım diz (sol ayak önde, sağ diz yerde): iki kalkışın da son ara pozu
+const HALFKNEEL = kp(0.25, 0, 0, 0.5, 0.1, { hipL: [-1.8, 0, 0.1], knL: [1.55], anL: [-0.1], hipR: [-0.18, 0, 0.05], knR: [1.62], anR: [0.7], toeR: [-0.6], spine: [0.22], chest: [0.08], neck: [-0.15], head: [-0.15], shL: [-0.75, 0, 0.1], elL: [-0.65], shR: [-0.3, 0, 0.25], elR: [-0.35] });
+// yüzüstüden: şınav → dört ayak → yarım diz → ayakta (baş +z, ayaklar kökte)
+const RISE_PRONE = [
+  [0.0, null],
+  [0.26, kp(1.18, 0, 0, 0.27, 0.74, { hipL: [0.1, 0, 0.06], hipR: [0.1, 0, 0.06], knL: [0.1], knR: [0.25], anL: [0.5], anR: [0.5], spine: [-0.22], chest: [-0.1], neck: [-0.3], head: [-0.25], shL: [-1.25, 0, 0.18], shR: [-1.25, 0, 0.18], elL: [-0.25], elR: [-0.25] })],
+  [0.52, kp(1.36, 0, 0, 0.49, 0.42, { hipL: [-1.38, 0, 0.06], hipR: [-1.38, 0, 0.06], knL: [1.55], knR: [1.55], anL: [0.55], anR: [0.55], spine: [0.05], neck: [-0.35], head: [-0.4], shL: [-1.36, 0, 0.1], shR: [-1.36, 0, 0.1], elL: [-0.1], elR: [-0.1] })],
+  [0.78, HALFKNEEL],
+  [1.0, STAND],
+];
+// sırtüstünden: dirsek/ele dayanıp yana dönerek doğrul → bacak altına, el yerde dize gel → yarım diz → ayakta (baş -z)
+const RISE_SUPINE = [
+  [0.0, null],
+  [0.3, kp(-0.5, 0.35, 0.15, 0.17, -0.62, { hipL: [-1.2, 0, 0.12], knL: [0.6], hipR: [-1.6, 0, 0.2], knR: [1.3], anR: [0.4], spine: [0.28, 0.1], chest: [0.1], head: [0.15], shR: [0.55, 0, 0.5], elR: [-0.12], shL: [-0.85, 0, 0.15], elL: [-0.7] })],
+  [0.56, kp(0.6, 0.28, 0, 0.44, -0.24, { hipR: [-0.55, 0, 0.05], knR: [1.7], anR: [0.6], toeR: [-0.5], hipL: [-2.1, 0, 0.12], knL: [1.55], spine: [0.3], neck: [-0.2], head: [-0.2], shR: [-1.05, 0, 0.3], elR: [-0.15], shL: [-0.9, 0, 0.15], elL: [-0.5] })],
+  [0.8, mirrorKP(HALFKNEEL)],
+  [1.0, STAND],
+];
+// bacaktan vurulunca dize çökme: yaralı (sol) diz yerde, gövde öne büzülü
+const KNEEL_HIT = kp(0.32, 0, 0, 0.48, 0.05, { hipR: [-1.85, 0, 0.12], knR: [1.55], anR: [-0.05], hipL: [-0.2, 0, 0.05], knL: [1.65], anL: [0.7], toeL: [-0.6], spine: [0.38], chest: [0.15], neck: [-0.1], head: [-0.2], shL: [-0.3, 0, 0.15], elL: [-0.5], shR: [-0.6, 0, 0.2], elR: [-0.7] });
+const KNEEL_HIT_R = mirrorKP(KNEEL_HIT);
+const mirrorKeys = (K) => K.map(([u, A]) => [u, A && mirrorKP(A)]);
+const RISE_PRONE_M = mirrorKeys(RISE_PRONE), RISE_SUPINE_M = mirrorKeys(RISE_SUPINE);
+export const REACT_KEYS = { RISE_PRONE, RISE_SUPINE, KNEEL_HIT, HALFKNEEL, STAND }; // test erişimi
+// anahtar pozlar arası yumuşak geçiş; a = başlangıç anlık görüntüsü (null anahtarı)
+function playKeys(P, keys, snap, u) {
+  let i = 1;
+  while (i < keys.length - 1 && u > keys[i][0]) i++;
+  const k0 = keys[i - 1], k1 = keys[i], A = k0[1] || snap, B = k1[1] || snap;
+  const w = sm((u - k0[0]) / Math.max(1e-3, k1[0] - k0[0]));
+  for (let c = 0; c < NCH; c++) P[c] = A[c] + (B[c] - A[c]) * w;
+}
 const GRIP_OFF = { shotgun: 0.33, sniper: 0.32, ak: 0.27, m4: 0.28, rpg: 0.24, cifte: 0.3 };
 const GRIP_UP = { cifte: 0.045 };
 export const SOCK = { x: 0.028, y: 0.07, z: 0.036 }; // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
@@ -301,7 +346,7 @@ export class CharacterModel {
     this.punchT = 0;
     this.P = new Float32Array(NCH);
     this.Q = new Float32Array(NCH);
-    this.D0 = new Float32Array(NCH);
+    this.D0 = new Float32Array(NCH); this.R0 = new Float32Array(NCH); this.R1 = new Float32Array(NCH);
     this.DS = new Float32Array(NCH);
     this.w = { crouch: 0, aim: 0, air: 0, swim: 0, sit: 0, up: 0, talk: 0, dance: 0, idle: 1, reload: 0, hold: 0, cower: 0, phone: 0, smoke: 0, cross: 0, watch: 0, behind: 0, look: 0 };
     this.spd = 0; this.mvx = 0; this.mvz = 1; this.acc = 0; this.prevSpd = 0;
@@ -473,6 +518,37 @@ export class CharacterModel {
     Z.zone = zone; Z.side = side > 0 ? 1 : -1; Z.k = clamp(k, 0.3, 1.6); Z.x = lx / l; Z.z = lz / l;
     Z.dur = zone === 'head' ? 0.6 : zone === 'leg' ? 0.55 : 0.4; Z.t = Z.dur;
   }
+  // [tepki] yarayı tutan el: IK ile yaranın üstüne. Dönüş: tutan elin dizini (-1 yok). aimK: silah nişan ağırlığı
+  clutchHand(CL, clW, aimK = 0) {
+    let clH = -1;
+    {
+      const hs = CL.zone === 'arm' ? -CL.side : CL.side; // tutan elin tarafı (+1 sağ)
+      clH = hs > 0 ? 1 : 0;
+      if (clH === 1 && this.weaponMesh) clH = CL.zone === 'arm' ? -1 : 0; // silah eli tutmaz
+      const wH = clH < 0 ? 0 : clW * (clH === 1 || !this.weaponMesh ? 1 : 1 - 0.85 * aimK);
+      if (wH > 0.02) {
+        this.root.updateMatrixWorld(true);
+        const A = this.arms[clH], hy = this.root.rotation.y, fx = Math.sin(hy), fz = Math.cos(hy), lx = Math.cos(hy), lz = -Math.sin(hy);
+        const xs = -CL.side; // yaranın tarafı: +1 sol
+        if (CL.zone === 'arm') {
+          const B2 = this.arms[CL.side > 0 ? 1 : 0];
+          B2.sh.getWorldPosition(WV.shL); B2.el.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.4);
+          WV.wT.x += fx * 0.05 - lx * xs * 0.02; WV.wT.z += fz * 0.05 - lz * xs * 0.02;
+        } else if (CL.zone === 'leg') {
+          const L = this.legs[CL.side > 0 ? 1 : 0];
+          L.hip.getWorldPosition(WV.shL); L.kn.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.55);
+          WV.wT.x += fx * 0.09; WV.wT.z += fz * 0.09;
+        } else {
+          WV.wT.set(xs * 0.075, 0.05, 0.13); this.spine.localToWorld(WV.wT);
+        }
+        A.sh.getWorldPosition(WV.shL);
+        const ps = clH === 0 ? 1 : -1;
+        WV.pole.copy(WV.shL); WV.pole.x += lx * ps * 0.6 - fx * 0.25; WV.pole.y -= 0.7; WV.pole.z += lz * ps * 0.6 - fz * 0.25;
+        this.solveArm(A, WV.wT, WV.pole, null, wH);
+      }
+    }
+    return clH;
+  }
   // [tepki] yarayı tutma: zone 'torso' | 'arm' | 'leg'; side +1 sağ; dur sn; k şiddet (0..1)
   setClutch(zone, side, dur = 5, k = 1) {
     if (zone !== 'torso' && zone !== 'arm' && zone !== 'leg') return;
@@ -485,12 +561,132 @@ export class CharacterModel {
     if (was) { C.t = Math.max(C.t, dur); C.dur = Math.max(C.dur, C.t); } else { C.t = dur; C.dur = dur; }
   }
   // [mekanik tepki] yere savrulma (patlama / araç çarpması): düşer, bir süre yatar, kalkar. dur: toplam süre (sn)
-  knockdown(dirX, dirZ, dur = 2.2) {
+  // mode: 'fall' (devrilme) | 'blast' (patlama: havaya kalkar, döner, yere çarpar, yuvarlanır) | 'fly' / 'hood' (araç: havadayken
+  // kdAir dışarıdan verilir) | 'knee' (bacak isabeti: dize çöker, kalkar). k: şiddet 0..1
+  knockdown(dirX, dirZ, dur = 2.2, mode = 'fall', k = 0.6) {
+    // actor.knockdown kip geçirmez: çağıran önce model.kdNext = { mode, k } yazar
+    if (this.kdNext) { mode = this.kdNext.mode || mode; k = this.kdNext.k !== undefined ? this.kdNext.k : k; this.kdNext = null; }
     const h = this.root.rotation.y, c = Math.cos(h), s = Math.sin(h);
     const lx = dirX * c - dirZ * s, lz = dirX * s + dirZ * c, l = Math.hypot(lx, lz) || 1;
-    if (this.kd) { this.kd.dur = Math.max(this.kd.dur, this.kd.t + dur * 0.6); return; }
-    this.kd = { t: 0, dur: Math.max(1.6, dur), dir: { x: lx / l, z: lz / l } };
+    const K0 = this.kd;
+    if (K0 && !(K0.mode === 'knee' && mode !== 'knee')) { K0.dur = Math.max(K0.dur, K0.t + dur * 0.6); return; }
+    const K = K0 || (this.kdRec || (this.kdRec = { dir: { x: 0, z: 1 } }));
+    K.t = 0; K.dur = Math.max(1.6, dur); K.dir.x = lx / l; K.dir.z = lz / l; K.mode = mode; K.k = clamp(k, 0, 1);
+    K.land = mode === 'fall' || mode === 'knee' ? 0 : -1; K.rise = -1; K.seq = null; K.sd = this.seed % 2 > 1 ? 1 : -1; K.th = 0;
+    K.airT = mode === 'blast' ? 0.28 + 0.4 * K.k : 0;
+    this.kd = K; this.kdAir = mode === 'fly' || mode === 'hood' ? mode : null;
+    this.DS.fill(0); this.kdSettle = false;
     this.D0.set(this.P);
+  }
+  // [tepki] devrilme/kalkışta yere gömülme düzeltmesi: kalkışta ayak/diz yerin altına inerse kalça yükselir;
+  // el yerin altındaysa kol IK ile yer yüzeyine konur (dirsek yukarı)
+  groundFix(P, lift) {
+    this.root.updateMatrixWorld(true);
+    const gy = this.root.matrixWorld.elements[13];
+    if (lift) {
+      let m = 9;
+      for (const L of this.legs) { m = Math.min(m, L.an.getWorldPosition(DTMP).y - 0.06, L.toe.getWorldPosition(DTMP).y - 0.02, L.kn.getWorldPosition(DTMP).y - 0.05); }
+      if (m - gy < -0.005) { P[HP + 1] += gy - m; this.apply(P, 0); this.root.updateMatrixWorld(true); }
+    }
+    for (const A of this.arms) {
+      A.wr.getWorldPosition(WV.wT);
+      A.el.getWorldPosition(WV.pole);
+      const lo = Math.min(WV.wT.y - 0.04, WV.pole.y - 0.05) - gy;
+      if (lo >= 0) continue;
+      if (WV.wT.y < gy + 0.04) WV.wT.y = gy + 0.04;
+      WV.pole.y += 0.6;
+      this.solveArm(A, WV.wT, WV.pole, null, 1);
+    }
+  }
+  // [tepki] yere savrulma pozu: uçuş/devrilme → (yere çarpma, sekme, yuvarlanma) → yatış (acı içinde kıpırdanma) → doğal kalkış
+  poseKnock(P, K, dt) {
+    const T = K.t, d = K.dir;
+    if (K.mode === 'knee') {
+      // dize çökme: 0,3 sn'de vurulan diz yere, eğilip yarayı tutar; sonunda 0,85 sn'de doğrulur
+      const KN = (this.clutch && this.clutch.side > 0) ? KNEEL_HIT_R : KNEEL_HIT;
+      if (!K.seq) { K.seq = 1; this.R0.set(P); }
+      const up = Math.max(0.85, Math.min(1.1, K.dur * 0.35));
+      if (T < K.dur - up) {
+        const u = T / 0.32, w = u < 1 ? u * u : 1 + 0.06 * Math.exp(-(T - 0.32) * 9) * Math.sin((T - 0.32) * 26); // ivmeli çöküş + dizde sekme
+        for (let c = 0; c < NCH; c++) P[c] = this.R0[c] + (KN[c] - this.R0[c]) * Math.min(1.04, w);
+        P[J.spine * 3] += 0.04 * Math.sin(this.time * 2.6); // ağrılı soluk
+        if (T >= K.dur - up - dt) this.R1.set(P);
+      } else {
+        const u = (T - (K.dur - up)) / up;
+        for (let c = 0; c < NCH; c++) P[c] = this.R1[c] + (STAND[c] - this.R1[c]) * sm(u);
+      }
+      return;
+    }
+    const riseDur = Math.min(K.dur - 0.9, K.seqDur || 1.7);
+    // 1) havada: patlamada yukarı yay çizer; savrulma yönünde takla, kollar-bacaklar çırpınır
+    const air = K.land < 0 && (this.kdAir || (K.mode === 'blast' && T < K.airT)) && T < 2.5;
+    if (air) {
+      const Q = this.Q; Q.fill(0);
+      const fl = Math.sin(T * 17), fl2 = Math.sin(T * 13 + 1);
+      if (this.kdAir === 'hood') {
+        // kaputa yatma: arkaya devrilir, bacaklar aracın önünden kalkar, kollar yana açılır
+        K.th = Math.max(-1.35, K.th - dt * 6);
+        setJ(Q, J.hips, K.th, 0, 0.15 * K.sd);
+        setJ(Q, J.hipL, -1.0, 0, 0.15); setJ(Q, J.hipR, -0.7, 0, 0.1); setJ(Q, J.knL, 0.9, 0, 0); setJ(Q, J.knR, 0.5, 0, 0);
+        setJ(Q, J.shL, -0.6, 0, 1.3); setJ(Q, J.shR, -0.4, 0, 1.2); setJ(Q, J.elL, -0.4); setJ(Q, J.elR, -0.5);
+        setJ(Q, J.head, 0.35, 0.3 * K.sd, 0); setJ(Q, J.spine, 0.15, 0, 0);
+        Q[HP + 1] = 0.35 - RIG.hips + 0.95 * 0.3;
+      } else {
+        // takla: savrulma yönünde öne/arkaya dönüş (yüze göre), en çok ~1,5 rad (yere yan/sırt değsin)
+        const spin = (K.mode === 'blast' ? 5.5 : 4.5) * (0.6 + 0.6 * K.k);
+        K.th = Math.min(1.5, K.th + dt * spin);
+        const th = K.th;
+        setJ(Q, J.hips, th * d.z, 0, -th * d.x);
+        setJ(Q, J.shL, -1.1 + 0.5 * fl, 0, 1.25 + 0.3 * fl2); setJ(Q, J.shR, -0.9 - 0.5 * fl2, 0, 1.15 + 0.3 * fl);
+        setJ(Q, J.elL, -0.5 - 0.3 * fl2); setJ(Q, J.elR, -0.6 - 0.3 * fl);
+        setJ(Q, J.hipL, -0.7 + 0.35 * fl, 0, 0.15); setJ(Q, J.hipR, -0.3 - 0.35 * fl, 0, 0.12); setJ(Q, J.knL, 0.9 + 0.3 * fl2); setJ(Q, J.knR, 0.6 - 0.2 * fl2);
+        setJ(Q, J.spine, -0.25 * d.z, 0, 0.2 * d.x); setJ(Q, J.head, -0.3 * d.z, 0.2 * fl2, 0);
+        const ya = K.mode === 'blast' ? 4 * (0.35 + 0.6 * K.k) * (T / K.airT) * (1 - T / K.airT) : 0; // patlamada yay (kök yerde kalır)
+        Q[HP + 1] = 0.5 - RIG.hips + ya; Q[HP] = 0.3 * d.x * Math.sin(th); Q[HP + 2] = 0.3 * d.z * Math.sin(th);
+      }
+      const w = Math.min(1, T / 0.12);
+      for (let c = 0; c < NCH; c++) P[c] = this.D0[c] + (Q[c] - this.D0[c]) * w;
+      this.R1.set(P);
+      return;
+    }
+    if (K.land < 0) { K.land = T; this.D0.set(this.R1); } // yere çarptı: düşüş pozuna uçuş pozundan devam
+    // 2) düşüş / yere çarpma (ölüm pozunun ilk evresi: ivmeli, sekme), sonra yuvarlanma ve yatış
+    const tl = T - K.land, rs = K.dur - riseDur;
+    if (K.rise < 0 && T < rs) {
+      const save = this.deathDir; this.deathDir = d;
+      const Tf = Math.min(1.6, tl + (K.mode === 'fall' ? 0 : 0.5));
+      this.poseDeath(P, Tf);
+      this.deathDir = save;
+      if (K.mode !== 'fall') {
+        // yuvarlanma: uzun eksen etrafında bir tur (hız arttıkça), sonra yerleşme
+        const ru = sm(tl / (0.55 + 0.25 * K.k));
+        if (Math.abs(d.z) > 0.6 && K.k > 0.35) P[J.hips * 3 + 1] += K.sd * Math.PI * 2 * ru;
+        P[J.shL * 3 + 2] += 0.6 * Math.sin(Math.PI * ru); P[J.shR * 3 + 2] += 0.6 * Math.sin(Math.PI * ru);
+      }
+      // yatarken acı: diz çekme, baş kalkıp düşme
+      const lie = smR(1.2, 1.8, tl), ph = this.time;
+      addJ(P, J.knL, 0.35 * lie * (0.5 + 0.5 * Math.sin(ph * 1.3)), 0, 0); addJ(P, J.hipL, -0.25 * lie * (0.5 + 0.5 * Math.sin(ph * 1.3)), 0, 0);
+      addJ(P, J.head, -0.12 * lie * Math.max(0, Math.sin(ph * 0.9)), 0, 0);
+      // yüzüstü yatışta ayak bileği uzanır (parmak ucu yere gömülmesin)
+      const pr = clamp((P[J.hips * 3] - 0.6) / 0.8, 0, 1) * clamp(tl / 0.6, 0, 1);
+      if (pr > 0) { addJ(P, J.anL, ANK_PRONE * pr, 0, 0); addJ(P, J.anR, ANK_PRONE * pr, 0, 0); }
+      // yere gömülmeyi düzelt (yere değdikten sonra): settleGround ölçer, burada eklenir
+      if (tl > 0.3) { this.kdSettle = true; for (let i = 0; i < NCH; i++) P[i] += this.DS[i]; } else this.kdSettle = false;
+      this.R1.set(P);
+      return;
+    }
+    // 3) kalkış: yüzüstüyse şınav → dört ayak → yarım diz; sırtüstüyse yana dönüp doğrul → diz → ayakta
+    if (K.rise < 0) {
+      K.rise = T; this.R0.set(this.R1);
+      // gövdenin yere bakan yüzü: kalça eğimine göre (yan yatış sırtüstü sayılır, yana dönerek kalkar)
+      const px = this.R0[J.hips * 3];
+      // yuvarlanmadan sonra kalça Y açısını 0..2π içine indir (anlık görüntüde tam tur farkı sıçrama yapmasın)
+      const ry = this.R0[J.hips * 3 + 1]; this.R0[J.hips * 3 + 1] = ry - Math.round(ry / (Math.PI * 2)) * Math.PI * 2;
+      const prone = px > 0.5;
+      K.seq = prone ? (K.sd > 0 ? RISE_PRONE : RISE_PRONE_M) : (K.sd > 0 ? RISE_SUPINE : RISE_SUPINE_M);
+    }
+    const u = clamp((T - K.rise) / Math.max(0.6, K.dur - K.rise), 0, 1);
+    playKeys(P, K.seq, this.R0, u);
   }
   // ---- [savaş kancası: yara / topallama / yere yığılma] (API: addWound, clearWounds, setLimp, setDowned) ----
   // boneName: BONES adı; local: kemik uzayında konum (THREE.Vector3); out: dışa normal (kemik uzayı, isteğe bağlı)
@@ -587,7 +783,7 @@ export class CharacterModel {
     // ---- ölüm ----
     if (st.dead) {
       // yerdeyken öldü: yatış pozundan devam (yeniden ayağa kalkıp düşmesin)
-      if (this.deadT === 0 && this.kd) { this.deathDir = this.kd.dir; this.deadT = 1.0; this.DS.fill(0); this.settled = false; }
+      if (this.deadT === 0 && this.kd && this.kd.mode !== 'knee' && this.kd.land >= 0 && this.kd.rise < 0) { this.deathDir = { x: this.kd.dir.x, z: this.kd.dir.z }; this.deadT = 1.0; this.DS.fill(0); this.settled = false; }
       this.kd = null;
       if (this.deadT === 0) { this.D0.set(P); this.DS.fill(0); this.settled = false; if (!this.deathDir) this.die(); }
       this.deadT += dt;
@@ -607,12 +803,15 @@ export class CharacterModel {
     if (this.kd) {
       const K = this.kd;
       K.t += dt;
-      const rise = 0.95, T = K.t < K.dur - rise ? Math.min(1.05, K.t) : Math.max(0, (K.dur - K.t) / rise) * 1.05;
-      const save = this.deathDir; this.deathDir = K.dir;
-      this.poseDeath(P, T);
-      this.deathDir = save;
+      this.kdSettle = false;
+      this.poseKnock(P, K, dt);
       this.apply(P, 0);
+      if (this.kdSettle) this.settleGround(dt);
+      this.groundFix(P, K.rise >= 0 || K.mode === 'knee' || (K.mode === 'blast' && K.land < 0) || (K.mode !== 'fall' && K.land >= 0 && K.t - K.land < 0.9)); // yuvarlanırken gövde de yükselir
       const crk = this._cr || (this._cr = [0, 0]); crk[0] = 0.3; crk[1] = this.weaponMesh ? 0.7 : 0.3;
+      // dize çökünce / yatarken yarayı tutar
+      const CLk = this.clutch;
+      if (CLk && CLk.t > 0 && K.rise < 0) { CLk.t = Math.max(0, CLk.t - dt); const h = this.clutchHand(CLk, Math.min(1, K.t / 0.3) * CLk.k * (K.mode === 'knee' ? 1 : 0.7)); if (h >= 0) crk[h] = 0.5; }
       this.applyHands(dt, crk);
       if (K.t >= K.dur) { this.kd = null; this._rpx = undefined; }
       return;
@@ -1188,33 +1387,7 @@ export class CharacterModel {
       }
     }
     // [tepki] yarayı tutma: el IK ile yaranın üstüne (karın/uyluk: aynı taraftaki el, silahlıysa boş el; kol: karşı el yaralı kolu kavrar)
-    let clH = -1;
-    if (clW > 0.02) {
-      const hs = CL.zone === 'arm' ? -CL.side : CL.side; // tutan elin tarafı (+1 sağ)
-      clH = hs > 0 ? 1 : 0;
-      if (clH === 1 && this.weaponMesh) clH = CL.zone === 'arm' ? -1 : 0; // silah eli tutmaz
-      const wH = clH < 0 ? 0 : clW * (clH === 1 || !this.weaponMesh ? 1 : 1 - 0.85 * gunW * W.aim);
-      if (wH > 0.02) {
-        this.root.updateMatrixWorld(true);
-        const A = this.arms[clH], hy = this.root.rotation.y, fx = Math.sin(hy), fz = Math.cos(hy), lx = Math.cos(hy), lz = -Math.sin(hy);
-        const xs = -CL.side; // yaranın tarafı: +1 sol
-        if (CL.zone === 'arm') {
-          const B2 = this.arms[CL.side > 0 ? 1 : 0];
-          B2.sh.getWorldPosition(WV.shL); B2.el.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.4);
-          WV.wT.x += fx * 0.05 - lx * xs * 0.02; WV.wT.z += fz * 0.05 - lz * xs * 0.02;
-        } else if (CL.zone === 'leg') {
-          const L = this.legs[CL.side > 0 ? 1 : 0];
-          L.hip.getWorldPosition(WV.shL); L.kn.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.55);
-          WV.wT.x += fx * 0.09; WV.wT.z += fz * 0.09;
-        } else {
-          WV.wT.set(xs * 0.075, 0.05, 0.13); this.spine.localToWorld(WV.wT);
-        }
-        A.sh.getWorldPosition(WV.shL);
-        const ps = clH === 0 ? 1 : -1;
-        WV.pole.copy(WV.shL); WV.pole.x += lx * ps * 0.6 - fx * 0.25; WV.pole.y -= 0.7; WV.pole.z += lz * ps * 0.6 - fz * 0.25;
-        this.solveArm(A, WV.wT, WV.pole, null, wH);
-      }
-    }
+    const clH = clW > 0.02 ? this.clutchHand(CL, clW, gunW * W.aim) : -1;
     // ---- eller ----
     const relaxed = 0.28 + 0.35 * run + 0.2 * wc;
     const cr = this._cr || (this._cr = [0, 0]);
@@ -1527,6 +1700,10 @@ export class CharacterModel {
   // gömülüyse yukarı it (yerçekimi + zemin kısıtı; basit kemik gevşetmesi)
   settleDeath(dt) {
     if (this.deadT < 0.6) return;
+    this.settleGround(dt);
+  }
+  // [tepki] yere gömülen eli/dizi/başı kaldır (ölüm ve devrilme yatışı ortak); DS: eklem düzeltmeleri
+  settleGround(dt) {
     const DS = this.DS, S = this.chain || (this.chain = [
       [this.arms[0].wr, J.shL, 0.04, 0], [this.arms[1].wr, J.shR, 0.04, 0], [this.arms[0].el, J.shL, 0.05, 2], [this.arms[1].el, J.shR, 0.05, 2],
       [this.head, J.neck, 0.1, 0], [this.legs[0].kn, J.hipL, 0.055, 0], [this.legs[1].kn, J.hipR, 0.055, 0], [this.legs[0].an, J.knL, 0.05, 0], [this.legs[1].an, J.knR, 0.05, 0],
