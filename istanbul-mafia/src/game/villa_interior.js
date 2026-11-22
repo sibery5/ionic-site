@@ -308,6 +308,8 @@ export function buildVillaInterior(VG, I, ctx) {
     if (f !== curF) setFloor(f);
     S.update(dt, f);
   };
+  // kamera tavanı: bulunulan katın tavanının altında kalsın (yoksa kamera alt kata iner)
+  ctx.camMaxY = (py) => (py > FY[2] - 0.8 ? VH : py > FY[1] - 0.8 ? FY[2] - SLAB : FY[1] - SLAB) - 0.25;
   // dış görüntü (küp) arka plan: camlardan Boğaz, bahçe, gökyüzü
   if (ctx.outside) s.background = ctx.outside;
   void canvasPlane;
