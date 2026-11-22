@@ -192,3 +192,8 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
   yoksa yapay takılmalar (cam sesi gibi) gerçek sanılır.
 - **Ben de kuralı çiğnedim:** toplu test sürerken atölye tarayıcısını çalıştırdım, iki test bellekten çöktü. Toplu test sürerken tarayıcı açma.
 - **Eski gövdeyle aynı pozu görüntüle (A/B):** silah tutuşu sorununda eski/yeni gövde ve eski/yeni silah ayrı ayrı denenince sebep iki adımda ayrıştı.
+
+### V2 dersleri (villa/şehir)
+- **Yazılımsal çizicide ikinci tuval okuması tarayıcıyı düşürüyor:** aynı sayfada `drawImage(webglCanvas)` + `getImageData` ikinci kez çağrılınca "Target crashed" (eski sürümde de). Görüntü başına ayrı koşu (`V2ONLY`) çözdü.
+- **İç mekândan dışarısı = bir kez çizilen küp görüntü:** canlı ikinci görünüm yerine girişte küp; yüzler kare kare (tek karede 6 şehir çizimi takılma yapar). Çok katlı iç mekânda `ctx.camMaxY` verilmezse kamera alt kata iner.
+- **Bellek sınırı villa testinde yakın:** ana dalda da son adımda düşüyor; şehre üçgen eklemek (kule taçları) düşmeyi öne çekebilir — üçgen artışını raporla.
