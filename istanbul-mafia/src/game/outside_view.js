@@ -7,7 +7,7 @@
 // dünyada kapının normali (nx, nz) yönündedir.
 import * as THREE from 'three';
 
-let RT = null, CAM = null;
+let RT = null, CAM = null, PEND = [], GAME = null;
 const _bg = new THREE.Color();
 
 // Dış görüntüyü yakala. at: { x, y, z } dünya konumu; yaw: iç mekân +z → dünya kapı yönü dönüşü.
@@ -21,22 +21,35 @@ export function captureOutside(g, at, yaw, size) {
     if (RT) RT.dispose();
     RT = new THREE.WebGLCubeRenderTarget(res, { type: THREE.HalfFloatType, generateMipmaps: false });
     RT.texture.mapping = THREE.CubeRefractionMapping;
-    CAM = new THREE.CubeCamera(0.5, 2500, RT);
+    CAM = new THREE.CubeCamera(0.5, 1200, RT);
   }
-  const t0 = performance.now();
+  if (CAM.coordinateSystem !== r.coordinateSystem) { CAM.coordinateSystem = r.coordinateSystem; CAM.updateCoordinateSystem(); } // yüz kameralarının yönleri
   CAM.position.set(at.x, at.y, at.z);
   CAM.rotation.set(0, yaw || 0, 0);
   CAM.updateMatrixWorld(true);
-  const p = g.player, pv = p && p.model ? p.model.root.visible : true;
-  if (p && p.model) p.model.root.visible = false; // kapıdaki oyuncu görüntüye girmesin
-  const sm = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false; // gölge haritası yeniden çizilmesin
-  const prev = r.getRenderTarget();
-  try { CAM.update(r, g.scene); } catch (e) { console.warn('dış görüntü yakalanamadı', e); }
-  r.setRenderTarget(prev);
-  r.shadowMap.autoUpdate = sm;
-  if (p && p.model) p.model.root.visible = pv;
-  captureOutside.lastMs = performance.now() - t0;
+  // Yüzler kare kare çizilir (kare başına 1 yüz): kapı geçişinde tek karede 6 şehir çizimi yerine 6 karede birer çizim.
+  // İlk iki yüz (kapı yönü +z ve yanları) hemen; kalan dördü stepOutside ile sonraki karelerde.
+  PEND = [4, 0, 1, 5, 2, 3]; GAME = g;
+  captureOutside.lastMs = 0;
+  stepOutside(); stepOutside();
   return RT.texture;
+}
+
+// Bekleyen bir küp yüzünü çiz (iç mekân güncellemesinden her kare çağrılır; iş bitince maliyetsiz).
+// Yüz sırası CubeCamera çocuklarıyla aynı: 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z.
+export function stepOutside() {
+  if (!PEND.length || !GAME) return;
+  const g = GAME, r = g.renderer, f = PEND.shift(), t0 = performance.now();
+  const p = g.player, root = p && p.model ? p.model.root : null, inCity = root && root.parent === g.scene, pv = root ? root.visible : true;
+  if (inCity) root.visible = false; // kapıdaki oyuncu görüntüye girmesin
+  const sm = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false; // gölge haritası yeniden çizilmesin
+  const prev = r.getRenderTarget(), prevFace = r.getActiveCubeFace(), prevMip = r.getActiveMipmapLevel();
+  try { r.setRenderTarget(RT, f); r.render(g.scene, CAM.children[f]); } catch (e) { console.warn('dış görüntü yakalanamadı', e); PEND.length = 0; }
+  r.setRenderTarget(prev, prevFace, prevMip);
+  r.shadowMap.autoUpdate = sm;
+  if (inCity) root.visible = pv;
+  captureOutside.lastMs = (captureOutside.lastMs || 0) + performance.now() - t0;
+  if (typeof window !== 'undefined') window.__ovMs = captureOutside.lastMs; // ölçüm (test): toplam yakalama süresi
 }
 
 // Pencere camı: dış görüntüyü bakış yönüyle gösterir; hafif soğuk ton ve kararma (ışıma eşiğini aşmasın).

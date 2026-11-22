@@ -32,8 +32,8 @@ module.exports = async (p, out) => {
 
   if (parts.includes('ic')) {
     // iç mekânlar: güvenli ev, Reis konağı, köşk — oyuncu kapı önünde, kamera odaya (ve ikinci görüntü kapıya) bakar
-    for (const type of ['safehouse', 'konak', 'rival', 'apartment']) {
-      for (const look of ['oda', 'kapi']) {
+    for (const type of (process.env.V2ICT || 'safehouse,konak,rival,apartment').split(',')) {
+      for (const look of (process.env.V2LOOK || 'oda').split(',')) {
         await run('ic-' + type + '-' + look, ([type, look]) => {
           const g = game, pl = g.player;
           if (pl.inInterior) g.interiors.exit();
@@ -44,7 +44,7 @@ module.exports = async (p, out) => {
           if (look === 'kapi') { pl.pos.set(0, 0, 0); pl.heading = 0; pl.camYaw = 0; } else { pl.heading = Math.PI; pl.camYaw = Math.PI; }
           pl.camPitch = 0.15; pl.camInit = false; sim(0.6);
           const r = grab();
-          r.outsideMs = ctx.outsideMs !== undefined ? +ctx.outsideMs.toFixed(1) : null;
+          r.outsideMs = +(window.__ovMs || 0).toFixed(1);
           return r;
         }, [type, look]);
       }
@@ -67,7 +67,7 @@ module.exports = async (p, out) => {
       const door = g.city.doors.find((d) => d.building.villaPlayer);
       pl.pos.set(door.x, 0, door.z); sim(0.3);
       const ctx = g.interiors.enter(door);
-      return { type: ctx.type, outsideMs: +(ctx.outsideMs || 0).toFixed(1), interact: ctx.interact.length, seats: (ctx.furnSeats || []).length };
+      return { type: ctx.type, outsideMs2: +(window.__ovMs || 0).toFixed(1), interact: ctx.interact.length, seats: (ctx.furnSeats || []).length };
     });
     for (const [n, x, y, z, yaw] of rooms) {
       await run('villa-' + n, ([x, y, z, yaw]) => {

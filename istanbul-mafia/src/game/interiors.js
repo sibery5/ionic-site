@@ -10,7 +10,7 @@ import { GANGS } from './economy.js';
 import { buildBakkal, buildMarket, buildKafe, decorateGunShop } from './shop_interiors.js'; // [şehir]
 import { buildMall } from './mall.js'; // [şehir]
 import { buildApartment, safehouseSeats } from './home_interior.js'; // [şehir]
-import { captureOutside, windowMaterial } from './outside_view.js'; // [V2]
+import { captureOutside, stepOutside, windowMaterial } from './outside_view.js'; // [V2]
 import { Kit } from './interior_kit.js'; // [şehir]
 
 const NAMES = {
@@ -48,7 +48,6 @@ export class Interiors {
       if (!at && b.x0 !== undefined) { const h = b.h || 6; at = { x: (b.x0 + b.x1) / 2, y: Math.max(1.8, Math.min(h * 0.35, h - 1)), z: (b.z0 + b.z1) / 2 }; }
       if (!at) at = { x: door.x - (dn.nx || 0) * 3, y: 2, z: door.z - (dn.nz || 0) * 3 };
       ctx.outside = captureOutside(g, at, Math.atan2(dn.nx || 0, dn.nz === undefined ? 1 : dn.nz));
-      ctx.outsideMs = captureOutside.lastMs;
     }
     this.current = ctx;
     // şehir NPC'lerini dondur
@@ -56,6 +55,7 @@ export class Interiors {
     g.pickups.group = ctx.pickupGroup;
     const builder = b.build || BUILDERS[type] || BUILDERS.apartment; // [villa] binanın kendi iç mekân kurucusu
     const spawn = builder.call(this, ctx) || { x: 0, z: ctx.d / 2 - 1.6 };
+    { const u = ctx.update; ctx.update = (dt, t) => { stepOutside(); if (u) u(dt, t); }; } // [V2] dış görüntünün kalan yüzleri
     g.physics.setInterior(cols);
     g.setActiveScene(scene);
     const p = g.player;
@@ -309,6 +309,7 @@ const BUILDERS = {
 
   safehouse(ctx) {
     const g = this.game;
+    ctx.ambient = 1.4; // [V2] güvenli ev hâlâ loştu (ölçüm: ort. parlaklık 13.8 → 30)
     this.room(ctx, 12, 10, 3.2, new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c1a') }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#4a4440', '#5a524a') })); // [V2] daha açık duvar kâğıdı
     this.carpet(ctx, 4, 3, -2, 0, 1);
     this.sofa(ctx, -2, -1.6, 0, '#1a1a1a');
@@ -331,6 +332,7 @@ const BUILDERS = {
 
   konak(ctx) {
     const g = this.game;
+    ctx.ambient = 1.3; // [V2]
     this.room(ctx, 16, 14, 4.2, new THREE.MeshStandardMaterial({ map: marbleTexture() }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#5a1a1a', '#7a2a2a') }), 0xe8d8b0);
     this.carpet(ctx, 8, 6, 0, -2, 0);
     // makam masası
