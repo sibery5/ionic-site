@@ -130,7 +130,7 @@ export class VillaGame {
   buildInterior(I, ctx) { return buildVillaInterior(this, I, ctx); }
 
   // [V2] Güvenlik kamerası televizyonu: salondaki televizyonda villa kapısı/bahçesi canlı. Düşük çözünürlüklü ikinci kamera
-  // ayrı hedef dokuya saniyede 4 kez çizer; yalnız oyuncu zemin kattayken ve televizyona 16 m'den yakınken. Gölge haritası
+  // ayrı hedef dokuya saniyede ~3 kez çizer; yalnız oyuncu zemin kattayken ve televizyona 16 m'den yakınken. Gölge haritası
   // yeniden çizilmez (autoUpdate kapalı), villa ağ grubu çizim süresince görünür yapılır. Ölçüm: ctx.tvStats (çizim başına ms).
   securityCam(ctx, I) {
     const g = this.g, w = this.w, s = ctx.scene;
@@ -190,7 +190,7 @@ export class VillaGame {
         const p = g.player.pos;
         if (Math.hypot(p.x + 11.8, p.z + 3.5) > 16) return;
         acc += dt;
-        if (acc >= 0.25) { acc = 0; render(); }
+        if (acc >= 0.34) { acc = 0; render(); } // ~3 Hz: ölçüm 13.7 ms/çizim (yazılımsal) → 30 FPS'te kare başına ≤ 1.3 ms
         const e = g.env, sec = Math.floor(((e.time % 1) * 3600) % 60);
         if (sec !== lastSec) { lastSec = sec; drawOv(); }
         stats.total = stats.ms / Math.max(1, stats.frames);
