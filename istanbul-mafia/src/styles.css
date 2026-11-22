@@ -650,3 +650,12 @@ table.trade .cheap { color: var(--good); } table.trade .dear { color: var(--red2
 .qcard ul { margin: 0; padding-left: 16px; font: 12px var(--sans); color: #c9bea6; line-height: 1.55; }
 .qrestart { display: flex; align-items: center; gap: 14px; justify-content: space-between; margin: 10px 0; padding: 10px 14px; border: 1px solid var(--gold3); background: rgba(201,165,74,0.07); font: 13px var(--sans); color: #d9cdb2; }
 @media (max-width: 900px) { .qcards { grid-template-columns: repeat(2, 1fr); } }
+
+/* [E7] canlı görev yönlendirmesi: sol üst takip kutusu ve ekran kenarı oku (yalnız JS konumlar; sürekli animasyon yok) */
+.guide-box { position: fixed; left: 28px; top: 24px; display: none; min-width: 170px; max-width: 300px; padding: 7px 12px 8px; background: linear-gradient(90deg, rgba(0,0,0,0.72), rgba(0,0,0,0.35)); border-left: 3px solid #ffd21a; color: #fff; pointer-events: none; z-index: 19; text-shadow: 0 1px 3px #000; }
+.guide-box .gk { display: block; font: 700 10px var(--display, system-ui); letter-spacing: 0.3em; color: #ffd21a; }
+.guide-box .gt { font: 600 14px var(--sans, system-ui); line-height: 1.25; margin-top: 2px; }
+.guide-box .gd { font: 700 16px var(--display, system-ui); color: #ffd21a; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.guide-edge { position: fixed; left: 0; top: 0; width: 64px; display: none; z-index: 20; pointer-events: none; text-align: center; font: bold 14px system-ui, sans-serif; color: #fff; text-shadow: 0 0 4px #000, 0 0 2px #000; }
+.guide-edge .ga { width: 0; height: 0; margin: 0 auto 2px; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 22px solid #ffd21a; filter: drop-shadow(0 0 2px #000); }
+.notes { top: 100px; }

@@ -20,6 +20,7 @@ import { SLOTS, listSaves, latestSave } from '../game/save.js';
 import { audio } from '../core/audio.js';
 import { esc } from './dom.js';
 import { Speedo } from './speedo.js';
+import { Guide } from './guide.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -56,6 +57,7 @@ const setText = (e, v) => { if (e._t !== v) { e._t = v; e.textContent = v; } };
 export class UI {
   constructor(game) {
     this.game = game;
+    this.guide = new Guide(game); // [E7] canlı görev yönlendirmesi
     this.root = $('#ui');
     this.modalStack = [];
     this.notes = [];
@@ -250,6 +252,7 @@ export class UI {
     if (!s) return;
     const life = this.ensureLife();
     if (life) life.tickFromUI(dt);
+    try { this.guide.update(dt); } catch (e) { if (!this._gErr) { this._gErr = 1; console.error('[yönlendirme]', e); } }
     if (this._setStamp !== g.settings) { this._setStamp = g.settings; withDefaults(g.settings); applyExtendedSettings(g); }
     // saat & hava
     const env = g.env;
@@ -416,7 +419,7 @@ export class UI {
     c.drawImage(src, 0, 0);
     // GPS rotası
     if (g.gpsPath && g.gpsPath.length) {
-      c.strokeStyle = '#c86aff'; c.lineWidth = 6 / scale * k * 1.2; c.lineJoin = 'round'; c.lineCap = 'round';
+      c.strokeStyle = g.missions.active || (this.guide.main && !g.waypoint) ? '#ffcc00' : '#c86aff'; c.lineWidth = 6 / scale * k * 1.2; // görev rotası sarı c.lineJoin = 'round'; c.lineCap = 'round';
       c.beginPath();
       c.moveTo((p.pos.x + 1000) * k, (p.pos.z + 1000) * k);
       for (const n of g.gpsPath) c.lineTo((n.x + 1000) * k, (n.z + 1000) * k);

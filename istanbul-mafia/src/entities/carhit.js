@@ -4,7 +4,7 @@
 // Kare içinde bellek ayırma yok: uçuş kayıtları havuzdan. stats: her alt adımın süresi (takılma teşhisi).
 import { audio } from '../core/audio.js';
 
-const LIVE = [], POOL = [];
+const LIVE = [], POOL = [], KDN = { mode: 'fly', k: 0.5 };
 export const HIT_STATS = { hits: 0, ms: 0, worst: 0, part: { dmg: 0, react: 0, fx: 0, law: 0, threat: 0 } };
 const now = () => performance.now();
 
@@ -20,7 +20,7 @@ export function pedImpact(g, v, a, sp) {
   if (a.isPlayer) {
     // oyuncu: eski tepki (kendi fiziği savrulmayı işler)
     a.knock = { x: v.vx * 0.6 + sx * 3, z: v.vz * 0.6 + sz * 3, t: 0.4 };
-    if (!a.dead) { if (sp > 3.2 && a.knockdown) a.knockdown(a.knock.x, a.knock.z, 1.8 + Math.min(1.6, sp * 0.12)); g.cameraShake(Math.min(1.4, 0.4 + sp * 0.08)); }
+    if (!a.dead) { if (sp > 3.2 && a.knockdown) { KDN.mode = sp > 9 ? 'blast' : 'fall'; KDN.k = Math.min(1, sp / 16); a.model.kdNext = KDN; a.knockdown(a.knock.x, a.knock.z, 2.5 + Math.min(1.4, sp * 0.1)); a.model.kdNext = null; } g.cameraShake(Math.min(1.4, 0.4 + sp * 0.08)); }
     g.ui.damageFlash();
   } else if (!a.dead && Math.max(sp, vs) < 4) {
     // sendeleme: kısa itiş + irkilme, düşmez
@@ -52,7 +52,10 @@ export function pedImpact(g, v, a, sp) {
     }
     a.flight = F; LIVE.push(F);
     const kd = F.mode === 'hood' ? 2.9 : 2.4 + Math.min(1.2, (cs - 10) * 0.08);
-    if (!a.dead && a.knockdown) a.knockdown(F.mode === 'hood' ? sx : ux, F.mode === 'hood' ? sz : uz, kd);
+    // [tepki] model kipi: kaputa yatma / savrulma (havadayken takla, yere çarpınca yuvarlanma, sonra doğal kalkış)
+    if (a.model) { KDN.mode = F.mode; KDN.k = Math.min(1, cs / 16); a.model.kdNext = KDN; }
+    if (!a.dead && a.knockdown) a.knockdown(F.mode === 'hood' ? sx : ux, F.mode === 'hood' ? sz : uz, kd + 0.8);
+    if (a.model) { a.model.kdNext = null; a.model.kdAir = F.mode; }
   }
   const t2 = now(); P.react += t2 - t1;
   audio.punch(a.pos.x, a.pos.z);
@@ -123,6 +126,7 @@ export function updateFlights(g, dt) {
       }
       if (a.kdT !== undefined && a.kdT < 0.8 && !done) a.kdT = 0.8; // uçarken kalkmasın
     }
+    if (a.model) a.model.kdAir = done || !a.flight ? null : F.mode === 'hood' ? 'hood' : F.ground ? null : 'fly';
     if (F.a && a.pos.y - F.y00 > F.maxY) F.maxY = a.pos.y - F.y00;
     if (a.sync) a.sync();
     if (done || F.t > 4) {
