@@ -182,7 +182,7 @@ export class Bounties {
     const g = this.g, p = g.player, S = this.S;
     this.mkT -= dt;
     if (this.mkT <= 0) { this.mkT = 0.6; this.updateMarkers(false); }
-    this.updateArrow();
+    // [E7] kırmızı ok yerine ui/guide.js sarı oku (aynı ok ve kenar oku tüm hedeflerde)
     if (p.inInterior || !S.active) return;
     const b = BOUNTY_POOL.find((x) => x.id === S.active);
     const h = this.hideout(b);
