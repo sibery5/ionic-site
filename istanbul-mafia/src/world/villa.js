@@ -47,6 +47,9 @@ export function buildPlayerVilla(city) {
     rect(126, -817.4, 177.5, -814.6, PAVE); // bina önü → havuz → deniz kapısı
     rect(140.4, -848, 142.9, -817.4, PAVE); // bina doğusu
     rect(88, -850.5, 142.9, -847.8, PAVE); // pistlere patika
+    // [V2] kapalı yapıların altında çim yok (galeri garajının içinde çim bitiyordu)
+    for (const b of [VL.gallery, VL.house, VL.poolHouse, VL.booth, VL.deck]) rect(b.x0 - 0.5, b.z0 - 0.5, b.x1 + 0.5, b.z1 + 0.5, PAVE);
+    for (const p of VL.pads) rect(p.x - 7, p.z - 7, p.x + 7, p.z + 7, PAVE);
   });
 
   // ---------- çevre duvarı + ferforje çit ----------

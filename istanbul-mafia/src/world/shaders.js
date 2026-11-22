@@ -248,10 +248,19 @@ export function facadeMaterial(quality) {
         vec3 lp = vLP * vDim; float H = vDim.y;
         if (vLN.y > 0.5) {
           // düz çatı yüzeyi: çakıl/zift
+          // [V2] çatı kaplaması binaya göre değişir: beton karo (derz), zift membran (bindirme şeritleri) ya da çakıl;
+          // kenarlara doğru kir/yağmur izi. Kuşbakışında tek düze gri "karton" yüzey yerine malzeme okunur.
           vec4 pa = texture2D(tPA, vWP.xz / 3.0);
-          float n = texture2D(tNoise, vWP.xz / 17.0).g;
-          diffuseColor.rgb = vec3(0.36, 0.35, 0.33) * (0.7 + pa.r * 0.4) * (0.8 + n * 0.4) * (1.0 - uWet * 0.35);
-          fRough = mix(0.9, 0.3, uWet);
+          float n = texture2D(tNoise, vWP.xz / 17.0).g, n2 = texture2D(tNoise, vWP.xz / 4.3).r;
+          float kindR = fract(seed * 7.13);
+          vec3 rc = kindR < 0.4 ? vec3(0.52, 0.5, 0.47) : kindR < 0.75 ? vec3(0.24, 0.24, 0.25) : vec3(0.43, 0.41, 0.37);
+          float pat = 1.0;
+          if (kindR < 0.4) { vec2 g2 = fract(vWP.xz / 0.6); pat = 1.0 - 0.28 * (step(g2.x, 0.04) + step(g2.y, 0.04)); }
+          else if (kindR < 0.75) { float sx = fract((st == 4.0 ? vWP.z : vWP.x) / 1.0); pat = 1.0 - 0.22 * step(0.94, sx); }
+          vec2 ed = min(lp.xz + vDim.xz * 0.5, vDim.xz * 0.5 - lp.xz);
+          float edge = smoothstep(0.0, 1.6, min(ed.x, ed.y));
+          diffuseColor.rgb = rc * pat * (0.72 + pa.r * 0.35) * (0.78 + n * 0.3 + n2 * 0.12) * mix(0.7, 1.0, edge) * (1.0 - uWet * 0.35);
+          fRough = mix(kindR < 0.75 && kindR >= 0.4 ? 0.7 : 0.92, 0.3, uWet);
         } else if (vLN.y < -0.5) {
           diffuseColor.rgb = base * 0.4;
         } else {
@@ -554,7 +563,7 @@ export function grassField(maskTex, radius = 34, spacing = 0.55) {
   const pos = [], uv = [], nrm = [];
   const [u0, v0, u1, v1] = [576 / 2048, 1 - (1408 + 128) / 2048, (576 + 64) / 2048, 1 - 1408 / 2048];
   for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI, c = Math.cos(a) * 0.32, s = Math.sin(a) * 0.32, h = 0.55;
+    const a = (i / 3) * Math.PI, c = Math.cos(a) * 0.32, s = Math.sin(a) * 0.3, h = 0.24; // kısa, biçilmiş çim (eski 0.55: diz boyu)
     const q = [[-c, 0, -s, u0, v0], [c, 0, s, u1, v0], [c, h, s, u1, v1], [-c, h, -s, u0, v1]];
     for (const k of [0, 1, 2, 0, 2, 3]) { pos.push(q[k][0], q[k][1], q[k][2]); uv.push(q[k][3], q[k][4]); nrm.push(0, 1, 0); }
   }
@@ -581,11 +590,11 @@ export function grassField(maskTex, radius = 34, spacing = 0.55) {
         vec2 wpos = cell + (vec2(hsh(cell + 1.3), hsh(cell + 7.1)) - 0.5) * uSpacing;
         float gm = texture2D(tMask, (wpos + 1000.0) / 2000.0).b;
         float dist = length(wpos - uCam.xz);
-        float s = smoothstep(0.45, 0.7, gm) * (1.0 - smoothstep(uRadius * 0.55, uRadius, dist)) * (0.6 + rr * 0.8);
+        float s = smoothstep(0.45, 0.7, gm) * (1.0 - smoothstep(uRadius * 0.55, uRadius, dist)) * (0.75 + rr * 0.5);
         float ang = rr * 6.2831; float ca = cos(ang), sa = sin(ang);
         vec3 transformed = vec3(position.x * ca - position.z * sa, position.y, position.x * sa + position.z * ca) * s;
-        transformed.y *= 0.8 + hsh(cell + 3.3) * 0.7;
-        transformed.x += sin(uTime * 2.1 + wpos.x * 0.35 + wpos.y * 0.27) * 0.09 * position.y * s;
+        transformed.y *= 0.85 + hsh(cell + 3.3) * 0.35;
+        transformed.x += sin(uTime * 2.1 + wpos.x * 0.35 + wpos.y * 0.27) * 0.05 * position.y * s;
         transformed.xz += wpos;
         vShade = 0.75 + rr * 0.4;`)
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);');

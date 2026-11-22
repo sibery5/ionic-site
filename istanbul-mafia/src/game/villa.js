@@ -7,9 +7,7 @@ import * as THREE from 'three';
 import { PLAYER_VILLA as V } from '../world/map.js';
 import { RNG } from '../core/util.js';
 import { randomLook } from '../entities/character.js';
-import { marbleTexture, wallpaperTexture, woodTexture } from '../core/textures.js';
-import { Kit } from './interior_kit.js';
-import { sofa, bedDouble } from './home_interior.js';
+import { buildVillaInterior } from './villa_interior.js'; // [V2]
 
 export const VILLA_CARS = [['gt', '#a80d12'], ['gt', '#121212'], ['coupe', '#e9e9e6'], ['cabrio', '#1d3a7a']];
 const GATE_PT = { x: V.gate.x, z: V.z1 };
@@ -29,6 +27,7 @@ export class VillaGame {
       id: 'playerVilla', type: 'villa_player', name: 'Villan', ownedProp: true, villaPlayer: true,
       door: { x: L.house.door.x, z: L.house.door.z, nx: 0, nz: 1 },
       build(ctx) { return self.buildInterior(this, ctx); },
+      view: { x: 128, y: 15.2, z: -826 }, // [V2] camlardan dışarısı: çatı üstünden küp görüntü (ev gövdesinin içinden değil)
     };
     game.city.doors.push({ x: L.house.door.x, z: L.house.door.z + 0.9, building: this.building });
     if (game.map.specials) game.map.specials.push(this.building);
@@ -127,54 +126,76 @@ export class VillaGame {
     void _v;
   }
 
-  // İç mekân: salon (kanepeler, TV, şömine, avize), yatak odası (çift kişilik yatak = kayıt), giyinme odası (gardırop),
-  // ofis (masa, kitaplık, kasa = cephanelik), üst katlara merdiven, denize bakan geniş cam (gece sıcak ışık).
-  buildInterior(I, ctx) {
-    const g = this.g;
-    const W = 24, D = 16, Hh = 4.2;
-    I.room(ctx, W, D, Hh, new THREE.MeshStandardMaterial({ map: marbleTexture(), roughness: 0.25 }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#efe8da', '#e2d8c4') }), 0xf6f2ea);
-    const K = new Kit(I, ctx);
-    const wall = (x0, z0, x1, z1) => K.box(x1 - x0, Hh, z1 - z0, (x0 + x1) / 2, 0, (z0 + z1) / 2, 0xece5d6, { col: true, rough: 0.9 });
-    // bölmeler: yatak odası (doğu-kuzey), ofis (batı-güney)
-    wall(4, -8, 4.2, -1.8); wall(4, 1.4, 4.2, 2); wall(4, 2, 12, 2.2);
-    wall(-12, 2, -7.2, 2.2); wall(-4.8, 2, -4.6, 8);
-    // deniz manzaralı cam duvar (kuzey) ve doğu pencereleri: gün ışığı / gece kenti
-    for (let x = -11; x <= 11; x += 2.75) { K.emis(2.4, 2.9, 0.04, x, 0.6, -7.97, 0x9cc8e8); K.box(0.18, Hh, 0.12, x + 1.37, 0, -7.92, 0x2a2a2a, { metal: 0.6 }); }
-    for (const z of [-5.5, -2.5]) K.emis(0.04, 2.6, 2.2, 11.97, 0.8, z, 0x9cc8e8);
-    // salon
-    const seats = [];
-    seats.push(...sofa(K, -3, -2.2, Math.PI, 0xe8e2d4, 3));
-    seats.push(...sofa(K, -7.4, -4.6, Math.PI / 2, 0xe8e2d4, 2));
-    seats.push(...sofa(K, 1.4, -4.6, -Math.PI / 2, 0x2c3440, 1));
-    K.box(1.8, 0.4, 0.9, -3, 0, -4.4, 0x1c1c1c, { col: true, rough: 0.15, metal: 0.4 }); // sehpa
-    K.box(3.4, 0.5, 0.5, -3, 0, -7.6, 0x2a1c12, { col: true, uv: 'wood' }); K.box(2.6, 1.5, 0.06, -3, 1.2, -7.75, 0x050608, { rough: 0.1 }); // TV ünitesi
-    K.box(2.2, 1.3, 0.7, -10.8, 0, -4.6, 0xd8d0c0, { col: true, rot: Math.PI / 2 }); K.emis(1.0, 0.5, 0.05, -10.43, 0.2, -4.6, 0xff8a30, Math.PI / 2); // şömine
-    K.box(4.2, 0.02, 3.0, -4, 0.005, -4.2, 0x5a4a3a, { rough: 1 }); // halı
-    // yatak odası
-    bedDouble(K, 8, -5.6, 0, 0xe9e4d8);
-    for (const x of [6.4, 9.6]) K.box(0.5, 0.55, 0.45, x, 0, -6.9, 0x3a2a1c, { col: true, uv: 'wood' });
-    // giyinme odası (gardırop duvarı)
-    for (let z = -7.2; z <= -2.6; z += 1.15) { K.box(0.62, 2.5, 1.1, 11.6, 0, z, 0x3a2a1c, { col: true, uv: 'wood' }); K.box(0.02, 2.3, 0.04, 11.28, 0.1, z, 0xc8a050, { metal: 0.9, rough: 0.2 }); }
-    // ofis: masa, koltuk, kitaplık, kasa
-    K.box(2.2, 0.76, 1.0, -8.8, 0, 5.2, 0x2a1a10, { col: true, uv: 'wood' }); K.emis(0.6, 0.38, 0.03, -8.8, 0.78, 5.0, 0x9ad0ff);
-    K.box(0.7, 1.15, 0.7, -8.8, 0, 6.3, 0x111111, { col: true, rough: 0.5 });
-    for (let i = 0; i < 4; i++) K.box(0.4, 3.2, 1.8, -11.75, 0, 3.0 + i * 1.2, 0x3a2a1c, { col: true, uv: 'wood' });
-    K.box(0.9, 1.3, 0.8, -5.6, 0, 7.4, 0x2a2e33, { col: true, metal: 0.7, rough: 0.35 }); // kasa
-    // merdiven (üst katlara; görsel + çarpışma)
-    for (let k = 0; k < 10; k++) K.box(1.6, 0.21 * (k + 1), 0.32, 10.8, 0, 7.6 - k * 0.32, 0xd8d0c0, { col: true });
-    K.box(0.06, 1.0, 3.3, 9.95, 0.3, 6.1, 0xb9b9b9, { metal: 0.9 });
-    K.finish();
-    ctx.furnSeats = ctx.furnSeats || []; void seats;
-    I.chandelier(ctx, -3, -3.5, Hh, 1.1);
-    I.light(ctx, -3, Hh - 0.3, -3.5, 0xffd9a8, 9, 16);
-    I.light(ctx, 8, Hh - 0.3, -4.5, 0xffd2a0, 6, 10);
-    I.light(ctx, -8.5, Hh - 0.3, 5, 0xffe0b0, 5, 9);
-    ctx.peaceful = true;
-    ctx.interact.push({ x: 8, z: -3.9, r: 1.6, label: 'Uyu ve Oyunu Kaydet', action: () => g.sleepAndSave() });
-    ctx.interact.push({ x: 10.6, z: -4.9, r: 1.6, label: 'Gardırop (kıyafet değiştir)', action: () => g.ui.openShop('wardrobe') });
-    ctx.interact.push({ x: -5.6, z: 6.6, r: 1.4, label: 'Kasa ve cephanelik (cephane doldur ₺)', action: () => g.ui.openShop('stash') });
-    ctx.interact.push({ x: -8.8, z: 4.4, r: 1.4, label: 'Ofis masası (telefon)', action: () => g.phone && g.phone.open ? g.phone.open() : g.ui.notify('Ofis: işler yolunda, patron.', 'good') });
-    void woodTexture;
-    return { x: 0, z: D / 2 - 1.6 };
+  // İç mekân: üç katlı villa içi (villa_interior.js). Kayıt yatağı 1. kattaki ana yatak odasında.
+  buildInterior(I, ctx) { return buildVillaInterior(this, I, ctx); }
+
+  // [V2] Güvenlik kamerası televizyonu: salondaki televizyonda villa kapısı/bahçesi canlı. Düşük çözünürlüklü ikinci kamera
+  // ayrı hedef dokuya saniyede ~3 kez çizer; yalnız oyuncu zemin kattayken ve televizyona 16 m'den yakınken. Gölge haritası
+  // yeniden çizilmez (autoUpdate kapalı), villa ağ grubu çizim süresince görünür yapılır. Ölçüm: ctx.tvStats (çizim başına ms).
+  securityCam(ctx, I) {
+    const g = this.g, w = this.w, s = ctx.scene;
+    const q = g.settings && g.settings.quality;
+    const RW = q === 'low' ? 192 : 256, RH = Math.round(RW * 9 / 16);
+    const rt = new THREE.WebGLRenderTarget(RW, RH, { type: THREE.HalfFloatType, depthBuffer: true });
+    const cam = new THREE.PerspectiveCamera(62, RW / RH, 0.3, 700);
+    const CAMS = [
+      { name: 'KAM 1  ANA KAPI', p: [139.4, 6.4, -816.6], t: [121, 0.5, -782] },
+      { name: 'KAM 2  HAVUZ', p: [141.0, 6.8, -843.5], t: [160, 0.5, -826] },
+      { name: 'KAM 3  İSKELE', p: [176.0, 4.5, -823.0], t: [214, 0.5, -815] },
+    ];
+    let ci = 0;
+    const aim = () => { const c = CAMS[ci]; cam.position.set(c.p[0], c.p[1], c.p[2]); cam.lookAt(c.t[0], c.t[1], c.t[2]); cam.updateMatrixWorld(true); };
+    aim();
+    // ekran: hafif yeşil-gri güvenlik kamerası tonu (MeshBasic: ışıktan etkilenmez, ışıma eşiğinin altında)
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.24), new THREE.MeshBasicMaterial({ map: rt.texture, color: 0xb8c4b8 }));
+    scr.position.set(-11.83, 2.25, -3.5); scr.rotation.y = Math.PI / 2; s.add(scr);
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.34, 2.32), new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.3 }));
+    bezel.position.set(-11.87, 2.25, -3.5); s.add(bezel);
+    // yazı katmanı: "KAM 1" + zaman damgası + kayıt noktası; saniyede bir güncellenir
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 288;
+    const c2 = cv.getContext('2d');
+    const ov = new THREE.CanvasTexture(cv); ov.colorSpace = THREE.SRGBColorSpace;
+    const ovm = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.24), new THREE.MeshBasicMaterial({ map: ov, transparent: true, depthWrite: false, color: 0xbbbbbb }));
+    ovm.position.set(-11.82, 2.25, -3.5); ovm.rotation.y = Math.PI / 2; ovm.renderOrder = 4; s.add(ovm);
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    let lastSec = -1;
+    const drawOv = () => {
+      const e = g.env, sec = Math.floor(((e.time % 1) * 3600) % 60);
+      c2.clearRect(0, 0, 512, 288);
+      c2.font = 'bold 22px monospace'; c2.fillStyle = '#e8f0e8'; c2.shadowColor = '#000'; c2.shadowBlur = 4;
+      c2.fillText(CAMS[ci].name, 16, 32);
+      c2.fillText('GÜN ' + pad(e.day || 1) + '  ' + pad(e.hour) + ':' + pad(e.minute) + ':' + pad(sec), 16, 272);
+      if (sec % 2 === 0) { c2.fillStyle = '#e02020'; c2.beginPath(); c2.arc(482, 26, 9, 0, 6.283); c2.fill(); }
+      c2.fillStyle = '#e8f0e8'; c2.fillText('REC', 410, 34);
+      ov.needsUpdate = true;
+    };
+    drawOv();
+    const stats = ctx.tvStats = { n: 0, ms: 0, frames: 0, total: 0 };
+    let acc = 1;
+    const render = () => {
+      const r = g.renderer, t0 = performance.now();
+      const vis = w ? w.group.visible : true; if (w) w.group.visible = true;
+      const sm = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false;
+      const prev = r.getRenderTarget();
+      r.setRenderTarget(rt); r.render(g.scene, cam); r.setRenderTarget(prev);
+      r.shadowMap.autoUpdate = sm; if (w) w.group.visible = vis;
+      stats.n++; stats.ms += performance.now() - t0;
+    };
+    ctx.dispose = () => { rt.dispose(); ov.dispose(); };
+    return {
+      next: () => { ci = (ci + 1) % CAMS.length; aim(); acc = 1; drawOv(); },
+      update: (dt, floor) => {
+        stats.frames++;
+        if (floor !== 0) return;
+        const p = g.player.pos;
+        if (Math.hypot(p.x + 11.8, p.z + 3.5) > 16) return;
+        acc += dt;
+        if (acc >= 0.34) { acc = 0; render(); } // ~3 Hz: ölçüm 13.7 ms/çizim (yazılımsal) → 30 FPS'te kare başına ≤ 1.3 ms
+        const e = g.env, sec = Math.floor(((e.time % 1) * 3600) % 60);
+        if (sec !== lastSec) { lastSec = sec; drawOv(); }
+        stats.total = stats.ms / Math.max(1, stats.frames);
+      },
+      render,
+    };
   }
 }

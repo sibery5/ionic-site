@@ -195,3 +195,8 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
 - **Tırmanma testi çökmesi (1.13):** test tarayıcısı belleği 7. denetimden sonra ~70 MB/sn büyüyordu. Adımı ayrı koşunca (çit tırmanışı) 0,6 sn, JS yığını sabit 342 MB:
   oyun sızdırmıyor; büyüme kamera denetiminin yazılımsal çizicide yüzlerce kare çizmesinden. Ders: bellek ölçümünde tek tarayıcı olduğundan emin ol (ekip testleri toplamı bozar)
   ve şüpheli adımı ayrı koştur.
+
+### V2 dersleri (villa/şehir)
+- **Yazılımsal çizicide ikinci tuval okuması tarayıcıyı düşürüyor:** aynı sayfada `drawImage(webglCanvas)` + `getImageData` ikinci kez çağrılınca "Target crashed" (eski sürümde de). Görüntü başına ayrı koşu (`V2ONLY`) çözdü.
+- **İç mekândan dışarısı = bir kez çizilen küp görüntü:** canlı ikinci görünüm yerine girişte küp; yüzler kare kare (tek karede 6 şehir çizimi takılma yapar). Çok katlı iç mekânda `ctx.camMaxY` verilmezse kamera alt kata iner.
+- **Bellek sınırı villa testinde yakın:** ana dalda da son adımda düşüyor; şehre üçgen eklemek (kule taçları) düşmeyi öne çekebilir — üçgen artışını raporla.

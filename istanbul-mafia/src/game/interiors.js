@@ -10,6 +10,7 @@ import { GANGS } from './economy.js';
 import { buildBakkal, buildMarket, buildKafe, decorateGunShop } from './shop_interiors.js'; // [şehir]
 import { buildMall } from './mall.js'; // [şehir]
 import { buildApartment, safehouseSeats } from './home_interior.js'; // [şehir]
+import { captureOutside, stepOutside, windowMaterial } from './outside_view.js'; // [V2]
 import { Kit } from './interior_kit.js'; // [şehir]
 
 const NAMES = {
@@ -40,12 +41,21 @@ export class Interiors {
       npcGroup: new THREE.Group(), pickupGroup: new THREE.Group(), name: placeName(type, b), peaceful: false,
     };
     scene.add(ctx.npcGroup); scene.add(ctx.pickupGroup);
+    // [V2] camlardan dışarısı: şehir henüz kapının önündeki hâliyle duruyorken bina içinden küp görüntü (outside_view.js)
+    {
+      const dn = b.door || { nx: 0, nz: 1 };
+      let at = b.view;
+      if (!at && b.x0 !== undefined) { const h = b.h || 6; at = { x: (b.x0 + b.x1) / 2, y: Math.max(1.8, Math.min(h * 0.35, h - 1)), z: (b.z0 + b.z1) / 2 }; }
+      if (!at) at = { x: door.x - (dn.nx || 0) * 3, y: 2, z: door.z - (dn.nz || 0) * 3 };
+      ctx.outside = captureOutside(g, at, Math.atan2(dn.nx || 0, dn.nz === undefined ? 1 : dn.nz));
+    }
     this.current = ctx;
     // şehir NPC'lerini dondur
     g.npcs.stash(ctx.npcGroup);
     g.pickups.group = ctx.pickupGroup;
     const builder = b.build || BUILDERS[type] || BUILDERS.apartment; // [villa] binanın kendi iç mekân kurucusu
     const spawn = builder.call(this, ctx) || { x: 0, z: ctx.d / 2 - 1.6 };
+    { const u = ctx.update; ctx.update = (dt, t) => { stepOutside(); if (u) u(dt, t); }; } // [V2] dış görüntünün kalan yüzleri
     g.physics.setInterior(cols);
     g.setActiveScene(scene);
     const p = g.player;
@@ -86,6 +96,8 @@ export class Interiors {
     if (ctx.onExit) ctx.onExit(); // [şehir] AVM: silah sesi kancasını geri al
     if (ctx.mall) ctx.mall.crowd.clear(); // [şehir]
     ctx.scene.traverse((o) => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); });
+    if (ctx.winMat) ctx.winMat.dispose();
+    if (ctx.dispose) ctx.dispose(); // [V2] villa: güvenlik kamerası hedefi
   }
 
   // ---------- yapı yardımcıları ----------
@@ -107,13 +119,33 @@ export class Interiors {
     for (const [ww, dd, x, z] of [[w, 0.04, 0, -d / 2 + 0.02], [w, 0.04, 0, d / 2 - 0.02], [0.04, d, -w / 2 + 0.02, 0], [0.04, d, w / 2 - 0.02, 0]]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(ww, 0.12, dd), base); m.position.set(x, 0.06, z); s.add(m);
     }
-    s.add(new THREE.HemisphereLight(0xfff4e0, 0x403020, 0.7));
+    s.add(new THREE.HemisphereLight(0xfff4e0, 0x5a4a38, ctx.ambient || 1.0)); // [V2] 0.7 → 1.0: karanlık iç mekân şikâyeti
+    // [V2] kapı aydınlatması: çıkış kapısının iki yanında sıcak aplik + kapıya bakan yumuşak ışık (kapı karanlıkta kaybolmasın)
+    const sconce = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
+    for (const sx of [-1.05, 1.05]) { const a = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.1), sconce); a.position.set(sx, 2.15, d / 2 - 0.06); s.add(a); }
+    const dl = new THREE.PointLight(0xffdcae, 5, 7, 1.6); dl.position.set(0, 2.6, d / 2 - 1.2); s.add(dl);
+    // [V2] kapı duvarında iki pencere (sokağa bakar): dış görüntü küpünü gösterir
+    if (ctx.outside && !ctx.noWindows && w >= 6) this.windows(ctx, [[-w / 4 - 0.4, Math.min(2.2, w / 4)], [w / 4 + 0.4, Math.min(2.2, w / 4)]], d / 2, Math.PI, Math.min(1.0, h - 2.2), Math.min(1.5, h - 1.6));
     // çıkış kapısı
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.3, 0.08), new THREE.MeshStandardMaterial({ color: 0x4a2c1a }));
     door.position.set(0, 1.15, d / 2 - 0.05); s.add(door);
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 }));
     knob.position.set(0.5, 1.05, d / 2 - 0.12); s.add(knob);
     ctx.interact.push({ x: 0, z: d / 2 - 0.6, r: 1.3, label: 'Dışarı çık', action: () => this.exit() });
+  }
+  // [V2] Duvar penceresi: list = [[merkez (duvar boyunca), genişlik]], wz duvar düzlemi (z), rotY cam yüzünün dönüşü,
+  // y0 denizlik yüksekliği, wh pencere yüksekliği. Cam düzlemi dış görüntüyü (ctx.outside) bakış yönüyle örnekler.
+  windows(ctx, list, wz, rotY, y0, wh) {
+    const s = ctx.scene, mat = ctx.winMat || (ctx.winMat = windowMaterial(ctx.outside));
+    const frame = ctx.winFrame || (ctx.winFrame = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.6 }));
+    const sg = Math.sign(wz) || 1, iz = wz - sg * 0.012;
+    for (const [cx, ww] of list) {
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), mat); pane.position.set(cx, y0 + wh / 2, iz); pane.rotation.y = rotY; s.add(pane);
+      for (const [bw, bh, x, y] of [[ww + 0.16, 0.08, cx, y0 - 0.04], [ww + 0.16, 0.08, cx, y0 + wh + 0.04], [0.08, wh, cx - ww / 2 - 0.04, y0 + wh / 2], [0.08, wh, cx + ww / 2 + 0.04, y0 + wh / 2], [0.05, wh, cx, y0 + wh / 2], [ww, 0.05, cx, y0 + wh * 0.62]]) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.06), frame); f.position.set(x, y, iz - sg * 0.02); s.add(f);
+      }
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.3, 0.05, 0.22), frame); sill.position.set(cx, y0 - 0.1, wz - sg * 0.11); s.add(sill);
+    }
   }
   box(ctx, w, h, d, x, y, z, mat, collide = true, rotY = 0) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -277,7 +309,8 @@ const BUILDERS = {
 
   safehouse(ctx) {
     const g = this.game;
-    this.room(ctx, 12, 10, 3.2, new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c1a') }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#2a2a2a', '#3a3a3a') }));
+    ctx.ambient = 1.4; // [V2] güvenli ev hâlâ loştu (ölçüm: ort. parlaklık 13.8 → 30)
+    this.room(ctx, 12, 10, 3.2, new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c1a') }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#4a4440', '#5a524a') })); // [V2] daha açık duvar kâğıdı
     this.carpet(ctx, 4, 3, -2, 0, 1);
     this.sofa(ctx, -2, -1.6, 0, '#1a1a1a');
     this.table(ctx, -2, 0, 1.2, 0.6, 0.45);
@@ -287,8 +320,9 @@ const BUILDERS = {
     const rack = this.box(ctx, 2, 2, 0.3, -5.7, 0, -2, new THREE.MeshStandardMaterial({ color: 0x222222 }), true, Math.PI / 2);
     void rack;
     ['ak', 'shotgun', 'pistol'].forEach((id, i) => { const m = buildWeaponModel(id); m.scale.setScalar(1.5); m.position.set(-5.5, 1.6 - i * 0.5, -2.6 + i * 0.2); m.rotation.y = Math.PI / 2; ctx.scene.add(m); });
-    this.light(ctx, -2, 2.9, 0, 0xffd8a0, 7);
-    this.light(ctx, 4, 2.9, -2, 0xffd8a0, 5);
+    this.light(ctx, -2, 2.9, 0, 0xffd8a0, 12, 14); // [V2] 7 → 12
+    this.light(ctx, 4, 2.9, -2, 0xffd8a0, 9, 12); // [V2] 5 → 9
+    this.light(ctx, -4.5, 2.9, -3.2, 0xffd8a0, 6, 9); // [V2] silah dolabı köşesi
     this.nazar(ctx, 0, 2.2, -4.99);
     { const K = new Kit(this, ctx); safehouseSeats(K); } // [şehir] kanepeye otur, yatağa uzan
     ctx.interact.push({ x: 4.6, z: -1.4, r: 1.6, label: 'Uyu ve Oyunu Kaydet', action: () => g.sleepAndSave() });
@@ -298,6 +332,7 @@ const BUILDERS = {
 
   konak(ctx) {
     const g = this.game;
+    ctx.ambient = 1.3; // [V2]
     this.room(ctx, 16, 14, 4.2, new THREE.MeshStandardMaterial({ map: marbleTexture() }), new THREE.MeshStandardMaterial({ map: wallpaperTexture('#5a1a1a', '#7a2a2a') }), 0xe8d8b0);
     this.carpet(ctx, 8, 6, 0, -2, 0);
     // makam masası
@@ -307,6 +342,8 @@ const BUILDERS = {
     this.sofa(ctx, 4, -1, -Math.PI / 2, '#3a0d0d');
     this.chandelier(ctx, 0, -2, 4.2, 1.2);
     this.chandelier(ctx, 0, 3, 4.2, 0.8);
+    // [V2] Reis'in konağı karanlıktı: yan duvarlarda sıcak aplikler
+    for (const z of [-4.5, 1.5]) for (const x of [-7.7, 7.7]) this.light(ctx, x, 2.6, z, 0xffd6a0, 6, 9);
     this.nazar(ctx, 0, 3, -6.99);
     this.sign(ctx, 'AİLE HER ŞEYDİR', 0, 3.2, -6.98, 0, '#1a0a0a', '#d4af37', 4);
     const reis = this.npc(ctx, 'boss', 0, -5.2, 0, { name: 'Reis Baba', look: { ...randomLook(ctx.rng, 'boss'), hat: 'none', hairColor: '#cccccc' } });
@@ -654,6 +691,7 @@ const BUILDERS = {
     this.carpet(ctx, 8, 6, 0, -2, 2);
     this.box(ctx, 3, 0.8, 1.2, 0, 0, -5.8, new THREE.MeshStandardMaterial({ map: woodTexture('#2a1a0a') }));
     this.chandelier(ctx, 0, -2, 4, 1.2);
+    for (const x of [-6, 6]) this.light(ctx, x, 3.6, 3, 0xffe2b8, 7, 11); // [V2] köşkün arka yarısı karanlıktı
     for (let i = 0; i < 6; i++) this.box(ctx, 1, 1, 1, -7 + i * 2.8, 0, 2 + (i % 2) * 2, new THREE.MeshStandardMaterial({ color: 0x3a3a3a }));
     this.game.missions.populateRival(ctx, this);
   },
