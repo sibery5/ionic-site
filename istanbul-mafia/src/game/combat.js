@@ -581,6 +581,11 @@ export class Combat {
     if (target.dead) return;
     const strongZ = (def && def.stagger || 1) * Math.min(1.5, 0.5 + dealt / 35);
     if (M.hitZone) M.hitZone(zone, side, strongZ, dir.x, dir.z);
+    // [tepki] yarayı tutma: sivil uzun süre (kaçarken de), savaşan kısa, oyuncu yalnız bir an (boş el)
+    if (M.setClutch && zone !== 'head') {
+      const civ = !target.isPlayer && (target.faction === 'civilian' || !target.wdef || target.wdef.type !== 'gun');
+      M.setClutch(zone, side, target.isPlayer ? 0.9 : civ ? 7 + Math.random() * 5 : 1.6 + Math.random(), target.isPlayer ? 0.6 : 1);
+    }
     // [vurulma tepkisi] ölçümde gövde irkilmesi zayıftı (omurga ~2°): merminin yönünde ek itki -> gövde ~8-12° sarsılır
     if (M.hit) M.hit(dir.x, dir.z, (zone === 'torso' ? 1.9 : zone === 'arm' ? 1.1 : 0.8) * Math.min(1.4, strongZ) * (target.isPlayer ? 0.6 : 1));
     if (zone === 'arm') {

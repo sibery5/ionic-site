@@ -473,6 +473,17 @@ export class CharacterModel {
     Z.zone = zone; Z.side = side > 0 ? 1 : -1; Z.k = clamp(k, 0.3, 1.6); Z.x = lx / l; Z.z = lz / l;
     Z.dur = zone === 'head' ? 0.6 : zone === 'leg' ? 0.55 : 0.4; Z.t = Z.dur;
   }
+  // [tepki] yarayı tutma: zone 'torso' | 'arm' | 'leg'; side +1 sağ; dur sn; k şiddet (0..1)
+  setClutch(zone, side, dur = 5, k = 1) {
+    if (zone !== 'torso' && zone !== 'arm' && zone !== 'leg') return;
+    const C = this.clutch || (this.clutch = { zone: null, side: 1, t: 0, dur: 0, k: 1 });
+    // daha ağır yara öncelikli: karın > bacak > kol
+    const rank = { torso: 3, leg: 2, arm: 1 };
+    if (C.t > 0.8 && rank[C.zone] > rank[zone]) { C.t = Math.max(C.t, dur); return; }
+    const was = C.t > 0 && C.zone === zone;
+    C.zone = zone; C.side = side > 0 ? 1 : -1; C.k = clamp(k, 0.3, 1);
+    if (was) { C.t = Math.max(C.t, dur); C.dur = Math.max(C.dur, C.t); } else { C.t = dur; C.dur = dur; }
+  }
   // [mekanik tepki] yere savrulma (patlama / araç çarpması): düşer, bir süre yatar, kalkar. dur: toplam süre (sn)
   knockdown(dirX, dirZ, dur = 2.2) {
     const h = this.root.rotation.y, c = Math.cos(h), s = Math.sin(h);
@@ -1105,6 +1116,24 @@ export class CharacterModel {
         hipsY -= 0.1 * w;
       }
     }
+    // [tepki] yarayı tutma: gövde yaraya doğru büzülür (karın: öne eğilip yana kapanır, kol: kol göğse çekilir, bacak: öne eğilip uyluğa uzanır)
+    const CL = this.clutch;
+    let clW = 0;
+    if (CL && CL.t > 0) {
+      CL.t -= dt;
+      clW = Math.min(1, (CL.dur - CL.t) / 0.18) * Math.min(1, CL.t / 0.7) * CL.k * (1 - W.swim) * (1 - W.sit) * (1 - W.dance) * (1 - rollW);
+      const xs = -CL.side, br2 = Math.sin(t * 2.6) * 0.03; // ağrılı soluk
+      if (CL.zone === 'torso') {
+        addJ(P, J.spine, (0.3 + br2) * clW, 0.08 * xs * clW, 0.1 * xs * clW); addJ(P, J.chest, 0.18 * clW, 0, 0.06 * xs * clW);
+        addJ(P, J.hipL, -0.12 * clW, 0, 0); addJ(P, J.hipR, -0.12 * clW, 0, 0); hipsY -= 0.05 * clW;
+      } else if (CL.zone === 'arm') {
+        const sh = CL.side > 0 ? J.shR : J.shL, el = CL.side > 0 ? J.elR : J.elL;
+        if (!(this.weaponMesh && CL.side > 0 && W.aim > 0.3)) { setJ(P, sh, P[sh * 3] * (1 - clW) - 0.45 * clW, 0, P[sh * 3 + 2] * (1 - clW) + 0.12 * clW); setJ(P, el, P[el * 3] * (1 - clW) - 1.6 * clW, 0, 0); }
+        addJ(P, J.spine, (0.14 + br2) * clW, 0, 0); addJ(P, J.chest, 0.06 * clW, 0.18 * xs * clW, 0);
+      } else if (CL.zone === 'leg') {
+        addJ(P, J.spine, (0.32 + br2) * clW, 0, 0.08 * xs * clW); addJ(P, J.chest, 0.1 * clW, 0, 0);
+      }
+    }
 
     // ---- baş: sabitleme + bakış ----
     {
@@ -1158,10 +1187,39 @@ export class CharacterModel {
         this.solveArm(A, WV.wT, WV.pole, null, wHand);
       }
     }
+    // [tepki] yarayı tutma: el IK ile yaranın üstüne (karın/uyluk: aynı taraftaki el, silahlıysa boş el; kol: karşı el yaralı kolu kavrar)
+    let clH = -1;
+    if (clW > 0.02) {
+      const hs = CL.zone === 'arm' ? -CL.side : CL.side; // tutan elin tarafı (+1 sağ)
+      clH = hs > 0 ? 1 : 0;
+      if (clH === 1 && this.weaponMesh) clH = CL.zone === 'arm' ? -1 : 0; // silah eli tutmaz
+      const wH = clH < 0 ? 0 : clW * (clH === 1 || !this.weaponMesh ? 1 : 1 - 0.85 * gunW * W.aim);
+      if (wH > 0.02) {
+        this.root.updateMatrixWorld(true);
+        const A = this.arms[clH], hy = this.root.rotation.y, fx = Math.sin(hy), fz = Math.cos(hy), lx = Math.cos(hy), lz = -Math.sin(hy);
+        const xs = -CL.side; // yaranın tarafı: +1 sol
+        if (CL.zone === 'arm') {
+          const B2 = this.arms[CL.side > 0 ? 1 : 0];
+          B2.sh.getWorldPosition(WV.shL); B2.el.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.4);
+          WV.wT.x += fx * 0.05 - lx * xs * 0.02; WV.wT.z += fz * 0.05 - lz * xs * 0.02;
+        } else if (CL.zone === 'leg') {
+          const L = this.legs[CL.side > 0 ? 1 : 0];
+          L.hip.getWorldPosition(WV.shL); L.kn.getWorldPosition(WV.wT); WV.wT.lerp(WV.shL, 0.55);
+          WV.wT.x += fx * 0.09; WV.wT.z += fz * 0.09;
+        } else {
+          WV.wT.set(xs * 0.075, 0.05, 0.13); this.spine.localToWorld(WV.wT);
+        }
+        A.sh.getWorldPosition(WV.shL);
+        const ps = clH === 0 ? 1 : -1;
+        WV.pole.copy(WV.shL); WV.pole.x += lx * ps * 0.6 - fx * 0.25; WV.pole.y -= 0.7; WV.pole.z += lz * ps * 0.6 - fz * 0.25;
+        this.solveArm(A, WV.wT, WV.pole, null, wH);
+      }
+    }
     // ---- eller ----
     const relaxed = 0.28 + 0.35 * run + 0.2 * wc;
     const cr = this._cr || (this._cr = [0, 0]);
     cr[0] = Math.max(relaxed, fistW[0]); cr[1] = Math.max(relaxed, fistW[1]);
+    if (clH >= 0) cr[clH] = Math.max(cr[clH], 0.5 * clW);
     if (this.weaponMesh) cr[1] = 0.85;
     if (twoH && gunW > 0.5) cr[0] = 0.8;
     else if (this.weaponMesh && gunW > 0.5 && W.aim > 0.5) cr[0] = 0.75; // [tutuş] tabancada destek eli tetik elini sarar (gerçek boyutlu elde düz el sarkıyordu)
