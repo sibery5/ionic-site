@@ -14,6 +14,7 @@ const _drvIn = { throttle: 0, steer: 0, hb: false, canDrive: false, offRoad: fal
 import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
 import { Debris } from '../world/debris.js';
 import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
+import { terrainHeight } from '../world/terrain.js';
 import { BIKE_BUILDERS } from './two_wheelers.js';
 import { MIL_BUILDERS } from './military_vehicles.js';
 
@@ -2448,9 +2449,15 @@ export class Vehicle {
     // köprü tabliyesi: yükseklik ve eğim (Boğaz köprüsü ~20 m, Galata 4.2 m)
     if (this.kind === 'car' && !this.sinking && !this.vy && !(this.destroyed && this.pos.y > (this.groundY || 0) + 0.01)) {
       const by = phys.interiorMode ? null : bridgeHeightAt(this.pos.x, this.pos.z);
-      this.groundY = by === null ? 0 : by;
+      // [dağ] araçlar arazi yüksekliğini hiç okumuyordu (köprü dışı her yer 0): dağa çıkılamıyordu. Arazi bölgesinde yükseklik + eğim
+      const th = by === null && !phys.interiorMode && this.pos.x > 900 ? terrainHeight(this.pos.x, this.pos.z) : null;
+      this.groundY = by !== null ? by : th !== null ? th : 0;
       this.pos.y = this.groundY;
-      if (by !== null) {
+      if (th !== null) {
+        const fx = Math.sin(this.heading), fz = Math.cos(this.heading), L = def.len * 0.45;
+        const hf = terrainHeight(this.pos.x + fx * L, this.pos.z + fz * L), hb = terrainHeight(this.pos.x - fx * L, this.pos.z - fz * L);
+        this.roadPitch = hf !== null && hb !== null ? -Math.atan((hf - hb) / (2 * L)) : 0;
+      } else if (by !== null) {
         const sl = bridgeSlopeAt(this.pos.x, this.pos.z, this._slope || (this._slope = { x: 0, z: 0 }));
         this.roadPitch = -Math.atan(sl.x * Math.sin(this.heading) + sl.z * Math.cos(this.heading));
       } else this.roadPitch = 0;

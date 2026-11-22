@@ -779,9 +779,12 @@ export class Wanted {
         if (this.arrestT > 2.2) { this.arrestT = 0; this.cuff(null); g.onBusted(); }
       } else {
         if (this.arrestT > 0.3 && p.speed >= 4.5 && this.level === 1) { this.add(1, true); g.ui.notify('Kelepçeden sıyrıldın! Polis artık ateş edecek.', 'warn'); }
-        if (this.arrestT > 0) { this.arrestT = Math.max(0, this.arrestT - dt * 2); if (this.arrestT <= 0) { p.handsUp = false; this.cuff(null); } }
+        if (this.arrestT > 0) { this.arrestT = Math.max(0, this.arrestT - dt * 2); if (this.arrestT <= 0) this.cuff(null); }
+        // [hata] eller yalnız sayaç azalarak sıfıra inince iniyordu; sayaç başka yoldan sıfırlanınca (yıldız artışı, kaçış) havada kalıyordu
+        if (this.arrestT <= 0.25 && p.handsUp) p.handsUp = false;
       }
-    } else if (p.vehicle && !p.dead && p.vehicle.kind === 'car') {
+    } else if (p.handsUp) p.handsUp = false; // araçta ya da ölüyken eller havada kalmasın
+    if (p.vehicle && !p.dead && p.vehicle.kind === 'car') {
       // [kanun] sıkıştırılan araçtaki oyuncu: polis kapıya gelir, "Araçtan in!"; 1-2★'da direnmezsen gözaltı
       const v = p.vehicle;
       let cop = null;

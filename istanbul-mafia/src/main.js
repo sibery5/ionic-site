@@ -1,5 +1,6 @@
 // İSTANBUL MAFYA — ana oyun sınıfı ve döngü
 import * as THREE from 'three';
+import { MOUNTAIN, terrainHeight } from './world/terrain.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -341,6 +342,7 @@ class Game {
     mark('-'); BOOT.ready = Math.round(performance.now()); // [hikâye]
     // [hikâye] büyük harita / mini harita tabanı: açılışı yavaşlatmasın diye menü göründükten sonra hazırlanır
     setTimeout(() => { try { mapBase(this); BOOT.mapBaseMs = this._mapBaseMs; } catch (e) { console.error(e); } }, 1500);
+    window.__terrain = { MOUNTAIN, terrainHeight }; // testler (dağ)
     window.__ready = true;
     requestAnimationFrame(this._loop);
   }

@@ -57,3 +57,12 @@ Her madde: belirti (kullanıcının sözü) · kabul kriteri · not.
 - K16 Şehir: gökdelen bölgesi mega şehir, kuşbakışında karton görünümlü binalar, balkona gömülü tabelalar, askeri bölgede deniz-yol kenarına zincir çit, daha ferah yollar.
 - K17 Hız göstergesi: yuvarlak, gerçek araç göstergesi gibi + vites.
 **Ayar (küçük):** öldürülenden düşen para ↑, görev ödülleri ↑, kırmızı ışık cezası ÷2, tekne hızı ↑.
+
+## Ek 2 — 1.12 oynanışı sonrası (sahibi: "ayrı ayrı exe verme; hepsini bitir, en sonda tek tam exe ver")
+- E1 Polis "teslim ol" sonrası uzaklaşınca eller havada kalıyor → DÜZELTİLDİ (wanted.js: tutuklama yoksa eller iner).
+- E2 Dağda araç kullanılamıyor; dağın her noktasına araçla ve yürüyerek gidilebilmeli → araçlar arazi yüksekliğini okumuyordu, DÜZELTİLDİ (doğrulama: mountain-steps.js).
+- E3 Yürüme sesi çok kötü; silah, mermi, çarpışma sesleri (önceki liste) → ses ekibi.
+- E4 Deniz araçları hâlâ saydam görünüyor → stüdyo ve oyun içi görüntüde yakalanamadı; sahibinden ekran görüntüsü istenecek, bu arada su/çizim sırası incelenir.
+- E5 Silah tutuşu, saldırı, zıplama, eğilme hâlâ absürt (1.12'de; 1.13 düzeltmeleri henüz sahibine gitmedi).
+- E6 Vurulan NPC'ler saçma çöküyor, yarayı tutmuyor; arabayla ezme saçma; patlamada karakter düz düşüp düz kalkıyor → vurulma/devrilme/kalkma tepkileri (yaraya el, sendeleme, yuvarlanma, doğal kalkış).
+- E7 Görev takibi zayıf: görev kabulünde canlı yönlendirme (hedef işareti, rota, mesafe, adım yazısı, 3B sarı ok).
