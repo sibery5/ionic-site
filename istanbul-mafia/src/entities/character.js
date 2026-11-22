@@ -630,7 +630,7 @@ export class CharacterModel {
         setJ(Q, J.hipL, -1.0, 0, 0.15); setJ(Q, J.hipR, -0.7, 0, 0.1); setJ(Q, J.knL, 0.9, 0, 0); setJ(Q, J.knR, 0.5, 0, 0);
         setJ(Q, J.shL, -0.6, 0, 1.3); setJ(Q, J.shR, -0.4, 0, 1.2); setJ(Q, J.elL, -0.4); setJ(Q, J.elR, -0.5);
         setJ(Q, J.head, 0.35, 0.3 * K.sd, 0); setJ(Q, J.spine, 0.15, 0, 0);
-        Q[HP + 1] = 0.35 - RIG.hips + 0.95 * 0.3;
+        Q[HP + 1] = 0.16 - RIG.hips; // kaputun üstünde sırtüstü (kök kaput yüzeyinde)
       } else {
         // takla: savrulma yönünde öne/arkaya dönüş (yüze göre), en çok ~1,5 rad (yere yan/sırt değsin)
         const spin = (K.mode === 'blast' ? 5.5 : 4.5) * (0.6 + 0.6 * K.k);

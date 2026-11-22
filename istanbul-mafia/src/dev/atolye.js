@@ -49,6 +49,22 @@ const posed = (wid, n, f, fn) => () => {
     m.root.userData.model = m; return m.root;
   } finally { Math.random = mr; }
 };
+// [tepki] vurulma / devrilme / kalkış poz kataloğu (R): i=30'da tetiklenir, n. karede dondurulur
+const tepki = (n, fn) => posed(null, n, () => ({}), (m, i) => { if (i === 30) fn(m); });
+const kd = (mode, dx, dz, dur = 3.4) => (m) => { m.kdNext = { mode, k: 0.8 }; m.knockdown(dx, dz, dur); };
+CAT['tepki:karin'] = tepki(75, (m) => m.setClutch('torso', 1, 5, 1));
+CAT['tepki:kol'] = tepki(75, (m) => m.setClutch('arm', 1, 5, 1));
+CAT['tepki:bacak'] = tepki(75, (m) => m.setClutch('leg', -1, 5, 1));
+CAT['tepki:diz'] = tepki(30 + 50, (m) => { m.setClutch('leg', -1, 3, 1); kd('knee', 0, 1, 2.6)(m); });
+CAT['tepki:savrul-hava'] = tepki(30 + 20, kd('blast', 0, 1));
+CAT['tepki:yuvarlan'] = tepki(30 + 70, kd('blast', 0, 1));
+CAT['tepki:yatis'] = tepki(30 + 96, kd('blast', 0, 1));
+CAT['tepki:kalk-sinav'] = tepki(30 + 128, kd('blast', 0, 1));
+CAT['tepki:kalk-dortayak'] = tepki(30 + 155, kd('blast', 0, 1));
+CAT['tepki:kalk-yarimdiz'] = tepki(30 + 182, kd('blast', 0, 1));
+CAT['tepki:sirt-yatis'] = tepki(30 + 96, kd('fall', 0, -1));
+CAT['tepki:sirt-dogrul'] = tepki(30 + 133, kd('fall', 0, -1));
+CAT['tepki:sirt-diz'] = tepki(30 + 159, kd('fall', 0, -1));
 const yuru = (v, extra) => (i) => ({ speed: v, moveZ: 1, ...extra });
 CAT['poz:ayakta'] = posed(null, 90, () => ({}));
 CAT['poz:yuru'] = posed(null, 97, yuru(1.4));
