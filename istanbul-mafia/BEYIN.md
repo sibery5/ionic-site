@@ -192,3 +192,6 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
   yoksa yapay takılmalar (cam sesi gibi) gerçek sanılır.
 - **Ben de kuralı çiğnedim:** toplu test sürerken atölye tarayıcısını çalıştırdım, iki test bellekten çöktü. Toplu test sürerken tarayıcı açma.
 - **Eski gövdeyle aynı pozu görüntüle (A/B):** silah tutuşu sorununda eski/yeni gövde ve eski/yeni silah ayrı ayrı denenince sebep iki adımda ayrıştı.
+- **Tırmanma testi çökmesi (1.13):** test tarayıcısı belleği 7. denetimden sonra ~70 MB/sn büyüyordu. Adımı ayrı koşunca (çit tırmanışı) 0,6 sn, JS yığını sabit 342 MB:
+  oyun sızdırmıyor; büyüme kamera denetiminin yazılımsal çizicide yüzlerce kare çizmesinden. Ders: bellek ölçümünde tek tarayıcı olduğundan emin ol (ekip testleri toplamı bozar)
+  ve şüpheli adımı ayrı koştur.
