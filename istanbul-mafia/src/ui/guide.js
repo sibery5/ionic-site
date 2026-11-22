@@ -115,9 +115,11 @@ export class Guide {
     // hareketli hedefte GPS rotası hedefi izler (rota g.updateGps ile 1,5 sn'de bir yeniden hesaplanır)
     if (main && main.kind !== 'iş') {
       const G = g.gpsTarget;
-      if (!G) { if (!g.waypoint) g.setGps(main.x, main.z); }
+      if (!G) { if (!g.waypoint) { g.setGps(main.x, main.z); this._own = true; } }
       else if (!g.waypoint && Math.hypot(G.x - main.x, G.z - main.z) > 4) { G.x = main.x; G.z = main.z; }
     }
+    // yönlendirmenin kendi açtığı rota hedef kalkınca kapanır (ödül avı bitti, sevgili yanında)
+    if ((!main || main.kind === 'iş') && this._own) { this._own = false; if (!g.waypoint && !g.missions.active) g.setGps(null); }
     // 3B oklar
     const cam = g.camera.position, now = performance.now() * 0.001;
     let n = 0;
