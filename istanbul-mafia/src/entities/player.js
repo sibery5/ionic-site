@@ -300,9 +300,6 @@ export class Player extends Actor {
         this.pos.y = r.support; this.vy = 0; this.grounded = true;
       } else this.grounded = this.pos.y - r.support < 0.05;
       // ayak sesi
-      // [ses S2] adım kancası: ayak sesi modelin topuk temasıyla (character.js stepHit) eşleşir; koşuda sert, çömelikte yumuşak
-      const sh = this.model.stepHit || 0;
-      if (sh !== this._stepSeen) { this._stepSeen = sh; if (this.grounded && this.speed > 0.6) g.audio.step(this.pos.x, this.pos.z, undefined, this.crouch ? 0 : (this.model.stepRun > 0.5 ? 2 : 1)); }
     } else if (this.swimming) {
       g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
     }
@@ -330,6 +327,8 @@ export class Player extends Actor {
       }
     }
     this.model.animate(dt, this.animState());
+    // [ses S2] adım kancası: ayak sesi modelin topuk temasıyla (character.js stepHit) aynı karede çalar; koşuda sert, çömelikte yumuşak
+    { const sh = this.model.stepHit || 0; if (sh !== this._stepSeen) { this._stepSeen = sh; if (this.grounded && !this.swimming && !this.vehicle && this.speed > 0.6) g.audio.step(this.pos.x, this.pos.z, undefined, this.crouch ? 0 : (this.model.stepRun > 0.5 ? 2 : 1)); } }
     this.syncModel();
   }
 
