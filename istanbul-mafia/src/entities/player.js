@@ -300,8 +300,9 @@ export class Player extends Actor {
         this.pos.y = r.support; this.vy = 0; this.grounded = true;
       } else this.grounded = this.pos.y - r.support < 0.05;
       // ayak sesi
-      this.stepT -= dt * this.speed;
-      if (this.grounded && this.stepT <= 0 && this.speed > 1) { this.stepT = this.crouch ? 2.2 : 1.6; g.audio.step(this.pos.x, this.pos.z); }
+      // [ses S2] adım kancası: ayak sesi modelin topuk temasıyla (character.js stepHit) eşleşir; koşuda sert, çömelikte yumuşak
+      const sh = this.model.stepHit || 0;
+      if (sh !== this._stepSeen) { this._stepSeen = sh; if (this.grounded && this.speed > 0.6) g.audio.step(this.pos.x, this.pos.z, undefined, this.crouch ? 0 : (this.model.stepRun > 0.5 ? 2 : 1)); }
     } else if (this.swimming) {
       g.physics.resolveCircle(this.pos, this.radius, this.pos.y);
     }

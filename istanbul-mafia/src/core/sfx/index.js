@@ -81,7 +81,7 @@ export function installSfx(AudioEngine) {
     impactMetal(x, z) { WD.impact(this, x, z, 'metal'); },
     ricochet(x, z) { WD.ricochet(this, x, z); },
     shell(x, z, plastic = false, k = 1) { WD.shell(this, x, z, plastic, k); },
-    step(x, z, surface) { WD.step(this, x, z, surface); },
+    step(x, z, surface, k) { WD.step(this, x, z, surface, k); },
     // kapı: open=true açılış (mandal + menteşe gıcırtısı), false kapanış (gövde + mandal). kind: wood | metal | car
     door(x, z, open = true, kind = 'wood') { WD.door(this, x, z, open, kind); },
     seagull(x, z, k = 1) { WD.seagull(this, x, z, k); },

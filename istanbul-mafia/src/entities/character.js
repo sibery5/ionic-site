@@ -687,6 +687,9 @@ export class CharacterModel {
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? 1 : -1;
       const p = fract(cyc + i * 0.5);
+      // [ses S2] adım kancası: topuk teması = duruş evresinin başı (p sıfırdan geçer); ses bu karede tetiklenir (±1 kare)
+      if (F[i].pp !== undefined && p < F[i].pp && moving > 0.3 && !st.air) { this.stepHit = (this.stepHit || 0) + 1; this.stepRun = run; }
+      F[i].pp = p;
       let along, y = 0, pitch, toe = 0;
       if (p < beta) {
         const u = p / beta;
