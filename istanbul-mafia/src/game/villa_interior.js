@@ -151,7 +151,7 @@ export function buildVillaInterior(VG, I, ctx) {
   // giriş holü: yuvarlak orta masa + çiçek, mermer kakma, iki konsol + ayna
   K.box(6, 0.012, 5, 0, 0.001, 5.2, C.marbleK, { rough: 0.2 }); K.box(5.2, 0.014, 4.2, 0, 0.002, 5.2, 0xe8e2d4, { rough: 0.2 });
   K.cyl(0.75, 0.75, 0.05, 0, 0.78, 4.6, C.walnutD, { rough: 0.3, seg: 24 }); K.cyl(0.18, 0.3, 0.78, 0, 0, 4.6, C.brass, { ...BR, col: true });
-  K.cyl(0.16, 0.12, 0.38, 0, 0.83, 4.6, 0xf2f2f2, { rough: 0.2 }); K.sphere(0.42, 0, 1.4, 4.6, 0xd85a7a, { rough: 0.9, sy: 0.75 });
+  K.cyl(0.16, 0.12, 0.38, 0, 0.83, 4.6, 0xf2f2f2, { rough: 0.2 }); for (let k = 0; k < 7; k++) K.sphere(0.1, Math.cos(k * 0.9) * 0.16 * (k % 3), 1.27 + (k % 3) * 0.06, 4.6 + Math.sin(k * 0.9) * 0.16 * (k % 3), [0xd85a7a, 0xf2f0ea, 0xe8a0b0][k % 3], { rough: 0.9 }); // buket
   for (const sx of [-1, 1]) { K.box(1.6, 0.85, 0.45, sx * 3.0, 0, 7.6, C.walnut, { col: true, uv: 'wood' }); K.box(1.1, 1.5, 0.04, sx * 3.0, 1.2, 7.82, 0xc8d8e0, { rough: 0.05, metal: 0.9 }); K.box(1.2, 0.05, 0.06, sx * 3.0, 2.72, 7.8, C.brass, BR); }
   // büyük salon — 1. oturma grubu: şömine + televizyon karşısı
   K.box(0.7, 1.25, 2.6, -11.5, 0, -3.5, C.stone, { col: true, rough: 0.5 }); K.box(0.8, 0.12, 2.9, -11.45, 1.25, -3.5, C.marbleW, { rough: 0.25 });

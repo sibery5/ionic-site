@@ -28,7 +28,9 @@ module.exports = async (p, out) => {
     };
   });
   const save = (n, r) => { if (r && r.url) { fs.writeFileSync(path.join(out, tag + '-' + n + '.jpg'), Buffer.from(r.url.split(',')[1], 'base64')); delete r.url; } console.log('V2', n, JSON.stringify(r)); return r; };
-  const run = async (n, fn, arg) => { try { return save(n, await p.evaluate(fn, arg)); } catch (e) { console.log('V2HATA', n, String(e.message || e).slice(0, 300)); return null; } };
+  // V2ONLY=ad1,ad2: yalnız bu görüntüler (yazılımsal çizicide ikinci okuma tarayıcıyı düşürüyor → görüntü başına ayrı koşu)
+  const only = process.env.V2ONLY ? process.env.V2ONLY.split(',') : null;
+  const run = async (n, fn, arg) => { if (only && n !== 'villa-giris' && !only.includes(n)) return null; try { return save(n, await p.evaluate(fn, arg)); } catch (e) { console.log('V2HATA', n, String(e.message || e).slice(0, 300)); return null; } };
 
   if (parts.includes('ic')) {
     // iç mekânlar: güvenli ev, Reis konağı, köşk — oyuncu kapı önünde, kamera odaya (ve ikinci görüntü kapıya) bakar
