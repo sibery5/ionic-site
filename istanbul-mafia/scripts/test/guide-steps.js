@@ -19,7 +19,8 @@ module.exports = async (p, out) => {
 
   // 1) görev yokken yönlendirme kapalı
   const idle = await p.evaluate(() => { game.setGps(null); sim(0.3); return { ...game.ui.guide.stat }; });
-  check(!idle.on || idle.kind !== 'görev', `Görev yokken görev oku yok (${JSON.stringify(idle)})`);
+  // görev yokken oyunun kendi sıradaki iş işaretçisi (konak) gösterilir; başka hedef yok
+  check(!idle.on || /konak|Reis|uğra/i.test(idle.text), `Görev yokken yalnız sıradaki iş (konak) gösteriliyor (${idle.text || 'kapalı'})`);
 
   // 2) ilk üç görev: her adımda ok + mesafe + rota
   for (let mi = 0; mi < 3; mi++) {
@@ -43,7 +44,7 @@ module.exports = async (p, out) => {
     const good = outside.filter((x) => x.on && x.above >= 1.5 && x.above <= 3.2 && x.route > 0 && x.box && x.text);
     console.log(`GÖREV ${mi + 1} ${r.title}: ` + JSON.stringify(r.rows));
     check(outside.length > 0 && good.length === outside.length, `Görev ${mi + 1} (${r.title}): dışarıdaki ${outside.length} adımın ${good.length}'inde ok (1,5–3 m üstte) + mesafe + rota + adım yazısı`);
-    check(!r.after.on || r.after.kind !== 'görev', `Görev ${mi + 1} bitince görev oku kalkıyor`);
+    check(!r.after.on || /konak|Reis|uğra/i.test(r.after.text), `Görev ${mi + 1} bitince eski hedefin oku kalkıyor (kalan: ${r.after.text || 'yok'})`);
   }
 
   // 3) hedef arkada: ekran kenarı oku; hedefe bakınca kenar oku gizli; ok uzakta büyür (ekranda sabit boy)
@@ -78,7 +79,8 @@ module.exports = async (p, out) => {
     const n1 = game.npcs.add('gang', P.pos.x + 30, P.pos.z + 5);
     const saveLive = B.live; B.live = { target: n1, def: {} };
     sim(0.4);
-    const S = game.ui.guide.stat, b = { on: S.on, kind: S.kind, above: +S.above.toFixed(2), col: game.ui.guide.arrows[0].material.color.getHexString() };
+    const Gd = game.ui.guide, i = Gd.T.findIndex((t) => t.on && t.kind === 'ödül avı'), A = i >= 0 ? Gd.arrows[i] : null;
+    const b = { on: !!(A && A.visible), kind: i >= 0 ? 'ödül avı' : '', above: A ? +(A.position.y - n1.pos.y).toFixed(2) : 0, col: A ? A.material.color.getHexString() : '' };
     B.live = saveLive; game.npcs.remove(n1);
     const id = Object.keys(R.S)[0];
     const n2 = game.npcs.add('civilian', P.pos.x + 40, P.pos.z - 10);

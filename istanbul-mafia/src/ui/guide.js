@@ -62,6 +62,7 @@ export class Guide {
       if (mk.mmHide || mk.areaOnly) continue;
       if (mk.actor) { if (mk.actor.dead || mk.actor.passengerOf) continue; const a = mk.actor, v = a.vehicle; return this.setT(0, (v || a).pos.x, (v || a).pos.y, (v || a).pos.z, v ? H_CAR : H_PERSON, 'görev'); }
       if (mk.vehicle) { if (mk.vehicle.destroyed) continue; return this.setT(0, mk.vehicle.pos.x, mk.vehicle.pos.y, mk.vehicle.pos.z, H_CAR, 'görev'); }
+      if (!Number.isFinite(mk.x) || !Number.isFinite(mk.z)) continue; // konumsuz işaretçi (araç henüz yok)
       return this.setT(0, mk.x, this.groundY(mk.x, mk.z), mk.z, H_POINT, 'görev');
     }
     if (M.active && g.gpsTarget) return this.setT(0, g.gpsTarget.x, this.groundY(g.gpsTarget.x, g.gpsTarget.z), g.gpsTarget.z, H_POINT, 'görev');
