@@ -172,13 +172,14 @@ h3 { font: 600 12px var(--display); color: var(--gold); letter-spacing: 0.3em; m
 /* ---------- karakter yaratma ---------- */
 .modal.creator-layer { background: transparent; pointer-events: none; }
 .creator-ui { position: fixed; inset: 0; pointer-events: none; }
-.creator-ui::before { content: ''; position: absolute; inset: 0; background: linear-gradient(270deg, rgba(6,6,8,0.94) 0%, rgba(6,6,8,0.75) 28%, transparent 52%), radial-gradient(ellipse at 36% 55%, transparent 40%, rgba(0,0,0,0.55) 100%); }
-.cr-panel { position: absolute; right: clamp(28px, 5vw, 100px); top: 50%; transform: translateY(-50%); width: min(470px, 42vw); max-height: 88vh; display: flex; flex-direction: column; pointer-events: auto; }
+/* [S2] aydınlık mağaza sahnesi: tam ekran karartma yok; panel kendi koyu kartında */
+.creator-ui::before { content: ''; position: absolute; inset: 0; background: linear-gradient(270deg, rgba(20,16,12,0.28) 0%, transparent 40%); }
+.cr-panel { position: absolute; right: clamp(20px, 4vw, 80px); top: 50%; transform: translateY(-50%); width: min(490px, 44vw); max-height: 90vh; box-sizing: border-box; padding: 22px 24px 20px; background: rgba(14,12,11,0.88); border: 1px solid rgba(201,165,74,0.35); border-radius: 6px; box-shadow: 0 18px 50px rgba(40,28,16,0.35); display: flex; flex-direction: column; pointer-events: auto; }
 .cr-step { font: 600 11px var(--display); letter-spacing: 0.5em; color: var(--red); }
 .cr-head h2 { margin: 8px 0 6px; font: 700 34px var(--display); letter-spacing: 0.12em; }
 .cr-head p { margin: 0; font: italic 14px var(--serif); color: var(--mute); }
 .cr-tabs { display: flex; margin-top: 24px; border-bottom: 1px solid var(--line); }
-.cr-tab { display: flex; align-items: center; gap: 8px; padding: 12px 16px 12px 0; margin-right: 18px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--mute); font: 600 13px var(--display); letter-spacing: 0.14em; text-transform: uppercase; cursor: var(--cursor); transition: color 0.15s, border-color 0.15s; }
+.cr-tab { display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 12px 8px 12px 0; margin-right: 5px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--mute); font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; cursor: var(--cursor); transition: color 0.15s, border-color 0.15s; }
 .cr-tab:hover, .cr-tab.hot { color: var(--paper); }
 .cr-tab.on { color: var(--paper); border-bottom-color: var(--gold); }
 .cr-body { flex: 1; overflow-y: auto; padding: 8px 4px 8px 0; min-height: 260px; }
@@ -196,12 +197,13 @@ h3 { font: 600 12px var(--display); color: var(--gold); letter-spacing: 0.3em; m
 .btn.big-cta { margin-left: auto; padding: 13px 26px; font-size: 14px; letter-spacing: 0.2em; }
 .cr-view { position: absolute; left: clamp(40px, 7vw, 150px); bottom: 44px; pointer-events: auto; }
 .cr-tools { display: flex; gap: 6px; }
-.btn.cr-tool { width: 42px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; }
-.cr-hint { margin: 12px 0 0; font: 500 11px var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); }
+.btn.cr-tool { width: 42px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(22,18,14,0.82); color: #f0e8dc; }
+.cr-hint kbd { background: #2a221a; color: #f0e8dc; border-color: #2a221a; }
+.cr-hint { margin: 12px 0 0; font: 500 11px var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: #5a4e40; }
 .cr-hint kbd + kbd { margin-left: 8px; }
 .cr-name { position: absolute; left: clamp(40px, 7vw, 150px); top: 56px; }
-.cr-name small { font: 600 10px var(--display); letter-spacing: 0.5em; color: var(--red); }
-.cr-name b { display: block; font: 700 46px var(--display); letter-spacing: 0.16em; margin-top: 4px; }
+.cr-name small { font: 600 10px var(--display); letter-spacing: 0.5em; color: #9a1418; }
+.cr-name b { display: block; font: 700 46px var(--display); letter-spacing: 0.16em; margin-top: 4px; color: #1e1914; }
 input.txt { background: rgba(0,0,0,0.4); border: 0; border-bottom: 1px solid var(--line2); color: var(--paper); font: 600 22px var(--display); letter-spacing: 0.08em; padding: 8px 2px; width: 100%; outline: none; transition: border-color 0.15s; }
 input.txt:focus, input.txt.hot { border-color: var(--gold); }
 
