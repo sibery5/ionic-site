@@ -11,6 +11,7 @@ import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK } from './story_data.js';
 import { Baba } from './baba.js';
 import { Dialogue, shotBetween, shotOver, shotWide } from './dialogue.js';
 import { SideContent, MarkerSet } from './side_missions.js';
+import { Showdowns } from './showdowns.js';
 import { Military, PoliceStations } from './military.js';
 
 export { STORY };
@@ -51,6 +52,7 @@ export class Missions {
     this.summonT = 0;
     this.konakAutoT = 0; // konağa girince Reis'in değerlendirme + yeni iş sahnesi
     this.baba = new Baba(this); // güven / şüphe / performans notu
+    this.showdowns = new Showdowns(this); // [O3] çete hesaplaşmaları
   }
   addMarkerSet(ms) { this.extraSets.push(ms); return ms; }
   // Eski kayıtlarla uyum: hikâyeye görev eklenince storyIndex'i tamamlanan görevlerden yeniden hesapla
@@ -770,6 +772,11 @@ export class Missions {
   post(dt) {
     const g = this.g;
     this.side.update(dt);
+    this.showdowns.update(dt);
+    // [O2/O3] görev sürerken kanun en çok görevin izin verdiği yıldıza çıkar (varsayılan 3★; "polisle" görevlerde tanımda 4★);
+    // çete hesaplaşmasında çete bölgesi: en çok 2★. Görev dışında sınır yok.
+    const A = this.active, SD = this.showdowns.job;
+    g.wanted.capLevel = A ? (A.maxStars || 3) : SD ? SD.def.wanted : 0;
     this.military.update(dt);
     this.stations.update(dt);
     this.story.update();

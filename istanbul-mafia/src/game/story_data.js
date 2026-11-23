@@ -1321,7 +1321,7 @@ export const STORY = [
     ],
   },
   {
-    id: 'banka', act: 3, title: 'Büyük Vurgun', reward: 80000, respect: 300, giver: 'Leyla', short: 'Savaş kasası için banka soygunu.',
+    id: 'banka', act: 3, maxStars: 4 /* [O2] polisle çatışmalı */, title: 'Büyük Vurgun', reward: 80000, respect: 300, giver: 'Leyla', short: 'Savaş kasası için banka soygunu.',
     brief: 'Savaşın parası lazım. Nevzat Kurtlar\'ın parasını Beşiktaş\'taki bankanın kasa dairesinde tutuyor. O parayı alırsak hem biz güçleniriz hem o zayıflar. Kasa dairesini del, polisle çatış ve kaç.',
     steps: [
       enter('bank', 'Beşiktaş\'taki bankaya gir', {
@@ -1494,7 +1494,7 @@ export const STORY = [
 
   // ============================ BEŞİNCİ PERDE · GİZLİ MASA (gerçek ve komplo) ============================
   {
-    id: 'nevzat', act: 4, title: 'Komiserin Sonu', reward: 60000, respect: 340, needTrust: 60, short: 'Nevzat\'ın konvoyu, hesaplaşma ve yedi yılın gerçeği.',
+    id: 'nevzat', act: 4, maxStars: 4 /* [O2] polis konvoyu */, title: 'Komiserin Sonu', reward: 60000, respect: 340, needTrust: 60, short: 'Nevzat\'ın konvoyu, hesaplaşma ve yedi yılın gerçeği.',
     brief: (M) => `Ayağa kalktım evlat ama Nevzat rahat durmuyor. Konvoyla şehirden kaçıyor; savcıyla anlaşmış, ağzını açacak. Konvoyu durdur, onu arabadan indir. ${M.flag('ledger') ? 'Elinizde defter varmış, duydum. O defter... Savcıya gitmesin, bana getir.' : 'Konuşmadan susturulması lazım. Anladın mı beni? Konuşmadan.'}`,
     steps: [
       step({

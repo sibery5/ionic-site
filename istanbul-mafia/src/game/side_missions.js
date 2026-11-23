@@ -473,7 +473,7 @@ export class SideContent {
   update(dt) {
     const g = this.g;
     if (g.player.inInterior) return;
-    const storyBusy = !!this.M.active;
+    const storyBusy = !!this.M.active || !!(this.M.showdowns && this.M.showdowns.busy); // [O3]
     if (this.event) this.updateEvent(dt);
     else if (!storyBusy && !this.contract && !this.war && !this.lostBag && !this.bagCarry) {
       this.eventT -= dt;

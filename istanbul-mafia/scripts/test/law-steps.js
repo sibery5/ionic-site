@@ -113,11 +113,11 @@ module.exports = async (p, out) => {
       L.clear();
       const R = L.road(200, -100, 100); const at = R.at(50, 8.5); L.place(at.x, at.z);
       sim(0.3);
-      W.set(4); W.swatT = 0.1; W.dispatchT = 99; W.roadblockT = 99; sim(1);
+      W.set(4); W.hold[4] = 99; W.swatT = 0.1; W.dispatchT = 99; W.roadblockT = 99; sim(1); // [O] kademe süresi dolmuş say
       const swatU = W.units.filter((u) => u.type === 'swat');
       const swatInVan = swatU.length && swatU[0].crew.every((a) => a.passengerOf === swatU[0].v || a.cargoOf === swatU[0].v);
       const vanType = swatU.length ? swatU[0].v.type : null;
-      W.set(5); W.armyT = 0.1; W.heliT = 0.1; sim(1);
+      W.set(5); W.armyT = 0.1; W.heliT = 0.1; sim(1, () => { W.hold[5] = 99; });
       const jU = W.units.filter((u) => u.type === 'jandarma');
       const heli = W.heli ? Math.round(L.d(W.heli.pos, game.player.pos)) : -1;
       return { swat: swatU.length, swatInVan: !!swatInVan, vanType, jand: jU.length, jVeh: jU.length ? jU[0].v.type : null, jCrew: jU.length ? jU[0].crew.length : 0, heliDist: heli };
@@ -298,7 +298,7 @@ module.exports = async (p, out) => {
       for (let k = 0; k < 3; k++) { pl.vy = 4; pl.grounded = false; sim(0.1); pl.pos.set(m.zone.x1 + 0.9, 0, m.cz); sim(1.6); cs.push(m.alert ? 3 : m.stage); }
       m.calm(); W.reset(); m.alertT = 0; sim(0.5);
       // içeri girme
-      pl.pos.set(m.zone.x1 - 3, 0, m.cz); sim(0.5); const in1 = m.stage; sim(3.8); const in2 = m.stage; sim(3.5); const inAlert = m.alert;
+      pl.pos.set(m.zone.x1 - 3, 0, m.cz); sim(0.5); const in1 = m.stage; sim(8.5); const in2 = m.stage; sim(7); const inAlert = m.alert || !!m.search; // [O5] 15 sn uyarı, sonra alarm + arama
       pl.pos.set(m.zone.x1 + 220, 0, m.cz); m.alertT = 1; sim(2);
       m.calm(); W.reset();
       // dışarıdan (35 m) ateş: önce son uyarı

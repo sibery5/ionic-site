@@ -96,5 +96,39 @@ module.exports = async (p, out) => {
   console.log('DİĞER ' + JSON.stringify(o));
   check(o.b.on && o.b.kind === 'ödül avı' && o.b.above >= 1.5 && o.b.above <= 3.2 && o.b.col === 'ffd21a', `Ödül avı hedefinde sarı ok (${o.b.above} m üstte, #${o.b.col})`);
   check(o.gf.arrows >= 1 && o.gf.y >= 1.5 && o.gf.y <= 3.2, `Kız arkadaşın üstünde sarı ok (${o.gf.y} m)`);
+  // 5) [O4] okun ekran boyu: 0–200 m'de projeksiyonla (uç ve tepe noktası) ekran yüksekliği oranı ≤ 0,06;
+  //    kameraya < 6 m'de / kamera ile oyuncu arasında gizli; kişi hedefine < 4 m'de gizli; aynı anda en çok 2 ok
+  const fr = await p.evaluate(() => {
+    const g = game, P = g.player, Gd = g.ui.guide, B = g.social.bounties, M = g.missions;
+    if (M.active) M.cleanup(true); M.active = null; g.setGps(null);
+    const saveLive = B.live, t = g.npcs.add('gang', P.pos.x, P.pos.z + 1);
+    B.live = { target: t, def: {} };
+    const rows = []; let maxF = 0, nearShown = 0, personShown = 0;
+    const v = P.pos.clone(), w = P.pos.clone();
+    for (const d of [0, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 80, 120, 160, 200]) {
+      t.pos.set(P.pos.x + Math.sin(P.camYaw) * d, P.pos.y, P.pos.z + Math.cos(P.camYaw) * d); t.state = 'idle';
+      sim(0.15);
+      const i = Gd.T.findIndex((x) => x.on && x.kind === 'ödül avı'), A = Gd.arrows[i];
+      if (!A || !A.visible) { rows.push(d + ':gizli'); continue; }
+      g.camera.updateMatrixWorld();
+      v.copy(A.position).project(g.camera); w.copy(A.position); w.y += 1.05 * A.scale.y; w.project(g.camera);
+      const f = Math.abs(w.y - v.y) / 2, dc = A.position.distanceTo(g.camera.position);
+      maxF = Math.max(maxF, f); rows.push(d + ':' + f.toFixed(3));
+      if (dc < 6) nearShown++;
+      if (d < 4) personShown++;
+    }
+    // aynı anda en çok 2 ok: 4 hedef kaydı açılsa da
+    const pm = Gd.pickMain;
+    Gd.pickMain = function () { for (let k = 1; k < 5; k++) this.setT(k, P.pos.x + 30 * k, P.pos.y, P.pos.z + 20, 2.0, 'görev'); return this.setT(0, P.pos.x - 40, P.pos.y, P.pos.z + 30, 2.0, 'görev'); };
+    sim(0.1);
+    const vis = Gd.arrows.filter((a) => a.visible).length;
+    Gd.pickMain = pm;
+    B.live = saveLive; g.npcs.remove(t); sim(0.2);
+    return { maxF: +maxF.toFixed(3), rows: rows.join(' '), nearShown, personShown, vis };
+  });
+  console.log('OK EKRAN ORANI ' + JSON.stringify(fr));
+  check(fr.maxF <= 0.06, `Ok 0–200 m'de ekran yüksekliğinin en çok %6'sı (en büyük ${(fr.maxF * 100).toFixed(1)}%)`);
+  check(fr.nearShown === 0 && fr.personShown === 0, 'Kameraya < 6 m ve kişi hedefine < 4 m iken ok gizli');
+  check(fr.vis <= 2, `Aynı anda en çok 2 ok (${fr.vis})`);
   console.log(fails.length ? `BAŞARISIZ ${fails.length}` : 'YÖNLENDİRME TAMAM');
 };

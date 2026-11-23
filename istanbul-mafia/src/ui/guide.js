@@ -6,6 +6,9 @@ import * as THREE from 'three';
 import { terrainHeight } from '../world/terrain.js';
 
 const YELLOW = 0xffd21a, NARROWS = 5;
+// [O4] okun ekrandaki boyu: ekran yüksekliğinin bu oranı (sabit; en çok %6). Kameraya NEAR_HIDE m'den yakınsa ya da kamera ile
+// oyuncu arasına girerse solar; hedefe PERSON_HIDE m'den yakın oyuncuda gizlenir; aynı anda en çok MAX_ON ok.
+export const ARROW = { frac: 0.045, maxFrac: 0.06, len: 1.05, nearHide: 6, nearFade: 3, personHide: 4, maxOn: 2, opacity: 0.82 };
 const H_PERSON = 2.35, H_CAR = 2.7, H_POINT = 2.0; // okun ucu hedefin tabanından bu kadar yukarıda (1,5–3 m)
 
 function arrowGeo() {
@@ -34,12 +37,13 @@ export class Guide {
   build() {
     const g = this.g;
     const geo = arrowGeo();
-    const mat = new THREE.MeshBasicMaterial({ color: YELLOW, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, fog: false });
-    const edgeMat = new THREE.MeshBasicMaterial({ color: 0x3a2a00, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false, fog: false, side: THREE.BackSide });
     this.arrows = [];
     for (let i = 0; i < NARROWS; i++) {
+      // ok başına malzeme (solma ok başına); yalnız kurulumda ayrılır
+      const mat = new THREE.MeshBasicMaterial({ color: YELLOW, transparent: true, opacity: ARROW.opacity, depthTest: false, depthWrite: false, fog: false });
+      const edgeMat = new THREE.MeshBasicMaterial({ color: 0x3a2a00, transparent: true, opacity: 0.45, depthTest: false, depthWrite: false, fog: false, side: THREE.BackSide });
       const m = new THREE.Mesh(geo, mat); m.renderOrder = 998; m.frustumCulled = false; m.visible = false;
-      const o = new THREE.Mesh(geo, edgeMat); o.scale.setScalar(1.12); o.position.y = -0.03; o.renderOrder = 997; o.frustumCulled = false; m.add(o); // koyu kenar: açık gökte okunur
+      const o = new THREE.Mesh(geo, edgeMat); o.scale.setScalar(1.06); o.position.y = -0.015; o.renderOrder = 997; o.frustumCulled = false; m.add(o); // ince koyu kenar: açık gökte okunur
       g.scene.add(m); this.arrows.push(m);
     }
     // sol üst takip kutusu ve ekran kenarı oku (yalnız JS ile konum; sürekli CSS animasyonu yok)
@@ -123,24 +127,36 @@ export class Guide {
     if ((!main || main.kind === 'iş') && this._own) { this._own = false; if (!g.waypoint && !g.missions.active) g.setGps(null); }
     // 3B oklar
     const cam = g.camera.position, now = performance.now() * 0.001;
+    // [O4] eski ölçek min(14, max(1, dc/16)) yakında 1 m'de kalıyordu: hedef kameraya 2–3 m iken ok ekranın üçte birini,
+    // kamera okun içindeyken bütün ekranı kaplıyordu (fotoğraftaki dev sarı koni). Şimdi boy ekran oranıyla sabit.
+    const tanH = Math.tan((g.camera.fov || 60) * Math.PI / 360);
+    const php = p.vehicle ? p.vehicle.pos : p.pos, phy = php.y + 1.4;
     let n = 0;
     for (let i = 0; i < NARROWS; i++) {
       const T = this.T[i], A = this.arrows[i];
       const pd = T.on ? Math.hypot(T.x - p.pos.x, T.z - p.pos.z) : 0;
-      if (!T.on || (pd < 2.2 && T.kind !== 'sevgili')) { A.visible = false; continue; }
+      if (!T.on || n >= ARROW.maxOn || pd < (T.h === H_PERSON ? ARROW.personHide : 2.2)) { A.visible = false; continue; }
+      const ay = T.y + T.h + 0.12 * Math.sin(now * 3.2 + i); // aşağı-yukarı hafifçe sallanır
+      const dc = Math.hypot(T.x - cam.x, ay - cam.y, T.z - cam.z);
+      // kamera→oyuncu doğrusuna (omuz üstü görüş) yakın ok görüşü kapatır: o doğru üzerindeyse solar
+      const sx = php.x - cam.x, sy = phy - cam.y, sz = php.z - cam.z, sl2 = sx * sx + sy * sy + sz * sz || 1;
+      const u = Math.max(0, Math.min(1, ((T.x - cam.x) * sx + (ay - cam.y) * sy + (T.z - cam.z) * sz) / sl2));
+      const block = Math.hypot(cam.x + sx * u - T.x, cam.y + sy * u - ay, cam.z + sz * u - T.z) < 1.6 && u < 0.98;
+      const fade = block ? 0 : Math.max(0, Math.min(1, (dc - ARROW.nearHide) / ARROW.nearFade));
+      if (fade <= 0.01) { A.visible = false; continue; }
       n++;
-      const dc = Math.hypot(T.x - cam.x, T.y + T.h - cam.y, T.z - cam.z);
-      const s = Math.min(14, Math.max(1, dc / 16)); // uzakta ekrandaki büyüklük sabit
+      const s = Math.min(ARROW.maxFrac, ARROW.frac) * 2 * dc * tanH / ARROW.len; // ekranda sabit boy
       A.visible = true;
+      A.material.opacity = ARROW.opacity * fade; A.children[0].material.opacity = 0.45 * fade;
       A.scale.setScalar(s);
-      A.position.set(T.x, T.y + T.h + 0.18 * Math.sin(now * 3.2 + i), T.z); // aşağı-yukarı sallanır
+      A.position.set(T.x, ay, T.z);
       A.rotation.y = now * 1.4;
     }
     this.updateHud(main);
     const S = this.stat;
     S.on = !!main; S.kind = main ? main.kind : ''; S.arrows = n;
     S.d = main ? Math.hypot(main.x - p.pos.x, main.z - p.pos.z) : 0;
-    S.above = main ? this.arrows[0].position.y - main.y : 0;
+    S.above = main ? main.h : 0; // [O4] ok yakında gizli olabilir: yükseklik kayıttan
     S.route = g.gpsPath ? g.gpsPath.length : 0;
   }
 

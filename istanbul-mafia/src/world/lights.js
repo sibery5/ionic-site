@@ -132,7 +132,8 @@ export class NightLights {
     let near = false;
     for (const s of sl) {
       const a = s.baseA + Math.sin(T * s.speed + s.phase) * s.sweep;
-      s.tx = s.x + Math.sin(a) * s.reach; s.tz = s.z + Math.cos(a) * s.reach;
+      if (s.focus && Math.abs(s.focus.x - s.x) + Math.abs(s.focus.z - s.z) < 260) { s.tx = s.focus.x + Math.sin(a * 3) * 6; s.tz = s.focus.z + Math.cos(a * 3) * 6; } // [O5] alarmda son görülen yeri tarar
+      else { s.tx = s.x + Math.sin(a) * s.reach; s.tz = s.z + Math.cos(a) * s.reach; }
       if (Math.abs(s.x - cx) + Math.abs(s.z - cz) < 420) near = true; // [dünya] uzak konileri (Levent'ten görünen) çizme
     }
     const show = night > 0.05 && near;

@@ -39,7 +39,7 @@ const BACKUP_DT = [0, 14, 8, 6, 5, 5]; // takviye sevki aralığı
 // Oyuncu kaçıyorsa daha ağır birim hiç gelmeyebilir; adil olan budur (sahibinin şikâyeti: "hemen geliyor").
 export const ESC_DELAY = { roadblock: 25, swat: 35, heli: 30, army: 60, tank: 60 };
 // [O] tank / helikopter roketi: atıştan önce uyarı süresi, en az sapma (m), mesafeyle artan sapma (m/m), doğrudan nişan olasılığı
-export const ROCKET_AIM = { warn: 1.8, minMiss: 4, perM: 0.06, direct: 0.22 };
+export const ROCKET_AIM = { warn: 1.8, minMiss: 4, perM: 0.06, direct: 0.2 };
 const PATROL_R = 110; // suç yerine koşan devriye polis yarıçapı
 const PATROL_CAR_R = 260; // olaya yönlendirilen devriye aracı yarıçapı
 const UNIT_DEF = {
@@ -136,7 +136,9 @@ export class Wanted {
   add(amount, immediate) {
     if (this.game.state.cheats && this.game.state.cheats.nowanted) return;
     const before = this.level;
-    this.heat = Math.min(5.99, this.heat + amount);
+    // [O2] görev/hesaplaşma sırasında yıldız tavanı (missions.post yazar; 0 = sınırsız)
+    const cap = this.capLevel > 0 ? this.capLevel + 0.99 : 5.99;
+    if (this.heat < cap) this.heat = Math.min(cap, this.heat + amount); // tavanın üstündeyse artmaz (düşürülmez de)
     this.level = Math.min(5, Math.floor(this.heat + 0.001));
     if (immediate) this.spotted();
     if (this.level > before) {
@@ -958,7 +960,8 @@ export class Wanted {
   rocketAim(x, z, d) {
     const R = this._ra || (this._ra = { x: 0, z: 0, direct: false });
     this.rocketStats.shots++;
-    if (Math.random() < ROCKET_AIM.direct) { R.x = x; R.z = z; R.direct = true; return R; }
+    // doğrudan nişan rastgele değil, sayaçla (beşte bir): şans serisiyle art arda isabet olmasın
+    if (this.rocketStats.shots % Math.round(1 / ROCKET_AIM.direct) === 2) { R.x = x; R.z = z; R.direct = true; this.rocketStats.direct++; return R; }
     const a = Math.random() * Math.PI * 2, m = ROCKET_AIM.minMiss + d * ROCKET_AIM.perM + Math.random() * 3;
     R.x = x + Math.sin(a) * m; R.z = z + Math.cos(a) * m; R.direct = false;
     return R;
