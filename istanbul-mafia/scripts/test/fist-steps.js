@@ -19,14 +19,16 @@ module.exports = async (p) => {
     // 1) 10 yumruk (dayanıklı çeteci: kaçmaz, karşılık verir)
     {
       const n = g.npcs.add('gang', pl.pos.x, pl.pos.z, null, { state: 'idle' }); put(n, 1.1); n.maxHp = n.hp = 5000; n.static = true; n.knockdown = () => false; // isabet ölçümü: yere düşme ayrı (2. bölüm)
-      let hits = 0, lag = [], clickF = -1, F = 0;
+      let hits = 0, lag = [], clickF = -1, F = 0; const diag = [];
       const td = n.takeDamage.bind(n); n.takeDamage = (a, b, k, h, r2) => { if (b === pl && k === 'melee') { hits++; if (clickF >= 0) lag.push(+((F - clickF) / 30).toFixed(3)); clickF = -1; } return td(a, b, k, h, r2); };
       const hp0 = n.hp;
       for (let k = 0; k < 10; k++) {
         face(n);
+        const c0 = pl.model.combo;
         sim(0.5, (i) => { F++; if (i === 0) { I.mouse.leftPressed = true; clickF = F; } face(n); });
+        diag.push([+Math.hypot(n.pos.x - pl.pos.x, n.pos.z - pl.pos.z).toFixed(2), n.state, +(n.pos.y - pl.pos.y).toFixed(2), pl.model.combo - c0, +(pl.kdT || 0).toFixed(1), !!n.downed, +(n.kdT || 0).toFixed(1)]);
       }
-      out.p = { hits, dmg: Math.round(hp0 - n.hp), lag, kinds: pl.model.combo };
+      out.p = { hits, dmg: Math.round(hp0 - n.hp), lag, kinds: pl.model.combo, diag };
       n.takeDamage = td; g.npcs.remove(n);
     }
     // 2) sivil: kaç yumrukta düşer
