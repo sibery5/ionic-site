@@ -22,6 +22,18 @@ const SURF_TAG = {
 };
 
 const tmp = new THREE.Vector3();
+// [O] "son nefes": ölümcül bir isabet (yaşarken) oyuncuyu 1 cana indirir ve 2 sn kırmızı ekran açar; bu sürede ikinci ağır isabet
+// öldürür, hafif isabet öldürmez. Yeniden kullanım 25 sn (sonsuz ölümsüzlük olmasın). Zor zorlukta ve kesin ölümcül baş vuruşunda yok.
+export const LAST_BREATH = { dur: 2, heavy: 12, cooldown: 25 };
+function lastBreath(g, p, dmg, lethal) {
+  if (p.god || p.dead || lethal || !(dmg > 0)) return dmg;
+  const now = g.combat.clock || 0;
+  if (p._lbUntil > now) return dmg >= LAST_BREATH.heavy ? Math.max(dmg, p.hp + 1) : Math.min(dmg, p.hp - 1);
+  if (dmg < p.hp || !playerBal(g).lastStand || now - (p._lbLast === undefined ? -99 : p._lbLast) < LAST_BREATH.cooldown) return dmg;
+  p._lbUntil = now + LAST_BREATH.dur; p._lbLast = now; p.lastBreaths = (p.lastBreaths || 0) + 1;
+  g.ui.dmgT = 2.4; g.ui.notify('SON NEFES — hemen siper al!', 'warn');
+  return Math.max(0, p.hp - 1);
+}
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _hp = new THREE.Vector3();
@@ -409,7 +421,7 @@ export class Combat {
     const lethal = R.lethal, pen = R.pen, blocked = R.blocked, helmetOff = R.helmetOff, plate = R.plate, dmg = R.dmg;
     const L = target._lastHit || (target._lastHit = { zone: 'torso', side: 1, dx: 0, dz: 1, heavy: false, t: -9, lethal: false });
     L.zone = zone; L.side = ah.side; L.dx = dir.x; L.dz = dir.z; L.heavy = (def.dmg || 0) * k >= 60; L.t = this.clock; L.lethal = lethal;
-    const dealt = target.takeDamage(dmg, attacker, 'bullet', zone === 'head', true);
+    const dealt = target.takeDamage(target.isPlayer && !attacker.isPlayer ? lastBreath(g, target, dmg, lethal) : dmg, attacker, 'bullet', zone === 'head', true); // [O]
     _w2.copy(dir).negate();
     if (blocked === 'helmet') {
       // kask: kıvılcım + metal çınlaması, baş geriye savrulur; tükenince kask uçar
@@ -837,10 +849,20 @@ export class Combat {
       const d = Math.hypot(a.pos.x - x, a.pos.y + 1 - y, a.pos.z - z);
       if (d < radius) {
         const k = 1 - d / radius;
-        let ed = dmg * k;
-        if (a.isPlayer) { const B = playerBal(g); ed = capBurst(a, ed * B.blast, B, k > 0.8); } // [savaş] oyuncu: zorluğa göre
+        let ed = dmg * k, res = false;
+        if (a.isPlayer) {
+          const B = playerBal(g);
+          // [O] kolluk roketi yaya oyuncuya en çok 120 ham hasar; tam can tek atışta ölmez (zırh takeDamage'de ayrıca emer)
+          if (attacker && !attacker.isPlayer) ed = Math.min(ed, 120);
+          ed = capBurst(a, ed * B.blast, B, k > 0.8 && !(attacker && !attacker.isPlayer)); // [savaş] oyuncu: zorluğa göre
+          if (attacker && !attacker.isPlayer) {
+            ed = Math.min(ed, a.maxHp * 0.85);
+            if (a.armor > 0 && !a.god) { const ab = Math.min(a.armor, ed * 0.7); a.armor -= ab; ed -= ab; }
+            ed = lastBreath(g, a, ed, false); res = true;
+          }
+        }
         if (a._lastHit) a._lastHit.t = -9;
-        a.takeDamage(ed, attacker, 'explosion');
+        a.takeDamage(ed, attacker, 'explosion', false, res);
         if (!a.dead) {
           const ux = (a.pos.x - x) / (d || 1), uz = (a.pos.z - z) / (d || 1);
           a.knock = { x: ux * 8 * k, z: uz * 8 * k, t: 0.3 };
