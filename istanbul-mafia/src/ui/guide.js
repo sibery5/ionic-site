@@ -143,6 +143,7 @@ export class Guide {
       const u = Math.max(0, Math.min(1, ((T.x - cam.x) * sx + (ay - cam.y) * sy + (T.z - cam.z) * sz) / sl2));
       const block = Math.hypot(cam.x + sx * u - T.x, cam.y + sy * u - ay, cam.z + sz * u - T.z) < 1.6 && u < 0.98;
       const fade = block ? 0 : Math.max(0, Math.min(1, (dc - ARROW.nearHide) / ARROW.nearFade));
+      if (i === 0) { const D = this.stat.a0 || (this.stat.a0 = {}); D.dc = +dc.toFixed(1); D.pd = +pd.toFixed(1); D.block = block; D.u = +u.toFixed(2); } // [O4] ölçüm
       if (fade <= 0.01) { A.visible = false; continue; }
       n++;
       const s = Math.min(ARROW.maxFrac, ARROW.frac) * 2 * dc * tanH / ARROW.len; // ekranda sabit boy

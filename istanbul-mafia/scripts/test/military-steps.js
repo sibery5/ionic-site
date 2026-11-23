@@ -40,7 +40,7 @@ module.exports = async (p) => {
       t = i / 30;
       if (car.pos.z > z.z1 - 25) { car.vx = 0; car.vz = -6; } else { car.vx *= 0.8; car.vz *= 0.8; }
       if ((m.stage || 0) >= 1 && car.pos.z > z.z1 - 2) gateWarn = true;
-      if (enterT < 0 && (m.stage || 0) >= 1) enterT = +t.toFixed(1);
+      if (enterT < 0 && m.inTrespass) enterT = +t.toFixed(1); // duvarların içine girdiği an
       if (i % 30 === 0) tl.push((m.alert ? 'Ç' : m.search ? 'A' : m.stage || 0));
       if (alarmT < 0 && (m.search || m.alert)) alarmT = +t.toFixed(1);
       if (fightT < 0 && m.alert) fightT = +t.toFixed(1);
@@ -54,9 +54,9 @@ module.exports = async (p) => {
     const sd = () => m.soldiers.filter((s) => s.searching && !s.dead).map((s) => Math.hypot(s.pos.x - lkp.x, s.pos.z - lkp.z));
     const a0 = sd(); sim(10); const a1 = sd();
     const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
-    searching = a0.length; d0 = avg(a0); dMin = avg(a1);
+    searching = a0.length; d0 = avg(a0); dMin = avg(a1); const closer = a0.filter((x, k) => a1[k] < x - 8).length;
     const stillSearch = !!m.search && !m.alert;
-    const res = { stillSearch, enterT, probes, gaps, soldiers: soldiers.length, gateWarn, tl: tl.join(''), firstShot, shots, alarmT, fightT, searching, d0: Math.round(d0), dMin: Math.round(dMin), deadT, hp: Math.round(pl.hp), lvl: W.level, inside: Math.round(z.z1 - car.pos.z) };
+    const res = { closer, stillSearch, enterT, probes, gaps, soldiers: soldiers.length, gateWarn, tl: tl.join(''), firstShot, shots, alarmT, fightT, searching, d0: Math.round(d0), dMin: Math.round(dMin), deadT, hp: Math.round(pl.hp), lvl: W.level, inside: Math.round(z.z1 - car.pos.z) };
     pl.god = true; if (pl.dead) pl.dead = false;
     if (pl.vehicle) g.vehicles.ejectDriver(pl.vehicle);
     m.calm(); W.reset();
@@ -68,7 +68,7 @@ module.exports = async (p) => {
   check(r.inside >= 15, `Araç nizamiyeden içeri girdi (${r.inside} m)`);
   check(r.firstShot < 0 || r.firstShot >= 10, `İlk 10 sn oyuncuya ateş yok (ilk atış ${r.firstShot} sn)`);
   check(r.alarmT - r.enterT >= 14 && r.alarmT - r.enterT <= 16, `Alarm + arama girişten ~15 sn sonra (giriş ${r.enterT}, alarm ${r.alarmT} sn)`);
-  check(r.searching >= 2 && r.dMin < r.d0 * 0.7 && r.stillSearch, `Arama (oyuncu görünmezken): ${r.searching} asker son görülen yere yaklaştı (ort. ${r.d0} → ${r.dMin} m), çatışma yok`);
+  check(r.closer >= 3 && r.dMin < r.d0 && r.stillSearch, `Arama (oyuncu görünmezken): ${r.closer}/${r.searching} asker 10 sn'de son görülen yere 8 m+ yaklaştı (ort. ${r.d0} → ${r.dMin} m), çatışma yok`);
   check(r.fightT >= r.alarmT, `Çatışma alarmla/aramadan sonra, asker görünce: ${r.fightT} sn`);
   check(r.deadT < 0 || r.fightT < 0 || r.deadT - r.fightT > 10, `Çatışmanın ilk 10 sn'sinde ölüm yok (ölüm ${r.deadT}, can ${r.hp})`);
   console.log('KONSOL HATALARI:', errs.length);
