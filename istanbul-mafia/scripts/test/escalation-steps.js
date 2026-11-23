@@ -107,11 +107,11 @@ module.exports = async (p, out) => {
     out.l1 = { foot: cnt((n) => n.faction === 'police') + W.units.length, lvl: W.level };
     W.set(2); W.dispatchT = 0; sim(8);
     out.l2 = { cars: g.vehicles.list.filter((v) => v.police && v.ai && (v.ai.mode === 'chase' || v.ai.mode === 'halt' || v.lawUnit)).length, shots };
-    W.set(3); W.roadblockT = 0.1; sim(4);
+    W.set(3); W.hold[3] = 99; W.roadblockT = 0.1; // [O] kademe süresi dolmuş say sim(4);
     out.l3 = { rb: W.roadblocks.length };
-    W.set(4); W.swatT = 0.1; sim(4); // [kanun] özel harekât zırhlı araçla gelir (ekip araçta sayılır)
+    W.set(4); W.hold[4] = 99; W.swatT = 0.1; sim(4); // [kanun] özel harekât zırhlı araçla gelir (ekip araçta sayılır)
     out.l4 = { swat: cnt((n) => n.kind === 'swat'), gear: cnt((n) => n.kind === 'swat' && n.model.gear) };
-    W.set(5); W.heliT = 0.1; W.armyT = 0.1; W.roadblockT = 0.1; W.clearRoadblocks(); sim(5);
+    W.set(5); W.heliT = 0.1; W.armyT = 0.1; W.roadblockT = 0.1; W.clearRoadblocks(); sim(5, () => { W.hold[3] = W.hold[4] = W.hold[5] = 99; });
     out.l5 = { heli: !!W.heli, army: W.army.filter((n) => !n.dead).length, tank: W.roadblocks.some((r) => r.tank), heliY: W.heli ? Math.round(W.heli.pos.y) : 0 };
     const s0 = shots; sim(10); out.l5.lawShots = shots - s0;
 
@@ -154,9 +154,10 @@ module.exports = async (p, out) => {
     const s0 = m.stage || 0;
     pl.pos.set(m.zone.x1 - 3, 0, m.cz); sim(0.5);
     const s1 = m.stage;
-    sim(3.5);
+    sim(9.5);
     const s2 = m.stage;
-    sim(4);
+    sim(6); // [O5] 15 sn'de alarm + arama; asker görünce çatışma
+    sim(6);
     const alert = m.alert, lvl = g.wanted.level;
     pl.pos.set(m.zone.x1 + 200, 0, m.cz); m.alertT = 1; sim(2);
     return { soldiers, s0, s1, s2, alert, lvl, calm: !m.alert };

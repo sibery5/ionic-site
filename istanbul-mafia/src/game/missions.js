@@ -11,6 +11,7 @@ import { STORY, ACTS, LEYLA_LOOK, ALI_LOOK } from './story_data.js';
 import { Baba } from './baba.js';
 import { Dialogue, shotBetween, shotOver, shotWide } from './dialogue.js';
 import { SideContent, MarkerSet } from './side_missions.js';
+import { Showdowns } from './showdowns.js';
 import { Military, PoliceStations } from './military.js';
 
 export { STORY };
@@ -51,6 +52,7 @@ export class Missions {
     this.summonT = 0;
     this.konakAutoT = 0; // konağa girince Reis'in değerlendirme + yeni iş sahnesi
     this.baba = new Baba(this); // güven / şüphe / performans notu
+    this.showdowns = new Showdowns(this); // [O3] çete hesaplaşmaları
   }
   addMarkerSet(ms) { this.extraSets.push(ms); return ms; }
   // Eski kayıtlarla uyum: hikâyeye görev eklenince storyIndex'i tamamlanan görevlerden yeniden hesapla
@@ -473,7 +475,7 @@ export class Missions {
     const g = this.g, r = this.retry;
     this.retry = null;
     const cpName = r.cp > 0 ? (r.def.steps[r.cp].cp || 'son kontrol noktası') : 'baştan';
-    g.ui.confirm('TEKRAR DENE?', `${r.def.title} — ${r.reason || ''} · Başlangıç: ${cpName}`, 'Tekrar dene', () => {
+    const go = (from) => {
       const p = g.player;
       if (r.snap) {
         for (const [id, w] of Object.entries(r.snap.weapons)) { if (!WEAPONS[id]) continue; if (WEAPONS[id].type === 'melee') p.giveWeapon(id); else p.weapons[id] = { mag: w.mag, ammo: w.ammo }; }
@@ -481,8 +483,14 @@ export class Missions {
       }
       p.hp = p.maxHp;
       g.wanted.reset(); g.npcs.calmPolice();
-      this.start(r.def, { fromStep: r.cp, replay: r.replay });
-    }, 'Vazgeç');
+      this.start(r.def, { fromStep: from, replay: r.replay });
+    };
+    // [O2] iki seçenek: yakın kontrol noktası (varsa) ya da görevin başlangıç noktası
+    const opts = [];
+    if (r.cp > 0) opts.push({ label: 'Kontrol noktasından: ' + cpName, cls: 'gold', action: () => go(r.cp) });
+    opts.push({ label: r.cp > 0 ? 'Baştan başla' : 'Tekrar dene', cls: r.cp > 0 ? '' : 'gold', action: () => go(0) });
+    opts.push({ label: 'Vazgeç' });
+    g.ui.choice('TEKRAR DENE?', `${r.def.title} — ${r.reason || ''}`, opts);
   }
   removeSpawned() {
     const g = this.g;
@@ -770,6 +778,11 @@ export class Missions {
   post(dt) {
     const g = this.g;
     this.side.update(dt);
+    this.showdowns.update(dt);
+    // [O2/O3] görev sürerken kanun en çok görevin izin verdiği yıldıza çıkar (varsayılan 3★; "polisle" görevlerde tanımda 4★);
+    // çete hesaplaşmasında çete bölgesi: en çok 2★. Görev dışında sınır yok.
+    const A = this.active, SD = this.showdowns.job;
+    g.wanted.capLevel = A ? (A.maxStars || 3) : SD ? SD.def.wanted : 0;
     this.military.update(dt);
     this.stations.update(dt);
     this.story.update();

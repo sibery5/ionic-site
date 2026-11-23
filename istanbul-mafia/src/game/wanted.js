@@ -35,6 +35,11 @@ export const LAW_CAP = [0, 4, 7, 10, 13, 16]; // sahadaki kolluk personeli (ara�
 export const CAR_CAP = [0, 1, 2, 3, 4, 4]; // takipteki ekip aracı
 export const ESCAPE = [0, 14, 24, 36, 50, 65]; // [C4] görüşten çıkınca bir yıldızın sönme süresi (sn); 1.5 öncesi 9/16/26/36/48
 const BACKUP_DT = [0, 14, 8, 6, 5, 5]; // takviye sevki aralığı
+// [O] kademeli tırmanma: bir birim türü, oyuncu o yıldızı (ya da üstünü) kesintisiz bu kadar sn koruyunca gelir.
+// Oyuncu kaçıyorsa daha ağır birim hiç gelmeyebilir; adil olan budur (sahibinin şikâyeti: "hemen geliyor").
+export const ESC_DELAY = { roadblock: 25, swat: 35, heli: 30, army: 60, tank: 60 };
+// [O] tank / helikopter roketi: atıştan önce uyarı süresi, en az sapma (m), mesafeyle artan sapma (m/m), doğrudan nişan olasılığı
+export const ROCKET_AIM = { warn: 1.8, minMiss: 4, perM: 0.06, direct: 0.2 };
 const PATROL_R = 110; // suç yerine koşan devriye polis yarıçapı
 const PATROL_CAR_R = 260; // olaya yönlendirilen devriye aracı yarıçapı
 const UNIT_DEF = {
@@ -77,6 +82,8 @@ export class Wanted {
     this.heli = null;
     this.heliT = 0;
     this.lowT = 0;
+    this.hold = [0, 0, 0, 0, 0, 0]; // [O] her yıldız eşiğinde kesintisiz geçen süre
+    this.rocketStats = { shots: 0, direct: 0 }; // [O] test ölçümü: roket atışı / doğrudan isabet
     this._wc = { t: -1, x: 1e9, z: 1e9, r: 0, v: false };
   }
   reset() {
@@ -129,18 +136,28 @@ export class Wanted {
   add(amount, immediate) {
     if (this.game.state.cheats && this.game.state.cheats.nowanted) return;
     const before = this.level;
-    this.heat = Math.min(5.99, this.heat + amount);
+    // [O2] görev/hesaplaşma sırasında yıldız tavanı (missions.post yazar; 0 = sınırsız)
+    const cap = this.capLevel > 0 ? this.capLevel + 0.99 : 5.99;
+    if (this.heat < cap) this.heat = Math.min(cap, this.heat + amount); // tavanın üstündeyse artmaz (düşürülmez de)
     this.level = Math.min(5, Math.floor(this.heat + 0.001));
     if (immediate) this.spotted();
     if (this.level > before) {
       this.game.audio.setSiren(1);
       this.game.ui.flashWanted();
       this.lostT = 0;
-      if (this.level >= 3 && before < 3) { this.roadblockT = Math.min(this.roadblockT, 6); this.game.ui.notify('Yollar kesiliyor: polis barikat kuruyor!', 'warn'); }
-      if (this.level >= 4 && before < 4) { this.roadblockT = Math.min(this.roadblockT, 4); this.swatT = 2; this.game.ui.notify('ÖZEL HAREKAT yolda!', 'warn'); }
-      if (this.level >= 5 && before < 5) { this.armyT = 3; this.heliT = 4; this.game.ui.notify('JANDARMA ve askerî birlikler yolda! Helikopter havalandı!', 'warn'); }
+      // [O] geçişte yalnız telsiz anonsu; birimler ESC_DELAY sonra gelir (geldiğinde ayrıca duyurulur)
+      if (this.level >= 3 && before < 3) { this.roadblockT = ESC_DELAY.roadblock; this.radio('Tüm ekipler, şüpheli için yol kesme hazırlığı.'); }
+      if (this.level >= 4 && before < 4) { this.swatT = ESC_DELAY.swat; this.radio('Özel Harekât\'tan destek istendi.'); }
+      if (this.level >= 5 && before < 5) { this.armyT = ESC_DELAY.army; this.heliT = ESC_DELAY.heli; this.radio('Hava desteği ve jandarma talep edildi!'); }
       if (before === 0) { this.respondT = 0; this.dispatchT = BACKUP_DT[this.level]; } // [kanun] önce devriye, takviye sonra
     }
+  }
+  // [O] telsiz: kısa cızırtı + iki bip, ardından yazı (birim gelişleri oyuncuya okunur olsun)
+  radio(text, kind = 'warn') {
+    audio.noiseBurst({ dur: 0.18, freq: 2400, q: 2, type: 'bandpass', gain: 0.18, rev: 0 });
+    audio.tone({ freq: 1450, dur: 0.07, type: 'square', gain: 0.06, delay: 0.2 });
+    audio.tone({ freq: 1450, dur: 0.07, type: 'square', gain: 0.06, delay: 0.32 });
+    this.game.ui.notify('TELSİZ: ' + text, kind);
   }
   set(level) { const was = this.level; this.heat = level; this.level = level; this.spotted(); this.lostT = 0; this.respondT = 0; if (!was && level > 0) this.dispatchT = Math.min(this.dispatchT, 3); if (level > 0) this.game.ui.flashWanted(); }
   // oyuncu şu an görüldü: LKP güncelle
@@ -630,7 +647,7 @@ export class Wanted {
       rb.cars.push(v);
     }
     // [savaş] 5★: barikatın arkasında tank (araç tipi varsa)
-    if (this.level >= 5 && CARS.tank && !this.roadblocks.some((r) => r.tank && !r.tank.destroyed)) {
+    if (this.level >= 5 && this.hold[5] >= ESC_DELAY.tank && CARS.tank && !this.roadblocks.some((r) => r.tank && !r.tank.destroyed)) {
       const tk = g.vehicles.add('tank', cx - best.fx * 7, cz - best.fz * 7, Math.atan2(best.fx, best.fz));
       tk.ai = { empty: true }; tk.parked = true; tk.roadblock = true; tk.police = true; tk.reloadT = 3; tk.lawTank = true;
       rb.cars.push(tk); rb.tank = tk;
@@ -647,7 +664,7 @@ export class Wanted {
       rb.cops.push(n);
     }
     this.roadblocks.push(rb);
-    return true;
+    return rb; // [O] çağıran tank var mı bilsin
   }
 
   // [kanun] suç yerine en yakın devriyeler koşar (yalnız birkaç kişi; sınır yıldıza göre)
@@ -711,6 +728,9 @@ export class Wanted {
     // [savaş] helikopter / tank / ordu: yıldız düşse de toparlanma
     this.updateHeli(dt);
     if (this.level < 5 && this.army.length) this.calmArmy();
+    for (let k = 1; k <= 5; k++) this.hold[k] = this.level >= k ? this.hold[k] + dt : 0; // [O] kademe sayaçları
+    if (!this.hold[4]) this.swatSaid = false;
+    if (!this.hold[5]) this.armySaid = false;
     if (this.level <= 0) { g.audio.setSiren(0); this.arrestT = 0; this.carArrestT = 0; this.cuff(null); this.prevLevel = 0; return; }
     this.updateEscalation(dt);
     this.updateSight(dt);
@@ -744,7 +764,7 @@ export class Wanted {
         this.dispatchT = BACKUP_DT[this.level];
         const room = LAW_CAP[this.level] - this.lawCount();
         if (this.chaseCars() < CAR_CAP[this.level] && room >= 2) {
-          const swat = this.level >= 4 && CARS.swat && Math.random() < 0.5;
+          const swat = this.level >= 4 && this.hold[4] >= ESC_DELAY.swat && CARS.swat && Math.random() < 0.5; // [O]
           this.dispatchUnit(swat ? 'swat' : 'police', this.backupAt ? { at: this.backupAt } : {});
           this.backupAt = null;
         }
@@ -752,15 +772,17 @@ export class Wanted {
       // özel harekât (4+): zırhlı araçla
       if (this.level >= 4) {
         this.swatT -= dt;
-        if (this.swatT <= 0) {
+        if (this.swatT <= 0 && this.hold[4] >= ESC_DELAY.swat) {
           this.swatT = 28;
-          if (LAW_CAP[this.level] - this.lawCount() >= 3) this.dispatchUnit('swat');
+          if (LAW_CAP[this.level] - this.lawCount() >= 3 && this.dispatchUnit('swat') && !this.swatSaid) { this.swatSaid = true; this.radio('Özel Harekât zırhlı araçla bölgede!'); }
         }
       }
       if (this.level >= 3) {
         this.roadblockT -= dt;
-        if (this.roadblockT <= 0) {
-          this.roadblockT = this.placeRoadblock() ? 22 : 4;
+        if (this.roadblockT <= 0 && this.hold[3] >= ESC_DELAY.roadblock) {
+          const ok = this.placeRoadblock();
+          this.roadblockT = ok ? 22 : 2; // [O] kademe süresi dolduysa yer bulunamayınca kısa aralıkla yeniden dene
+          if (ok) this.radio(ok.tank ? 'Barikatta TANK mevzilendi!' : 'Barikat kuruldu: yollar kesildi.');
           if (this.roadblocks.length > 2) { const old = this.roadblocks.shift(); for (const v of old.cars) if (!v.driver) g.vehicles.remove(v); }
         }
       }
@@ -881,17 +903,18 @@ export class Wanted {
     // 5★: jandarma birlikleri her yerde
     if (L >= 5) {
       this.armyT -= dt;
-      if (this.armyT <= 0) {
+      if (this.armyT <= 0 && this.hold[5] >= ESC_DELAY.army) {
         this.armyT = 24;
         for (let i = this.army.length - 1; i >= 0; i--) if (this.army[i].dead || !g.npcs.list.includes(this.army[i])) this.army.splice(i, 1);
         // [kanun] jandarma kamyonla gelir, iner (göz önünde belirmez)
         if (this.army.length < 8 && LAW_CAP[L] - this.lawCount() >= 3) {
           const u = this.dispatchUnit('jandarma');
           if (u && u.crew[0]) { u.crew[0].barkT = 0; }
+          if (u && !this.armySaid) { this.armySaid = true; this.radio('Jandarma birlikleri kamyonla geliyor!'); }
         }
       }
       this.heliT -= dt;
-      if (!this.heli && this.heliT <= 0) this.spawnHeli();
+      if (!this.heli && this.heliT <= 0 && this.hold[5] >= ESC_DELAY.heli) this.spawnHeli();
     }
     // barikat tankları
     for (const rb of this.roadblocks) if (rb.tank) this.updateTank(rb.tank, dt);
@@ -907,19 +930,44 @@ export class Wanted {
     let cur = ud.turret.rotation.y, diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
     ud.turret.rotation.y = cur + Math.max(-0.8 * dt, Math.min(0.8 * dt, diff));
     v.reloadT = (v.reloadT || 0) - dt;
-    if (Math.abs(diff) < 0.08 && v.reloadT <= 0 && d > 12) {
+    // [O] adil atış: namlu hedefe dönünce önce UYARI (motor uğultusu + "nişan alıyor" + ≥1,5 sn), nişan noktası o an donar
+    // (öncüleme yok: koşan/süren oyuncu kaçar), sapma en az 4 m ve mesafeyle artar.
+    if (v.warnT > 0) {
+      v.warnT -= dt;
+      if (v.warnT > 0) return;
+      v.warnT = 0;
       const yaw = v.heading + ud.turret.rotation.y;
       const ox = v.pos.x + Math.sin(yaw) * 6.2, oy = v.pos.y + 1.85, oz = v.pos.z + Math.cos(yaw) * 6.2;
-      if (!g.physics.lineOfSight(ox, oy, oz, tx.x, 1.2, tx.z)) { v.reloadT = 1; return; }
-      v.reloadT = 7 + Math.random() * 3; v.recoil = 1;
+      if (!g.physics.lineOfSight(ox, oy, oz, v.aimX, 1.2, v.aimZ)) { v.reloadT = 2; return; }
+      v.reloadT = 8 + Math.random() * 3; v.recoil = 1;
       const sh = this.shooter(v, ox, oy, oz);
-      const miss = (1 - Math.min(1, 30 / d)) * 6 + 2;
-      const o = new THREE.Vector3(ox, oy, oz), dir = new THREE.Vector3(tx.x + (Math.random() - 0.5) * miss - ox, 1.0 - oy, tx.z + (Math.random() - 0.5) * miss - oz).normalize();
+      const ax = this.rocketAim(v.aimX, v.aimZ, d);
+      const o = new THREE.Vector3(ox, oy, oz), dir = new THREE.Vector3(ax.x - ox, (v.aimY || 0) + 0.6 - oy, ax.z - oz).normalize();
       g.particles.explosion({ x: ox, y: oy - 0.3, z: oz }, 0.3);
       audio.gunshot('rpg', ox, oz); audio.explosion(ox, oz, 0.5);
-      g.combat.rocket(sh, o, dir, { dmg: 200, radius: 7 });
+      this.noteWarn(v);
+      g.combat.rocket(sh, o, dir, { dmg: 200, radius: 7, law: true });
       g.ui.bark(v, 'Tank ateş ediyor!');
+      return;
     }
+    if (Math.abs(diff) < 0.08 && v.reloadT <= 0 && d > 12) {
+      v.warnT = ROCKET_AIM.warn; v.warnAt = this.clockT || 0; v.aimX = tx.x; v.aimY = tx.y; v.aimZ = tx.z;
+      audio.tone({ freq: 55, freq2: 90, dur: 1.2, type: 'sawtooth', gain: 0.25, x: v.pos.x, z: v.pos.z, range: 220 });
+      g.ui.bark(v, 'Tank nişan alıyor!');
+      if (d < 120) g.ui.notify('TANK NİŞAN ALIYOR — SİPERE GİR / KAÇ!', 'warn');
+    }
+  }
+  // [O] ölçüm: uyarıdan atışa geçen en kısa süre (test)
+  noteWarn(v) { const w = (this.clockT || 0) - (v.warnAt || 0), S = this.rocketStats; S.minWarn = S.minWarn === undefined ? w : Math.min(S.minWarn, w); }
+  // [O] roket nişan noktası: çoğunlukla en az ROCKET_AIM.minMiss m öteye, ara sıra doğrudan (donmuş) noktaya
+  rocketAim(x, z, d) {
+    const R = this._ra || (this._ra = { x: 0, z: 0, direct: false });
+    this.rocketStats.shots++;
+    // doğrudan nişan rastgele değil, sayaçla (beşte bir): şans serisiyle art arda isabet olmasın
+    if (this.rocketStats.shots % Math.round(1 / ROCKET_AIM.direct) === 2) { R.x = x; R.z = z; R.direct = true; this.rocketStats.direct++; return R; }
+    const a = Math.random() * Math.PI * 2, m = ROCKET_AIM.minMiss + d * ROCKET_AIM.perM + Math.random() * 3;
+    R.x = x + Math.sin(a) * m; R.z = z + Math.cos(a) * m; R.direct = false;
+    return R;
   }
 
   // ---- projektörlü polis/askerî helikopter ----
@@ -1056,13 +1104,23 @@ export class Wanted {
     // saldırı helikopteri: roket
     if (H.armed) {
       H.rocketT -= dt;
-      if (H.rocketT <= 0 && d < 120) {
-        H.rocketT = 8 + Math.random() * 4;
-        const sh = this.shooter(H, H.pos.x, H.pos.y - 1.5, H.pos.z); sh.vehicle = null;
-        const o = new THREE.Vector3(H.pos.x, H.pos.y - 1.5, H.pos.z);
-        const dir = new THREE.Vector3(tgt.x + (Math.random() - 0.5) * 6 - o.x, (tgt.y || 0) - o.y, tgt.z + (Math.random() - 0.5) * 6 - o.z).normalize();
-        audio.gunshot('rpg', o.x, o.z);
-        g.combat.rocket(sh, o, dir, { dmg: 180, radius: 7 });
+      // [O] önce uyarı (≥1,5 sn: kilit bipleri + yazı), nişan noktası uyarı anında donar; sapma ≥ 4 m
+      if (H.rocketWarn > 0) {
+        H.rocketWarn -= dt;
+        if (H.rocketWarn <= 0) {
+          const sh = this.shooter(H, H.pos.x, H.pos.y - 1.5, H.pos.z); sh.vehicle = null;
+          const o = new THREE.Vector3(H.pos.x, H.pos.y - 1.5, H.pos.z);
+          const ax = this.rocketAim(H.aimX, H.aimZ, d);
+          const dir = new THREE.Vector3(ax.x - o.x, (H.aimY || 0) + 0.4 - o.y, ax.z - o.z).normalize();
+          audio.gunshot('rpg', o.x, o.z);
+          this.noteWarn(H);
+          g.combat.rocket(sh, o, dir, { dmg: 180, radius: 7, law: true });
+        }
+      } else if (H.rocketT <= 0 && d < 120) {
+        H.rocketT = 10 + Math.random() * 5;
+        H.rocketWarn = ROCKET_AIM.warn; H.warnAt = this.clockT || 0; H.aimX = tgt.x; H.aimY = tgt.y || 0; H.aimZ = tgt.z;
+        for (let i = 0; i < 4; i++) audio.tone({ freq: 1800, dur: 0.08, type: 'square', gain: 0.08, delay: i * 0.35 });
+        g.ui.notify('Helikopter roket kilitliyor — yer değiştir!', 'warn');
       }
     }
   }

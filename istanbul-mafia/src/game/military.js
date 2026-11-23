@@ -6,6 +6,9 @@ import { soldierLook, copLook } from '../entities/npc.js';
 
 const BASE_KEY = ['MILITARY', 'BASE'].join('_'); // map.js dışa aktarırsa kullanılır
 const FALLBACK = { x0: -990, x1: -870, z0: -990, z1: -700 };
+// [O5] izinsiz giriş akışı: uyarı (0 sn) → son uyarı (lastWarn) → alarm + arama (alarm sn) → asker görürse çatışma.
+// Aramada askerler son görülen yere koşar, çevresindeki köşeleri dolaşır; projektörler oraya döner; siren çalar.
+export const BASE_FLOW = { lastWarn: 8, alarm: 15, sightR: 42, sightNear: 9, searchCalm: 25, sirenDt: 1.3 };
 
 function normZone(b) {
   if (!b) return { ...FALLBACK, fallback: true };
@@ -20,6 +23,7 @@ export class Military {
     this.zone = normZone(MAP[BASE_KEY]);
     const z = this.zone;
     this.cx = (z.x0 + z.x1) / 2; this.cz = (z.z0 + z.z1) / 2;
+    this.gate = (MAP[BASE_KEY] || {}).gate || null; // [O5] nizamiye (test ve arama için)
     this.alert = false;
     this.alertT = 0;
     this.warnT = 0;
@@ -111,7 +115,8 @@ export class Military {
       g.audio.tone && g.audio.tone({ freq: 520, dur: 0.8, type: 'sawtooth', gain: 0.15 });
       if (g.wanted.level < 3) g.wanted.add(3 - g.wanted.level, true);
     }
-    this.alert = true; this.alertT = 60;
+    this.alert = true; this.alertT = 60; this.endSearch(true);
+    this.firstFireT = g.wanted.clockT || 0; // [O5] test/ölçüm: çatışmanın başladığı an
     for (const s of this.soldiers) if (!s.dead && Math.hypot(s.pos.x - g.player.pos.x, s.pos.z - g.player.pos.z) < 90) s.engage(g.player, 0.8);
   }
 
@@ -193,7 +198,9 @@ export class Military {
     }
     // [savaş] kademeli uyarı: uyarı bölgesi -> son uyarı -> ateş
     const stealth = g.missions.active && g.missions.active.stealthBase && !g.missions.s.spotted;
-    if (!this.alert && !stealth && !p.dead && this.active) this.updateWarnings(dt, p);
+    if (this.search) this.updateSearch(dt, p);
+    if (this.alert || this.search) this.siren(dt);
+    if (!this.alert && !this.search && !stealth && !p.dead && this.active) this.updateWarnings(dt, p);
     else if (!this.inWarn(p.pos.x, p.pos.z)) this.stage = 0;
     if (!this.trespass(p.pos.x, p.pos.z)) this.inTrespass = false;
     // 5 yıldız ve kışla yakını: askeri müdahale — [kanun] birlik nizamiyeden kamyonla çıkar, gelir, iner
@@ -286,34 +293,95 @@ export class Military {
         this.warnSay('Dur! Burası askeri bölge, geri çekil!');
       }
       this.outT = (this.outT || 0) + dt;
-      if (this.outT > 4 && !gate && !((this.climbAt || -99) + 30 > (g.wanted.clockT || 0))) { this.stage = 0; this.warned = false; }
+      if (this.outT > 4 && !gate && !((this.climbAt || -99) + 30 > (g.wanted.clockT || 0))) { this.stage = 0; this.warned = false; this.warnClock = 0; }
       return;
     }
     // izinsiz giriş: uyarı -> son uyarı -> ateş
     this.outT = 0;
     if (!this.inTrespass) {
       this.inTrespass = true;
-      if ((this.stage || 0) <= 1) { this.stage = 1; this.stageT = 0; this.warned = true; g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Dur! Yaklaşma! Geri çekil.', 'red', 3); this.warnSay('Dur! Yaklaşma! Askeri yasak bölge!'); }
+      if ((this.stage || 0) <= 1) { this.stage = 1; this.stageT = 0; this.warnClock = 0; this.warned = true; g.ui.bigMessage('ASKERİ YASAK BÖLGE', 'Dur! Yaklaşma! Geri çekil.', 'red', 3); this.warnSay('Dur! Yaklaşma! Askeri yasak bölge!'); }
     }
-    this.stageT += dt;
-    if (this.stage === 1 && (inL || this.stageT > 3.5)) {
+    // [O5] araçla/yaya girişte anında ateş yok: 15 sn uyarı, sonra alarm ve arama (görülürse çatışma)
+    this.stageT += dt; this.warnClock = (this.warnClock || 0) + dt;
+    if (this.stage === 1 && this.warnClock > BASE_FLOW.lastWarn) {
       this.stage = 2; this.stageT = 0;
-      g.ui.bigMessage('SON UYARI', 'Hemen geri çekil — ateş açılacak!', 'red', 2.5);
-      this.warnSay('Bu son uyarım, ateş açarım!');
-      for (const s of this.soldiers) if (!s.dead && Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) < 60) { s.aiming = true; s.faceYaw = Math.atan2(p.pos.x - s.pos.x, p.pos.z - s.pos.z); }
+      g.ui.bigMessage('SON UYARI', 'Hemen üsten çık — alarm verilecek!', 'red', 2.5);
+      this.warnSay('Bu son uyarım! Çık yoksa alarm veririm!');
+      for (const s of this.soldiers) if (!s.dead && Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) < 60) s.faceYaw = Math.atan2(p.pos.x - s.pos.x, p.pos.z - s.pos.z);
     }
-    if (this.stage === 2 && this.stageT > (inL ? 2.5 : 3)) { this.stage = 3; this.raiseAlert('Uyarılara uyulmadı — ateş serbest!'); }
+    if (this.stage === 2 && this.warnClock > BASE_FLOW.alarm) this.startSearch(p);
   }
   // alarm bitti: askerler devriye/nöbet yerine döner, takviye birlikler dağılır
   calm() {
     const g = this.g;
-    this.alert = false; this.alertT = 0; this.stage = 0; this.warned = false; this.lethalT = 0;
+    this.alert = false; this.alertT = 0; this.stage = 0; this.warned = false; this.lethalT = 0; this.warnClock = 0; this.endSearch(false);
     for (const s of this.soldiers) {
       if (s.dead) continue;
       s.hostile = false;
       if (s.state === 'attack') { s.state = s.restState(); s.target = null; s.path = []; s.coverPt = null; }
     }
     g.ui.notify('Kışlada alarm sona erdi.', 'info');
+  }
+  // ---- [O5] alarm + arama ----
+  startSearch(p) {
+    const g = this.g, src = p.vehicle || p;
+    this.stage = 3; this.stageT = 0;
+    const S = this.search = { t: 0, lkp: { x: src.pos.x, z: src.pos.z }, outT: 0, sightT: 0, k: 0 };
+    g.ui.bigMessage('ALARM!', 'Üste izinsiz giriş — askerler arıyor. Görünme ya da çık!', 'red', 3);
+    this.warnSay('Alarm! Davetsiz misafir! Bölgeyi tarayın!');
+    for (const sl of g.city.searchlights || []) sl.focus = S.lkp; // [O5] projektörler son görülen yere döner (lights.js kancası)
+    // askerler: kule/nöbet yerindekiler dışında son görülen yere koşar, çevresindeki dört köşeyi dolaşır
+    const offs = [[9, 9], [-9, 9], [-9, -9], [9, -9]];
+    let i = 0;
+    for (const s of this.soldiers) {
+      if (s.dead || s.pos.y > 3 || Math.hypot(s.pos.x - S.lkp.x, s.pos.z - S.lkp.z) > 140) continue;
+      const r = []; for (let k = 0; k < 4; k++) { const o = offs[(k + i) % 4]; r.push({ x: S.lkp.x + o[0], z: S.lkp.z + o[1] }); }
+      s._oldPatrol = s._oldPatrol || { patrol: s.patrol, state: s.state, walk: s.walkSpeed, home: s.home };
+      s.patrol = r; s.patrolIdx = 0; s.state = 'patrol'; s.walkSpeed = 3.2; s.searching = true;
+      i++;
+    }
+  }
+  endSearch(keep) {
+    const S = this.search;
+    if (!S) return;
+    this.search = null;
+    for (const sl of this.g.city.searchlights || []) sl.focus = null;
+    for (const s of this.soldiers) {
+      if (!s.searching) continue;
+      s.searching = false; s.aiming = false;
+      const o = s._oldPatrol; s._oldPatrol = null;
+      if (!keep && o && !s.dead) { s.patrol = o.patrol; s.walkSpeed = o.walk; s.home = o.home; s.state = o.state === 'attack' ? s.restState() : o.state; }
+    }
+  }
+  updateSearch(dt, p) {
+    const g = this.g, S = this.search, src = p.vehicle || p;
+    S.t += dt;
+    if (!this.inWarn(src.pos.x, src.pos.z)) { S.outT += dt; if (S.outT > BASE_FLOW.searchCalm) { this.endSearch(false); this.stage = 0; this.warnClock = 0; g.ui.notify('Kışlada arama bitti.', 'info'); return; } } else S.outT = 0;
+    // görüş denetimi 4 Hz: önüne bakan (ya da çok yakındaki) asker, açık görüşle görürse çatışma
+    S.sightT -= dt;
+    if (S.sightT > 0) return;
+    S.sightT = 0.25;
+    const py = src.pos.y + (p.vehicle ? 1.2 : 1.5);
+    for (const s of this.soldiers) {
+      if (s.dead || s.downed) continue;
+      const dx = src.pos.x - s.pos.x, dz = src.pos.z - s.pos.z, d = Math.hypot(dx, dz);
+      if (d > BASE_FLOW.sightR) continue;
+      const facing = (Math.sin(s.heading) * dx + Math.cos(s.heading) * dz) / (d || 1);
+      if (d > BASE_FLOW.sightNear && facing < 0.25) continue;
+      if (!g.physics.lineOfSight(s.pos.x, s.pos.y + 1.6, s.pos.z, src.pos.x, py, src.pos.z)) continue;
+      s.barkT = 0; s.say('Orada! Hedef görüldü!');
+      this.seenBy = s; this.raiseAlert('Asker seni gördü — çatışma!');
+      return;
+    }
+  }
+  // alarm sireni: yükselip alçalan uğultu (üs merkezinden, mesafeyle söner)
+  siren(dt) {
+    this.sirenT = (this.sirenT || 0) - dt;
+    if (this.sirenT > 0) return;
+    this.sirenT = BASE_FLOW.sirenDt;
+    const a = this.g.audio;
+    if (a && a.tone) { a.tone({ freq: 380, freq2: 820, dur: 0.6, type: 'sawtooth', gain: 0.12, x: this.cx, z: this.cz, range: 600 }); a.tone({ freq: 820, freq2: 380, dur: 0.6, type: 'sawtooth', gain: 0.12, x: this.cx, z: this.cz, range: 600, delay: 0.62 }); }
   }
   nearestSoldier() {
     const p = this.g.player;

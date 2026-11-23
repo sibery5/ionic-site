@@ -146,7 +146,7 @@ module.exports = async (p, out) => {
     const v = game.vehicles.add('sedan', n.x + 2.7, n.z + 10, 0);
     game.enterVehicle(v, true);
     game.wanted.set(4); game.wanted.roadblockT = 0.1; game.wanted.swatT = 0.1;
-    sim(3);
+    sim(3, () => { game.wanted.hold[3] = game.wanted.hold[4] = 99; }); // [O] kademe süresi dolmuş say
     game.wanted.set(5); sim(3);
     const rb = game.wanted.roadblocks.length;
     const swat = game.npcs.list.filter((x) => x.kind === 'swat' && !x.dead).length;
@@ -166,8 +166,8 @@ module.exports = async (p, out) => {
     game.player.pos.set(m.zone.x1 + 15, 0, m.cz); game.player.heading = -Math.PI / 2;
     sim(1.5);
     const soldiers = m.soldiers.filter((s) => !s.dead).length;
-    game.player.pos.set(m.zone.x1 - 8, 0, m.cz); sim(8);
-    const alert = m.alert;
+    game.player.pos.set(m.zone.x1 - 8, 0, m.cz); sim(16); // [O5] 15 sn uyarı → alarm + arama
+    const alert = m.alert || !!m.search;
     return { soldiers, alert, lvl: game.wanted.level };
   });
   check(mil.soldiers >= 4, 'Kışlada asker devriyesi (' + mil.soldiers + ')');
