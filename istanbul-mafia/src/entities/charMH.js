@@ -95,12 +95,28 @@ const SHAPES = new Map();
 // [donma] Yeni gövde birleştirmesi ~90 ms (5★'da aynı karede onlarca asker: saniyelerce donma). Kare bütçesi: 45 ms içinde
 // ikinci bir yeni şekil kurulmaz; bekleyen model aynı gövde tipinin son kurulan şekliyle görünür, sonra kendi şekline geçer.
 const BUILD = { t: -1e9 }, BYVAR = new Map();
-const shapeKey = (spec) => [spec.variant, spec.skin, spec.outfit, spec.shoes, spec.hair, spec.brow, spec.accKey].join('|');
+const shapeKey = (spec) => [spec.variant, spec.skin, spec.outfit, spec.shoes, spec.hair, spec.brow, spec.accKey, spec.cut || 0, spec.shoeDel || ''].join('|');
 let DEFER = true;
 export function setMHDefer(on) { DEFER = on; }
 export function mhShouldDefer(spec) { return DEFER && !SHAPES.has(shapeKey(spec)) && BYVAR.has(spec.variant) && performance.now() - BUILD.t < 45; }
 // spec: { variant, skin, outfit, shoes, hair, brow, accKey }, acc: kodla üretilen aksesuar geometrisi (şapka, gözlük, yelek) ya da null
 // accMap: { head: {c:[x,y,z], r:[rx,ry,rz]}, torso: {rx, rf, rb} } — aksesuarın oturduğu kodla üretilmiş baş/gövde ölçüleri
+// [S2] kol kemiği -> eklem çifti (eşleme ekseni)
+const ARMB = new Set(), ARMM = {};
+function initArm() {
+  if (ARMB.size || !HEAD) return;
+  for (const S of ['L', 'R']) {
+  const add = (b, j0, j1) => { const i = HEAD.bones ? HEAD.bones.indexOf(b + S) : -1; if (i >= 0) { ARMB.add(i); ARMM[i] = { j0: j0 + S, j1: j1 + S }; } };
+  add('kn', 'an', 'toe'); add('an', 'an', 'toe'); add('toe', 'an', 'toe'); for (const b of ['kn', 'an', 'toe']) ARMM[HEAD.bones.indexOf(b + S)].foot = true; // [S2] ayakkabı
+  add('sh', 'sh', 'el'); add('el', 'el', 'wr'); add('fa', 'el', 'wr'); add('wr', 'wr', 'fd'); add('fi', 'wr', 'fd'); add('fd', 'wr', 'fd'); add('th', 'wr', 'fd');
+  }
+}
+// a yönünü b yönüne çeviren döndürme matrisi (satır düzeni)
+function rotBetween(ax, ay, az, bx, by, bz) {
+  const la = Math.hypot(ax, ay, az) || 1, lb = Math.hypot(bx, by, bz) || 1; ax /= la; ay /= la; az /= la; bx /= lb; by /= lb; bz /= lb;
+  const vx = ay * bz - az * by, vy = az * bx - ax * bz, vz = ax * by - ay * bx, c = ax * bx + ay * by + az * bz, k = 1 / (1 + c + 1e-9);
+  return [vx * vx * k + c, vx * vy * k - vz, vx * vz * k + vy, vy * vx * k + vz, vy * vy * k + c, vy * vz * k - vx, vz * vx * k - vy, vz * vy * k + vx, vz * vz * k + c];
+}
 function shape(spec, acc, accMap) {
   const key = shapeKey(spec);
   let S = SHAPES.get(key);
@@ -114,11 +130,19 @@ function shape(spec, acc, accMap) {
   const pos = new Float32Array(N * 3), nrm = new Float32Array(N * 3), uv = new Float32Array(N * 2), matp = new Float32Array(N * 3);
   const si = new Uint8Array(N * 4), sw = new Uint8Array(N * 4), slot = new Uint8Array(N), bw = new Uint8Array(N), mw = new Uint8Array(N), accCol = acc ? new Float32Array(an * 3) : null;
   const AW = HEAD.atlas.w, AH = HEAD.atlas.h;
+  // [S2] şort/mini: kıyafetin alt (yuva 2) kısmı spec.cut yüksekliğinin altında kesilir; altında kalan bacak derisi gizlenmez
+  const cut = spec.cut || 0, BP = new Float32Array(HEAD.nv * 3);
+  lbs(V.P, HEAD.nv, body.wi, body.ww, V.M, BP);
   const del = new Uint8Array(HEAD.nv);
-  for (const p of parts) if (p.del) for (let i = 0; i < del.length; i++) del[i] |= p.del[i];
+  if (spec.shoeDel && HEAD.parts[spec.shoeDel]) { const p = part(spec.shoeDel); if (p.del) for (let i = 0; i < del.length; i++) del[i] |= p.del[i]; } // [S2] taşınan ayakkabının içinde çıplak ayak gizlenir
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k]; if (!p.del) continue;
+    const isOut = cut && names[k] === spec.outfit;
+    for (let i = 0; i < del.length; i++) if (p.del[i] && !(isOut && BP[i * 3 + 1] < cut + 0.035)) del[i] = 1; // 3,5 cm bindirme: paça ile deri arasında boşluk kalmasın
+  }
   const idx = [[], [], []];
   let o = 0;
-  const emit = (p, P3, nv, rect, rough, slotArr, isBody) => {
+  const emit = (p, P3, nv, rect, rough, slotArr, isBody, cutY) => {
     // köşe normalleri: kaynaklı köşeler üzerinde (uv dikişi ışık dikişi olmasın)
     const N3 = new Float32Array(nv * 3), t0 = p.tri[0], rv = p.rv_v;
     for (let i = 0; i < t0.length; i += 3) {
@@ -145,6 +169,7 @@ function shape(spec, acc, accMap) {
       for (let i = 0; i < t.length; i += 3) {
         const a = t[i], b = t[i + 1], c = t[i + 2];
         if (isBody && (del[rv[a]] || del[rv[b]] || del[rv[c]])) continue;
+        if (cutY && Math.min(P3[rv[a] * 3 + 1], P3[rv[b] * 3 + 1], P3[rv[c] * 3 + 1]) < cutY) continue;
         out.push(o + a, o + b, o + c);
         if (p.h.dbl) out.push(o + a, o + c, o + b);
       }
@@ -152,12 +177,10 @@ function shape(spec, acc, accMap) {
     o += m;
   };
   // gövde
-  const BP = new Float32Array(HEAD.nv * 3);
-  lbs(V.P, HEAD.nv, body.wi, body.ww, V.M, BP);
   emit(body, BP, HEAD.nv, HEAD.skins[spec.skin].rect, 0.62, null, true);
   // parçalar: gövdeye oturt (üç başvuru köşesi + kayma), sonra deri
-  for (const p of parts) {
-    const m = p.h.n, F = new Float32Array(m * 3), Q = new Float32Array(m * 3), P = V.P;
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k], m = p.h.n, F = new Float32Array(m * 3), Q = new Float32Array(m * 3), P = V.P;
     for (let i = 0; i < m; i++) {
       const a = p.ref[i * 3] * 3, b = p.ref[i * 3 + 1] * 3, c = p.ref[i * 3 + 2] * 3, wa = p.w[i * 3], wb = p.w[i * 3 + 1], wc = p.w[i * 3 + 2];
       F[i * 3] = wa * P[a] + wb * P[b] + wc * P[c] + p.off[i * 3];
@@ -165,7 +188,7 @@ function shape(spec, acc, accMap) {
       F[i * 3 + 2] = wa * P[a + 2] + wb * P[b + 2] + wc * P[c + 2] + p.off[i * 3 + 2];
     }
     lbs(F, m, p.wi, p.ww, V.M, Q);
-    emit(p, Q, m, p.h.rect, p.h.rough, p.rv_slot, false);
+    emit(p, Q, m, p.h.rect, p.h.rough, p.rv_slot, false, names[k] === spec.outfit ? cut : 0);
   }
   // ayak tabanı yere otursun (ayakkabı tabanı kalınlığı parçaya göre değişir)
   let minY = 1e9; for (let i = 0; i < n; i++) if (pos[i * 3 + 1] < minY) minY = pos[i * 3 + 1];
@@ -176,16 +199,41 @@ function shape(spec, acc, accMap) {
   }
   // aksesuarlar: kodla üretilmiş baş/gövde ölçüsünden gerçek gövdeye taşı
   if (acc) {
+    initArm();
     const A = acc.attributes, ap = A.position.array, anr = A.normal.array, auv = A.uv.array, ac = A.color.array, am = A.matp.array, asi = A.skinIndex.array, asw = A.skinWeight.array;
     const hd = V.info.hd, ts = V.info.ts, H = accMap.head, T = accMap.torso, HB = HEAD.bones.indexOf('head'), NB = HEAD.bones.indexOf('neck');
     const hc = [0, (hd.top + hd.chin) / 2, (hd.zf + hd.zb) / 2], hr = [hd.rx + 0.004, (hd.top - hd.chin) / 2, (hd.zf - hd.zb) / 2];
     const tcz = (ts.zf + ts.zb) / 2, trz = (ts.zf - ts.zb) / 2 + 0.012, prz = (T.rf + T.rb) / 2, pcz = (T.rf - T.rb) / 2;
+    const CJ = accMap.joints || null, MJ = V.info.pos, ROT = {};
+    const armRot = (a0, a1, b0, b1) => { const k = a0 + '' + b0; return ROT[k] || (ROT[k] = rotBetween(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2], b1[0] - b0[0], b1[1] - b0[1], b1[2] - b0[2])); };
+    let GL = null, HT = null; const FK = accMap.footK || 1;
+    if (accMap.glasses && V.info.eye) {
+      // eşlenmiş kod göz hizası ile gerçek göz arasındaki fark; mercek gözün 1,4 cm önünde
+      const ey = hc[1] + (accMap.eyeY - H.c[1]) * (hr[1] / H.r[1]), ez = hc[2] + (accMap.eyeZ - H.c[2]) * (hr[2] / H.r[2]);
+      GL = [V.info.eye[1] + 0.002 - ey, Math.max(0, V.info.eye[2] + 0.016 - ez)];
+    }
+    if (accMap.hat) HT = accMap.hat;
     const shTop = V.info.pos.shL[1] + 0.045, sy = (shTop - 0.92) / (1.475 - 0.92), sx = (ts.rx + 0.012) / T.rx;
     for (let i = 0; i < an; i++) {
       let x = ap[i * 3], y = ap[i * 3 + 1], z = ap[i * 3 + 2], hw = 0;
       for (let j = 0; j < 4; j++) { const b = asi[i * 4 + j]; if (b === HB || b === NB) hw += asw[i * 4 + j]; }
+      let ab = -1, aw = 0; // [S2] baskın kol/el kemiği (saat, yüzük, tespih, el çantası)
+      for (let j = 0; j < 4; j++) { const b = asi[i * 4 + j], w = asw[i * 4 + j]; if (ARMB.has(b) && w > aw) { aw = w; ab = b; } }
       if (hw > 0.5) {
+        const y0 = y, z0 = z;
         x = hc[0] + (x - H.c[0]) * (hr[0] / H.r[0]); y = hc[1] + (y - H.c[1]) * (hr[1] / H.r[1]); z = hc[2] + (z - H.c[2]) * (hr[2] / H.r[2]);
+        // [S2] gözlük: kodla üretilen göz hizası gerçek gövdenin gözüne taşınır (eskiden ~1 cm yukarıda, kaşta kalıyordu)
+        if (GL && Math.abs(y0 - accMap.eyeY) < 0.03 && z0 > H.c[2] - 0.06) { y += GL[0]; z += GL[1]; }
+        // [S2] şapka/bere: saç hacmini de sarsın diye baş merkezine göre büyütülür ve alına indirilir (eskiden saç taşıyor, siperlik havada kalıyordu)
+        else if (HT && y0 > accMap.eyeY + 0.035) { x = hc[0] + (x - hc[0]) * HT[0]; y = hc[1] + (y - hc[1]) * HT[0] + HT[1]; z = hc[2] + (z - hc[2]) * HT[0]; }
+      } else if (ab >= 0 && aw > 0.5 && CJ) {
+        // [S2] kol/el: kodla üretilen kol ekseninden gerçek kolun eksenine (eklem + yön döndürmesi)
+        const M = ARMM[ab]; x -= CJ[M.j0][0]; y -= CJ[M.j0][1]; z -= CJ[M.j0][2];
+        const r = armRot(CJ[M.j0], CJ[M.j1], MJ[M.j0], MJ[M.j1]);
+        const rx = r[0] * x + r[1] * y + r[2] * z, ry = r[3] * x + r[4] * y + r[5] * z, rz = r[6] * x + r[7] * y + r[8] * z;
+        x = MJ[M.j0][0] + rx; y = MJ[M.j0][1] + ry; z = MJ[M.j0][2] + rz;
+        // [S2] kodla üretilen ayakkabı gerçek ayaktan küçük (parmaklar deliyordu): bilek çevresinde %14 büyüt; basket botu yakası paçanın altında kalsın
+        if (M.foot && FK > 1) { x = MJ[M.j0][0] + rx * FK; z = MJ[M.j0][2] + rz * FK + 0.006; y = y > 0.14 ? 0.14 + (y - 0.14) * 0.25 : y; }
       } else {
         x *= sx; y = 0.92 + (y - 0.92) * sy; z = tcz + (z - pcz) * (trz / prz);
       }

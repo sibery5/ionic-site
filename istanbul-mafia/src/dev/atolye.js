@@ -86,6 +86,25 @@ CAT['poz:tirman-tutun'] = tirman(0.001, 1, 1.86); CAT['poz:tirman-cek'] = tirman
 // [C2] tüm ateşli silahlarda nişan tutuşu (tutus2:<silah>) ve boşta tutuş (tutus2:<silah>-bosta)
 for (const w of WEAPON_ORDER) { const d = WEAPONS[w]; if (!d || (d.type !== 'gun' && d.type !== 'launcher')) continue; CAT['tutus2:' + w] = holding(w, { aim: true, twoHanded: !d.oneHand }); if (!d.oneHand) CAT['tutus2:' + w + '-bosta'] = holding(w, { twoHanded: true }); }
 CAT['insan:kahraman-kadin'] = person(defaultLook('f'));
+// [S2] karakter yaratıcısındaki her giyilebilir seçenek tek tek (gerçekçi gövdede): giysi:<cinsiyet>-<alan>-<değer>
+{
+  const W = (g, k, v, extra) => () => Object.assign(defaultLook(g), extra || {}, { [k]: v, [k + 'Style']: v });
+  const add = (g, k, vals, extra) => { for (const v of vals) CAT[`giysi:${g}-${k}-${v}`] = person(W(g, k, v, extra)); };
+  add('m', 'pants', ['jeans', 'chino', 'slacks', 'cargo', 'shorts', 'track']);
+  add('f', 'pants', ['jeans', 'leggings', 'slacks', 'shorts', 'minishort', 'mini', 'skirt', 'midi', 'longskirt', 'track'], { top: 'tshirt', topStyle: 'tshirt' });
+  add('m', 'top', ['tshirt', 'polo', 'shirt', 'tank', 'hoodie', 'track', 'sweater', 'jacket', 'leather', 'bomber', 'blazer', 'suit', 'coat']);
+  add('m', 'shoes', ['sneaker', 'hightop', 'polished', 'loafer', 'boots', 'sandal']);
+  add('f', 'shoes', ['sneaker', 'flats', 'heels', 'sandal', 'boots']);
+  add('m', 'hat', ['cap', 'kasket', 'bere', 'fedora', 'panama', 'bandana']);
+  add('f', 'hat', ['cap', 'bere', 'basortusu']);
+  for (const v of ['glasses', 'aviator', 'readers']) { CAT['giysi:m-glasses-' + v] = person(() => Object.assign(defaultLook('m'), { glasses: true, glassesStyle: v })); CAT['giysi:f-glasses-' + v] = person(() => Object.assign(defaultLook('f'), { glasses: true, glassesStyle: v })); }
+  for (const v of ['digital', 'steelwatch', 'goldwatch']) CAT['giysi:m-watch-' + v] = person(() => Object.assign(defaultLook('m'), { watch: v, top: 'tshirt', topStyle: 'tshirt' }));
+  for (const v of ['chain', 'silverchain']) CAT['giysi:m-chain-' + v] = person(() => Object.assign(defaultLook('m'), { chain: true, chainStyle: v, chainColor: v === 'silverchain' ? '#cfd2d6' : '#d4af37', top: 'tshirt', topStyle: 'tshirt' }));
+  for (const v of ['bag1', 'duffel']) CAT['giysi:m-bag-' + v] = person(() => Object.assign(defaultLook('m'), { bag: v }));
+  for (const v of ['handbag', 'tote']) CAT['giysi:f-bag-' + v] = person(() => Object.assign(defaultLook('f'), { bag: v }));
+  for (const v of ['stud', 'hoop']) CAT['giysi:f-earrings-' + v] = person(() => Object.assign(defaultLook('f'), { earrings: v }));
+  CAT['giysi:m-tespih-var'] = person(() => Object.assign(defaultLook('m'), { tespih: true }));
+}
 CAT['insan:reis'] = person(REIS_LOOK);
 CAT['insan:kenan'] = person(KENAN_LOOK);
 CAT['insan:leyla'] = person(LEYLA_LOOK);
@@ -129,7 +148,7 @@ function studio() {
 }
 
 // Görünüşler: q = ön-sol 3/4, f = ön, s = yan, b = arka 3/4, t = üst, yuz = yüz yakın planı (insanlar)
-const DIRS = { q: [-0.75, 0.38, 1], f: [0, 0.12, 1], s: [1, 0.1, 0], b: [0.75, 0.38, -1], t: [0, 1, 0.001], yuz: [-0.35, 0.05, 1], el: [-0.6, 0.2, 1], silah: [0.5, 0.25, 1], silahust: [0.05, 1, 0.3], silahic: [-1, 0.15, 0.2] };
+const DIRS = { ayak: [-0.8, 0.45, 1], q: [-0.75, 0.38, 1], f: [0, 0.12, 1], s: [1, 0.1, 0], b: [0.75, 0.38, -1], t: [0, 1, 0.001], yuz: [-0.35, 0.05, 1], el: [-0.6, 0.2, 1], silah: [0.5, 0.25, 1], silahust: [0.05, 1, 0.3], silahic: [-1, 0.15, 0.2] };
 
 function place(id) {
   studio();
@@ -190,6 +209,7 @@ export function shot(id, view = 'q') {
   const c = box.getCenter(V(0, 0, 0)), size = box.getSize(V(0, 0, 0));
   let r = size.length() / 2;
   if (view === 'yuz') { c.set(c.x, box.min.y + size.y * 0.925, c.z + size.z * 0.1); r = Math.max(0.2, size.y * 0.115); }
+  if (view === 'ayak') { c.set(c.x, box.min.y + 0.09, c.z + 0.05); r = 0.24; } // [S2] ayakkabı yakın planı
   if (view === 'el') { c.set(box.min.x + size.x * 0.12, box.min.y + size.y * 0.47, c.z); r = Math.max(0.16, size.y * 0.1); }
   // silahlı kişide 'el': silahın etrafına odaklan (tutuş denetimi)
   if (view === 'el' || view.startsWith('silah')) { let wm = null; scene.traverse((o) => { if (o.userData && o.userData.weaponId) wm = o; }); if (wm) { const wb = new THREE.Box3().setFromObject(wm); wb.getCenter(c); r = Math.max(0.14, wb.getSize(V(0, 0, 0)).length() * 0.7); } }

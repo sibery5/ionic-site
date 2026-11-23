@@ -467,6 +467,8 @@ function mhSpec(L, R, top, pants, shoes, hat) {
   const covered = hat !== 'none' || L.helmet;
   let hair = MH_HAIR[L.hair] !== undefined ? MH_HAIR[L.hair] : (f ? 'long01' : 'short02');
   if (hat === 'basortusu' || L.helmet) hair = null; else if (covered && hair) hair = f ? 'ponytail01' : 'short04';
+  // [S2] kısa saçlı erkekte bere/kep/kasket/bandana altında saç ağı başlığı deliyordu: saç başlığın altında kalır (gizlenir)
+  if (!f && hair && ['bere', 'cap', 'kasket', 'bandana'].includes(hat) && L.hair !== 'uzun' && L.hair !== 'dalgali' && L.hair !== 'kivircik') hair = null;
   const skin = (f ? 'f_' : 'm_') + (R.age < 0.25 ? 'young' : R.age < 0.6 ? 'mid' : 'old');
   const sm = H.skins[skin].mean; _lin.setRGB(sm[0], sm[1], sm[2], THREE.SRGBColorSpace);
   const sk = [_lin.r, _lin.g, _lin.b]; // cilt dokusunun ortalama rengi (doğrusal)
@@ -475,16 +477,23 @@ function mhSpec(L, R, top, pants, shoes, hat) {
   const camo = L.camo ? CAMO[L.camo] : null;
   const gl = (0.2126 * tone[0] + 0.7152 * tone[1] + 0.0722 * tone[2]) / (0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2]);
   return {
-    variant: R.mh, skin, outfit, shoes: MH_SHOE[shoes] || 'shoes05', hair, brow: f ? 'eyebrow001' : 'eyebrow010',
+    // [S2] şort/mini etek: CC0 MakeHuman'da şort yok -> kıyafetin alt kısmı diz üstünde kesilir (diz ~0,49 m, bacak boyu sabit)
+    cut: skirt ? (pants === 'mini' || (top === 'dress' || top === 'sundress') && L.dressLen === 'mini' ? 0.64 : 0) : pants === 'shorts' ? 0.57 : pants === 'minishort' ? 0.68 : 0,
+    // [S2] MakeHuman'daki altı ayakkabının hepsi kösele/klasik görünüyor: spor ayakkabı, basket botu ve sandalet kodla üretilen ayakkabıdan taşınır
+    variant: R.mh, skin, outfit, shoes: CODE_SHOE.has(shoes) ? null : MH_SHOE[shoes] || 'shoes05', shoeDel: shoes === 'sneaker' || shoes === 'hightop' ? 'shoes05' : null, hair, brow: f ? 'eyebrow001' : 'eyebrow010',
     beard: f ? 'none' : L.beard || 'none', beardCol: [hc[0] / sk[0] * 0.5, hc[1] / sk[1] * 0.5, hc[2] / sk[2] * 0.5],
     // ten: dokunun kendi rengi korunur; görünüş tonu çoğunlukla parlaklık, az miktarda renk kayması olarak uygulanır
     colors: [[0, 1, 2].map((i) => gl + (tone[i] / base[i] - gl) * 0.3), lin(camo ? camo[0] : L.topColor || '#30405a'), lin(camo ? camo[2] : dressCol || L.pantsColor || '#2a3550'),
       lin(camo ? camo[1] : L.shirtColor || '#e6e2da'), lin(L.shoesColor || '#1a1410'), lin(L.hairColor || '#1a1410', 1.6), [1, 1, 1]],
   };
 }
-const ACC_OFF = { chain: false, tespih: false, bag: null, camera: false, watch: false, ring: false, bandana: null, apron: false, tie: false, waistcoat: false, carry: null, gloves: null };
+// [S2] saat, zincir, çanta, tespih, yüzük artık gerçekçi gövdeye taşınır (eskiden kapalıydı: yaratıcıda seçilse de görünmüyordu)
+const ACC_OFF = { camera: false, bandana: null, apron: false, tie: false, waistcoat: false, carry: null, gloves: null };
+const CODE_SHOE = new Set(['sneaker', 'hightop', 'sandal']);
+const ACC_ON = (L) => !!(L.watch || L.chain || L.bag || L.tespih || L.ring || CODE_SHOE.has(shoeKind(L)));
 function accKeyOf(L, hat) {
-  return [hat, L.hatColor, L.glasses && (L.glassesStyle || 1), L.glassesColor, L.vest, L.vestColor, L.vestLabel, L.helmet, L.visor, L.earrings, L.earringColor, L.camo].join(',');
+  return [hat, L.hatColor, L.glasses && (L.glassesStyle || 1), L.glassesColor, L.vest, L.vestColor, L.vestLabel, L.helmet, L.visor, L.earrings, L.earringColor, L.camo,
+    L.watch, L.watchColor, L.chain && (L.chainStyle || 1), L.chainColor, L.bag, L.bagColor, L.tespih, L.ring, CODE_SHOE.has(shoeKind(L)) && shoeKind(L), L.shoesColor].join(',');
 }
 
 // [donma] bekleyen (geçici şekilli) model kendi şekline geçebilir mi? Geometri üretmeden yalnız bütçeyi sorar
@@ -493,7 +502,7 @@ export function mhPendingReady(L) {
   const R = rigFor(L); if (!R.mh) return true;
   const top = topKind(L), pants = pantsKind(L), shoes = shoeKind(L), hat = hatKind(L);
   const spec = mhSpec(L, R, top, pants, shoes, hat);
-  spec.accKey = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings ? accKeyOf(L, hat) : '';
+  spec.accKey = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings || ACC_ON(L) ? accKeyOf(L, hat) : '';
   return !mhShouldDefer(spec);
 }
 
@@ -502,14 +511,17 @@ export function buildCharGeometry(L, lod = 0, accOnly = false) {
   if (R.mh && !accOnly) {
     const top = topKind(L), pants = pantsKind(L), shoes = shoeKind(L), hat = hatKind(L);
     const spec = mhSpec(L, R, top, pants, shoes, hat);
-    const need = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings;
+    const need = hat !== 'none' || L.glasses || L.vest || L.helmet || L.earrings || ACC_ON(L);
     spec.accKey = need ? accKeyOf(L, hat) : '';
     if (mhShouldDefer(spec)) { spec.defer = true; return mhGeometry(spec, lod, null, null); } // [donma] bu kare bütçe doldu
     let acc = null, accMap = null;
     if (need) {
-      acc = buildCharGeometry({ ...L, ...ACC_OFF, noMH: true, beard: 'none' }, 1, true);
+      acc = buildCharGeometry({ ...L, ...ACC_OFF, noMH: true, beard: 'none', codeShoe: CODE_SHOE.has(shoes) }, 1, true);
       const D = headDims(R.f), hb = acc.userData.headBase, G = gearFit({ ...L, noMH: true });
-      accMap = { head: { c: [hb[0], hb[1] + D.cy, hb[2] + D.cz], r: [D.rx, D.ry, D.rz] }, torso: { rx: G.rx, rf: G.rf, rb: G.rb } };
+      accMap = { head: { c: [hb[0], hb[1] + D.cy, hb[2] + D.cz], r: [D.rx, D.ry, D.rz] }, torso: { rx: G.rx, rf: G.rf, rb: G.rb },
+        // [S2] gözlük göz hizası (kod başı), şapka büyütme/indirme, kol eklemleri (saat/tespih/el çantası taşıma)
+        footK: shoes === 'sneaker' || shoes === 'hightop' ? 1.14 : 1, eyeY: hb[1] + D.cy + 0.012, eyeZ: hb[2] + D.cz + D.rz, glasses: !!L.glasses, joints: rigFor({ ...L, noMH: true }).pos,
+        hat: { cap: [1.08, -0.022], bere: [1.07, -0.014], kasket: [1.09, -0.016], bandana: [1.05, -0.006], fedora: [1.07, -0.024], panama: [1.07, -0.024] }[hat] || null };
       if (!acc.index || !acc.index.count) acc = null;
     }
     return mhGeometry(spec, lod, acc, accMap);
@@ -524,13 +536,14 @@ export function buildCharGeometry(L, lod = 0, accOnly = false) {
   // elbise: üst ile aynı kumaştan etek (boy: L.dressLen)
   if (ctx.top === 'dress' || ctx.top === 'sundress') { ctx.pants = { mini: 'mini', midi: 'midi', long: 'longskirt' }[L.dressLen] || 'skirt'; ctx.pc = L.topColor || '#5a2d5a'; ctx.dress = true; }
   ctx.gloveM = L.gloves ? M(L.gloves, 'leather', 0.55, 0.02) : null;
+  if (accOnly) ctx.accMb = new MB(); // [S2] kol/el aksesuarları (saat, yüzük, tespih) gövde kurulurken ayrı ağa
   buildTorso(ctx);
   buildArms(ctx);
   buildLegs(ctx);
   buildFeet(ctx);
   buildHead(ctx);
   buildHair(ctx);
-  if (accOnly) { ctx.mb = new MB(); ctx.accOnly = true; } // gövde yalnız ölçü için kuruldu; aksesuarlar ayrı ağa
+  if (accOnly) { ctx.mb = ctx.accMb; ctx.accMb = null; ctx.accOnly = true; } // gövde yalnız ölçü için kuruldu; aksesuarlar ayrı ağa
   buildHat(ctx);
   buildExtras(ctx);
   buildGear(ctx);
@@ -978,7 +991,7 @@ function buildArms(c) {
     // saat (sol bilek)
     if (L.watch && s > 0 && Q.detail) {
       const wc = L.watchColor || (L.watch === 'goldwatch' ? '#d4af37' : L.watch === 'digital' ? '#1a1a1a' : '#cfd2d6');
-      A.patch(mb, Math.PI, Math.PI * 3, 0.558, 0.57, 0.006, M(wc, 'flat', 0.25, L.watch === 'digital' ? 0 : 0.95), 12, 1);
+      A.patch(c.accMb || mb, Math.PI, Math.PI * 3, 0.558, 0.57, 0.006, M(wc, 'flat', 0.25, L.watch === 'digital' ? 0 : 0.95), 12, 1);
       if (Q.detail > 1) A.button(mb, 0.564, 0, 0.009, 0.012, M('#202428', 'flat', 0.1, 0.3), 10);
     }
     buildHand(c, s, S, A);
@@ -1011,7 +1024,7 @@ function buildHand(c, s, S, arm) {
       const st = [[kT - 0.01, W(wB)], [kT + 0.006, W(fB)], [dT - 0.004, W(fB)], [dT + 0.006, W(dB)]];
       const F = new Limb(fk, V(s, 0, 0), V(0, 0, 1), V(0, -1, 0), (t) => chainW(t, st));
       F.emit(mb, [{ t0: -0.012, t1: len, off: 0, mat: skin }], Q.fseg, len / 4, { th0: Math.PI });
-      if (L.ring && s < 0 && i === 2) F.patch(mb, Math.PI, Math.PI * 3, 0.006, 0.014, 0.0022, M(L.ringColor || '#d4af37', 'flat', 0.2, 0.95), 8, 1);
+      if (L.ring && s < 0 && i === 2) F.patch(c.accMb || mb, Math.PI, Math.PI * 3, 0.006, 0.014, 0.0022, M(L.ringColor || '#d4af37', 'flat', 0.2, 0.95), 8, 1);
     }
   }
   // başparmak: avuç tabanından aşağı-öne
@@ -1032,7 +1045,7 @@ function buildHand(c, s, S, arm) {
   if (L.tespih && s > 0 && Q.detail) {
     const tc = L.tespihColor || '#7a2a10', pts = [];
     for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU; pts.push(V(x - s * 0.012 + Math.cos(a) * 0.006, y0 - 0.075 - 0.05 + Math.cos(a) * 0.05, 0.005 + Math.sin(a) * 0.022)); }
-    tube(mb, pts, 0.0055, 5, M(tc, 'flat', 0.15, 0.1), () => W(BI['fi' + S]), true, (u) => 0.85 + 0.3 * Math.abs(Math.sin(u * 50)));
+    tube(c.accMb || mb, pts, 0.0055, 5, M(tc, 'flat', 0.15, 0.1), () => W(BI['fi' + S]), true, (u) => 0.85 + 0.3 * Math.abs(Math.sin(u * 50)));
   }
   // evrak çantası (sağ el, NPC)
   if (L.carry === 'briefcase' && s < 0 && Q.detail) {
@@ -1109,7 +1122,8 @@ function buildLegs(c) {
 
 // ---------------- ayakkabılar ----------------
 function buildFeet(c) {
-  const { L, R, Q, mb, f } = c;
+  const { L, R, Q, f } = c;
+  const mb = c.accMb && L.codeShoe ? c.accMb : c.mb; // [S2] gerçekçi gövdeye taşınacak ayakkabı
   const kind = c.shoes, col = L.shoesColor || '#222222';
   const k = f ? 0.9 : 1;
   const dress = kind === 'polished' || kind === 'loafer' || kind === 'heels' || kind === 'flats' || kind === 'sandal';
@@ -1524,7 +1538,7 @@ function buildHat(c) {
   } else if (kind === 'kasket' || kind === 'cap') {
     const cap = kind === 'cap';
     shell(c, (x, y, z) => smooth(0.04, 0.05, y + (z > 0 ? 0 : 0.008)), () => T + 0.01, M(hc, cap ? 'canvas' : 'felt', 0.9), ws, hs, (v, ly) => {
-      if (!cap && ly > 0.065) { v.y = D.cy + 0.065 + (ly - 0.065) * 0.42; v.z += (ly - 0.065) * 0.4; v.x *= 1.05; }
+      if (!cap && ly > 0.065) { v.y -= (ly - 0.065) * 0.22; v.z += (ly - 0.065) * 0.4; v.x *= 1.05; } // [S2] tepe başın altına basılıyordu (kafa delip çıkıyordu): hafif basık
       if (cap) v.y += 0.004 * smooth(0.06, 0.11, ly);
     });
     // siper: öne uzanan kavisli plaka

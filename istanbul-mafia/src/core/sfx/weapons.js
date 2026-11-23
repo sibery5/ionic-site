@@ -68,16 +68,13 @@ export function synthShot(sr, P, seed) {
       d[i0 + i] += F.p(nz) * ba * 1.6 * Math.exp(-t / bt) * Math.min(1, i / 8) + C.p(nz) * ba * 2.2 * Math.exp(-t / (bt * 2.2));
     }
   }
-  // 4) gümleme: perdesi düşen sinüs
+  // 4) [ses S2] namlu ağzı patlaması: Friedlander basınç darbesi (ani yükseliş, üstel düşüş, negatif emme evresi) + alçak gürültü "tok"
+  // Eski: perdesi düşen sinüs (70-180 Hz) -> kulakta "pıuv"/davul gibi tonal kalıyordu; gerçek atışta perde yok, yalnız basınç darbesi var.
   {
-    const [f0, tau, a] = P.boom, ff = f0 * j(0.06);
-    let ph = 0;
-    const n = Math.min(N - i0, Math.floor(tau * 7 * sr));
-    for (let i = 0; i < n; i++) {
-      const t = i / sr;
-      ph += TAU * ff * (0.55 + 0.45 * Math.exp(-t / 0.018)) / sr;
-      d[i0 + i] += Math.sin(ph) * a * 0.7 * Math.exp(-t / tau) * Math.min(1, t / 0.0012);
-    }
+    const [f0, tau, a] = P.boom, Tp = 0.0018 + tau * 0.06, bb = 1.6;
+    const F = new BQ('lp', Math.min(6000, f0 * 9), 0.7, sr), n = Math.min(N - i0, Math.floor(Tp * 5 * sr));
+    for (let i = 0; i < n; i++) { const u = i / sr / Tp; d[i0 + i] += F.p((1 - u) * Math.exp(-bb * u)) * a * 2.4 * Math.min(1, i / 3); }
+    burst(d, sr, t0, { dur: tau * 5, tau: tau * 0.55, f: f0 * 2.2, q: 0.7, type: 'lp', amp: a * 1.6, att: 0.001, R });
   }
   // 5) gaz
   burst(d, sr, t0 + 0.0008, { dur: P.gas[1] * 6, tau: P.gas[1], f: P.gas[0] * j(0.1), q: 0.9, type: 'bp', amp: P.gas[2] * 1.4, att: 0.002, R });
@@ -102,7 +99,7 @@ export function synthShot(sr, P, seed) {
   }
   // yumuşak doyma: yoğunluk ve vuruculuk
   normalize(d, 1);
-  const k = 2.2, kn = Math.tanh(k);
+  const k = 1.7, kn = Math.tanh(k); // [ses S2] 2,2 -> 1,7: aşırı doyma geçici darbeyi düzleştirip "cızırtı" yapıyordu
   for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * k) / kn;
   // alt kesim: ölçümde <150 Hz payı %54-68 idi (boğuk "bom"); küçük silahta 75 Hz, ağırlarda 50 Hz
   const hp = new BQ('hp', P.boom[0] < 100 ? 50 : 75, 0.7, sr); hp.run(d);
@@ -179,10 +176,11 @@ export function gunshot(eng, kind, x, z) {
   const indoor = !!eng.indoor;
   const inSame = indoor ? d < 25 : true; // iç mekândaysak yakın atışlar içeride sayılır
   const tail = tailBuf(eng, P.tail, indoor && inSame ? 'room' : 'street');
-  const delay = d > 30 ? Math.min(1.2, d / 343) : 0;
+  const delay = d > 8 ? Math.min(1.4, d / 343) : 0; // [ses S2] ses hızı gecikmesi 8 m'den başlar (30 m'de 88 ms sıçrama yoktu)
+  const far = Math.min(1, Math.max(0, (d - 40) / 160)); // uzakta kuru ses kısılır, kuyruk baskın: boğuk "güm"
   play(eng, buf, {
-    x, z, range: P.range, ref: 6, gain: P.g * (inSame ? 1 : 0.35) * (0.92 + Math.random() * 0.12),
-    rate: 0.96 + Math.random() * 0.08, rev: indoor ? 0.22 : 0.1, cat: 'gun', delay, lp: inSame ? 20000 : 650,
+    x, z, range: P.range, ref: 6, gain: P.g * (inSame ? 1 : 0.35) * (1 - 0.45 * far) * (0.92 + Math.random() * 0.12),
+    rate: 0.96 + Math.random() * 0.08, rev: indoor ? 0.22 : 0.1, cat: 'gun', delay, lp: inSame ? 20000 - 17500 * far : 650,
     tail: { buf: tail, gain: P.tg * (indoor && inSame ? 0.8 : 1) }, tailRef: P.range * 0.3,
   });
   if (d < 18) {
@@ -217,7 +215,7 @@ function synthWhiz(sr, crack, seed) {
     for (let i = 0; i < nw * 2; i++) d[i0 + i] += (i < nw ? 1 - i / nw : -(1 - (i - nw) / nw)) * 2.2;
     burst(d, sr, 0.05, { dur: 0.02, tau: 0.002, f: 6000, type: 'hp', amp: 1.2, R });
   }
-  return normalize(d, 0.9);
+  return normalize(d, 0.85);
 }
 export function whiz(eng, k = 1, sx = 0, sz = 0, crack = false) {
   if (!eng.ctx || !eng._vp) return;

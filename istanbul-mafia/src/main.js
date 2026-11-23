@@ -1,4 +1,5 @@
 // İSTANBUL MAFYA — ana oyun sınıfı ve döngü
+import { buildCreatorStage } from './ui/creatorStage.js';
 import * as THREE from 'three';
 import { MOUNTAIN, terrainHeight } from './world/terrain.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -408,17 +409,7 @@ class Game {
   }
 
   setupCreatorScene() {
-    const s = new THREE.Scene();
-    s.background = new THREE.Color(0x0c0a08);
-    s.add(new THREE.HemisphereLight(0xfff0d8, 0x201810, 0.8));
-    const key = new THREE.SpotLight(0xffe0b0, 40, 20, 0.6, 0.5); key.position.set(2, 4, 3); s.add(key); key.target.position.set(0, 1, 0); s.add(key.target);
-    const rim = new THREE.PointLight(0xb3131b, 20, 10); rim.position.set(-2, 2, -2); s.add(rim);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(1.0, 48), new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.4, metalness: 0.3 }));
-    floor.rotation.x = -Math.PI / 2; s.add(floor);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.97, 1.0, 64), new THREE.MeshBasicMaterial({ color: 0xd4af37 }));
-    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.01; s.add(ring);
-    const fill = new THREE.DirectionalLight(0x9fb4ff, 0.5); fill.position.set(-3, 2, 4); s.add(fill);
-    s.fog = new THREE.Fog(0x0c0a08, 6, 14);
+    const s = buildCreatorStage(this.renderer); // [S2] aydınlık mağaza sahnesi (src/ui/creatorStage.js)
     this.creatorScene = s;
     this.creatorCam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 50);
     this.creatorCamTarget = new THREE.Vector3();

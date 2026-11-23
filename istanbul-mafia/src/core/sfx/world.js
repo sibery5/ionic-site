@@ -100,19 +100,24 @@ export function impact(eng, x, z, surf = 'concrete') {
   play(eng, pick(bank(eng, 'imp:' + s, 3, (i) => synthImpact(eng.ctx.sampleRate, s, 300 + i * 13 + s.length))), { x, z, range: s === 'metal' ? 90 : 65, ref: 4, gain: s === 'metal' ? 0.45 : 0.55, rate: 0.93 + Math.random() * 0.14, rev: 0.15, cat: 'impact' });
 }
 // sekme: düşen perdeli ıslık + türbülans hışırtısı
+// [ses S2] sekme: eski sürüm uzun (0,55 sn) güçlü sinüs süpürmesiyle çizgi film "pıyuuv" gibiydi. Yeni: sert taş/metal çarpma tıkı +
+// kırılan kurşun parçalarının taneleri + kısa, gürültü ağırlıklı, yalpalayan vızıltı (mermi takla atar: genlik titreşimi 40-90 Hz)
 function synthRicochet(sr, seed) {
-  const R = rng(seed), N = Math.floor(0.55 * sr), d = new Float32Array(N);
-  burst(d, sr, 0, { dur: 0.02, tau: 0.002, f: 3500, type: 'hp', amp: 1.2, R });
-  const f0 = 2800 + R() * 1400, f1 = 700 + R() * 400, wob = 30 + R() * 30;
+  const R = rng(seed), N = Math.floor(0.42 * sr), d = new Float32Array(N);
+  burst(d, sr, 0, { dur: 0.015, tau: 0.0015, f: 3200, type: 'hp', amp: 1.3, R });
+  modal(d, sr, 0, [[2300 + R() * 800, 0.01, 0.4], [5100 + R() * 900, 0.006, 0.3]], 0.6, R);
+  for (let j = 0; j < 8; j++) burst(d, sr, 0.002 + R() * 0.05, { dur: 0.006, tau: 0.001, f: 2500 + R() * 5000, q: 1.5, type: 'bp', amp: 0.3 * R(), R });
+  const f0 = 3300 + R() * 1500, f1 = 900 + R() * 500, tum = 40 + R() * 50, tau = 0.09 + R() * 0.05;
   let ph = 0;
-  const F = new BQ('bp', f0, 6, sr);
+  const F = new BQ('bp', f0, 7, sr);
   for (let i = 0; i < N; i++) {
-    const t = i / sr, f = f1 + (f0 - f1) * Math.exp(-t / 0.16);
-    ph += TAU * f * (1 + 0.04 * Math.sin(TAU * wob * t)) / sr;
-    if ((i & 31) === 0) F.set('bp', f, 6);
-    const e = Math.min(1, t / 0.012) * Math.exp(-t / 0.16);
-    d[i] += (Math.sin(ph) * 0.35 + F.p(R.n()) * 1.2) * e;
+    const t = i / sr, f = f1 + (f0 - f1) * Math.exp(-t / tau);
+    ph += TAU * f / sr;
+    if ((i & 31) === 0) F.set('bp', f, 7);
+    const e = Math.min(1, t / 0.006) * Math.exp(-t / tau) * (0.55 + 0.45 * Math.sin(TAU * tum * t));
+    d[i] += (Math.sin(ph) * 0.12 + F.p(R.n()) * 1.4) * e;
   }
+  fadeOut(d, Math.floor(0.03 * sr));
   return normalize(d, 0.85);
 }
 export function ricochet(eng, x, z) {
@@ -136,67 +141,86 @@ export function shell(eng, x, z, plastic = false, k = 1) {
 }
 
 // ---------------- ayak sesleri ----------------
-function synthStep(sr, surf, seed) {
-  const R = rng(seed), d = new Float32Array(Math.floor(0.3 * sr));
-  const toe = 0.055 + R() * 0.03;
-  const thud = (t, f, a, tau) => { let ph = 0; const i0 = Math.floor(t * sr); for (let i = 0; i < tau * 6 * sr && i0 + i < d.length; i++) { ph += TAU * f * (0.7 + 0.3 * Math.exp(-i / (0.01 * sr))) / sr; d[i0 + i] += Math.sin(ph) * a * Math.exp(-i / (tau * sr)) * Math.min(1, i / 20); } };
-  const grains = (t, n, spread, f0, f1, a) => { for (let k = 0; k < n; k++) burst(d, sr, t + R() * spread, { dur: 0.006, tau: 0.0012 + R() * 0.001, f: f0 + R() * (f1 - f0), q: 1.6, type: 'bp', amp: a * (0.5 + R() * 0.5), R }); };
+// [ses S2] Ayak sesi yeniden yazıldı. Eski sürüm: sinüs "tup" gövdesi + sabit topuk-burun aralığı, tek şiddet, 4 varyant,
+// zamanlama ayak temasından bağımsız. Yeni: (1) topuk darbesi = ayakkabı tabanının kısa geniş bant tıkı (zemine göre süzülür),
+// (2) gövde = alçak geçirgen gürültü basıncı (sinüs değil; tonal "bum" yok), (3) taban yuvarlanması + burun darbesi; aralık
+// şiddete bağlı (çömelik 0,13 sn, yürüyüş 0,08, koşu 0,035), (4) zemin dokusu (çakıl tanesi, çim hışırtısı, tahta gıcırtısı, sac çınlaması),
+// (5) şiddet k: 0 çömelik (yumuşak, tizi kısık), 1 yürüyüş, 2 koşu (sert, kısa, parlak). Her zemin × şiddet için 6 varyant.
+function synthStep(sr, surf, seed, k = 1) {
+  const R = rng(seed), d = new Float32Array(Math.floor(0.26 * sr));
+  const hard = k === 2 ? 1.35 : k === 0 ? 0.45 : 1, bright = k === 2 ? 1.25 : k === 0 ? 0.55 : 1;
+  const gap = (k === 2 ? 0.035 : k === 0 ? 0.13 : 0.08) * (0.85 + R() * 0.3);
+  const toeA = (k === 2 ? 0.75 : k === 0 ? 0.6 : 0.5) * (0.7 + R() * 0.5);
+  // gövde basıncı: alçak geçirgen gürültü (f0 zemine göre), çok kısa
+  const press = (t, f, a, tau) => burst(d, sr, t, { dur: tau * 6, tau, f, q: 0.9, type: 'lp', amp: a * hard, att: 0.0015, R });
+  const click = (t, f, a, tau, q = 1) => burst(d, sr, t, { dur: tau * 6, tau, f: f * (0.9 + R() * 0.2) * (0.85 + 0.15 * bright), q, type: 'bp', amp: a * hard * bright, att: 0.0004, R });
+  const grains = (t, n, spread, f0, f1, a) => { for (let j = 0; j < n; j++) burst(d, sr, t + R() * spread, { dur: 0.006, tau: 0.0010 + R() * 0.0012, f: f0 + R() * (f1 - f0), q: 1.6, type: 'bp', amp: a * (0.4 + R() * 0.6) * bright, R }); };
+  const scuff = (t, f, a, len) => burst(d, sr, t, { dur: len, tau: len * 0.45, f, q: 0.8, type: 'bp', amp: a, att: len * 0.3, R, sweepTo: f * (0.6 + R() * 0.3) });
   switch (surf) {
-    case 'grass':
-      thud(0, 85, 0.25, 0.02); grains(0.003, 26, 0.07, 1800, 5500, 0.22); grains(toe, 14, 0.05, 2000, 6000, 0.15);
-      burst(d, sr, 0, { dur: 0.12, tau: 0.035, f: 3500, q: 0.6, type: 'bp', amp: 0.12, att: 0.01, R });
+    case 'grass': // yumuşak toprak basıncı + uzun yaprak hışırtısı, tık yok
+      press(0, 300, 0.9, 0.02); grains(0.002, 30 + 10 * k, 0.09, 700, 3800, 0.24); grains(gap, 16, 0.06, 900, 4200, 0.18 * toeA * 2);
+      burst(d, sr, 0.004, { dur: 0.14, tau: 0.04, f: 1700, q: 0.6, type: 'bp', amp: 0.35 * bright, att: 0.012, R });
       break;
     case 'dirt':
-      thud(0, 90, 0.35, 0.018); grains(0.002, 20, 0.05, 900, 3800, 0.35); grains(toe, 12, 0.04, 1000, 4000, 0.25);
+      press(0, 320, 0.6, 0.016); grains(0.002, 22, 0.05, 900, 3800, 0.32); grains(gap, 12, 0.04, 1000, 4000, 0.22 * toeA * 2);
+      scuff(gap * 0.5, 2200, 0.08 * k, 0.06);
       break;
-    case 'wood':
-      modal(d, sr, 0, [[130 + R() * 30, 0.045, 0.6], [290 + R() * 40, 0.03, 0.4], [610 + R() * 80, 0.016, 0.25]], 0.8, R);
-      burst(d, sr, 0, { dur: 0.02, tau: 0.004, f: 1800, q: 1, type: 'bp', amp: 0.4, R });
-      modal(d, sr, toe, [[150, 0.03, 0.4], [330, 0.02, 0.3]], 0.4, R);
-      if (R() < 0.35) burst(d, sr, 0.04, { dur: 0.15, tau: 0.05, f: 750 + R() * 300, q: 8, type: 'bp', amp: 0.25, att: 0.03, R, sweepTo: 950 + R() * 300 }); // gıcırtı
+    case 'wood': // içi boş döşeme: kısa tok rezonans + topuk tıkı + seyrek gıcırtı
+      press(0, 380, 0.55, 0.01);
+      modal(d, sr, 0, [[150 + R() * 30, 0.025, 0.3], [310 + R() * 40, 0.02, 0.4], [640 + R() * 80, 0.012, 0.3]], 0.7 * hard, R);
+      click(0, 1100, 2.2, 0.006, 0.8); click(0, 2600, 1.0, 0.003);
+      click(gap, 1700, 0.35 * toeA, 0.004); modal(d, sr, gap, [[150 + R() * 20, 0.02, 0.35]], 0.35 * toeA, R);
+      if (R() < 0.3) burst(d, sr, 0.03, { dur: 0.13, tau: 0.045, f: 700 + R() * 300, q: 9, type: 'bp', amp: 0.18, att: 0.03, R, sweepTo: 950 + R() * 300 });
       break;
-    case 'metal':
-      modal(d, sr, 0, [[410 + R() * 60, 0.09, 0.4], [1130 + R() * 100, 0.06, 0.3], [2240 + R() * 200, 0.035, 0.25], [3500, 0.02, 0.15]], 0.7, R);
-      burst(d, sr, 0, { dur: 0.015, tau: 0.002, f: 3000, type: 'hp', amp: 0.5, R });
-      modal(d, sr, toe, [[450, 0.05, 0.3], [1250, 0.03, 0.2]], 0.35, R);
+    case 'metal': // köprü/gemi saç: uyumsuz çınlama, şiddetle uzar
+      modal(d, sr, 0, [[380 + R() * 70, 0.05 + 0.02 * k, 0.35], [1020 + R() * 120, 0.035, 0.3], [2310 + R() * 200, 0.022, 0.22], [3650 + R() * 300, 0.012, 0.14]], 0.55 * hard, R);
+      press(0, 300, 0.4, 0.008); click(0, 3400, 0.45, 0.002, 0.7);
+      modal(d, sr, gap, [[430 + R() * 40, 0.03, 0.3], [1180 + R() * 80, 0.02, 0.2]], 0.35 * toeA, R);
       break;
     case 'water': {
       const F = new BQ('bp', 700, 1.2, sr);
-      for (let i = 0; i < d.length; i++) { const t = i / sr; if ((i & 31) === 0) F.set('bp', 700 + 1400 * Math.min(1, t / 0.12), 1.2); d[i] += F.p(R.n()) * Math.min(1, t / 0.01) * Math.exp(-t / 0.07) * 1.2; }
-      grains(0.05, 10, 0.18, 1800, 4200, 0.25);
+      for (let i = 0; i < d.length; i++) { const t = i / sr; if ((i & 31) === 0) F.set('bp', 600 + 1500 * Math.min(1, t / 0.12), 1.2); d[i] += F.p(R.n()) * Math.min(1, t / 0.008) * Math.exp(-t / (0.05 + 0.02 * k)) * 1.2 * hard; }
+      grains(0.04, 12, 0.18, 1800, 4800, 0.25);
       break;
     }
-    case 'stone': // [ses] Arnavut kaldırımı / meydan taşı: sert, tiz "tak" + kısa taş çınlaması, az gövde, taneli sürtme
-      thud(0, 140 + R() * 30, 0.22, 0.007);
-      modal(d, sr, 0, [[1250 + R() * 200, 0.012, 0.5], [2650 + R() * 300, 0.008, 0.35], [4300 + R() * 400, 0.005, 0.2]], 0.75, R);
-      burst(d, sr, 0, { dur: 0.012, tau: 0.0015, f: 3800, type: 'hp', amp: 0.45, R });
-      grains(0.004, 8, 0.03, 2500, 6500, 0.18);
-      modal(d, sr, toe, [[1500 + R() * 200, 0.008, 0.35], [3100, 0.005, 0.2]], 0.4, R);
-      burst(d, sr, toe, { dur: 0.05, tau: 0.012, f: 2400, q: 0.9, type: 'bp', amp: 0.22, att: 0.004, R });
+    case 'stone': // kaldırım/arnavut taşı: sert tiz "tak", kısa taş çınlaması, taşlar arası kum
+      press(0, 700, 0.8, 0.007);
+      click(0, 3000, 0.9, 0.0025, 1.2);
+      modal(d, sr, 0, [[1350 + R() * 250, 0.01, 0.35], [2800 + R() * 300, 0.006, 0.25], [4600 + R() * 400, 0.004, 0.15]], 0.6 * hard * bright, R);
+      grains(0.003, 6 + 3 * k, 0.03, 2500, 7500, 0.14);
+      click(gap, 2600, 0.55 * toeA, 0.0025, 1.2);
+      if (k > 0) scuff(gap * 0.6, 3000, 0.05 * k, 0.05);
       break;
-    default: // beton/asfalt: topuk vuruşu + kum/çakıl tanesi + burun sürtmesi
-      // [ses] ölçüm: eski adımın enerjisinin %98'i 150 Hz altındaydı (yalnız "tup"); topuk tıkı ve taban sürtmesi öne alındı
-      thud(0, 105 + R() * 20, 0.3, 0.01);
-      burst(d, sr, 0, { dur: 0.03, tau: 0.005, f: 1900 + R() * 600, q: 1.0, type: 'bp', amp: 1.1, R });
-      burst(d, sr, 0.004, { dur: 0.04, tau: 0.01, f: 3600, q: 0.8, type: 'bp', amp: 0.3, att: 0.003, R });
-      grains(0.002, 5, 0.02, 3000, 7000, 0.2);
-      thud(toe, 120, 0.25, 0.008);
-      burst(d, sr, toe, { dur: 0.06, tau: 0.014, f: 1500 + R() * 500, q: 0.9, type: 'bp', amp: 0.35, att: 0.004, R });
+    default: // asfalt/beton: topuk tıkı + çakıl tanesi + taban basıncı + burun; koşuda sürtme
+      press(0, 600 + R() * 120, 1.1, 0.011);
+      click(0, 1300, 0.7, 0.005, 0.8);
+      click(0, 2400, 0.6, 0.0035, 0.9);
+      click(0.002, 4200, 0.25, 0.006, 0.7);
+      grains(0.002, 5 + 3 * k, 0.025, 3000, 8000, 0.16);
+      press(gap, 650, 0.55 * toeA, 0.008);
+      click(gap, 1500, 0.45 * toeA, 0.004, 0.9);
+      if (k > 0) scuff(gap * 0.4, 2600, 0.06 * k, 0.04 + 0.02 * k);
   }
   fadeOut(d, Math.floor(0.02 * sr));
-  return normalize(d, 0.85);
+  return normalize(d, 0.85 * (k === 2 ? 1 : k === 0 ? 0.7 : 0.88));
 }
 // [ses] tarihî meydanlar ve Galata çevresi taş döşeli: savaş kodunun zemin türü yalnız beton döndürdüğü için konumdan çıkarılır
 const COBBLE = LANDMARKS.filter((l) => ['galata', 'bluemosque', 'ayasofya', 'sultanahmet_park', 'bazaar', 'suleymaniye'].includes(l.type));
 function onCobble(x, z) { for (let i = 0; i < COBBLE.length; i++) { const l = COBBLE[i], dx = x - l.x, dz = z - l.z; if (dx * dx + dz * dz < 120 * 120) return true; } return false; }
-export function step(eng, x, z, surface) {
+export function step(eng, x, z, surface, k = 1) {
   if (!eng.ctx || !eng._vp) return;
   let s = surface || (eng.surfaceAt ? eng.surfaceAt(x, z) : 'concrete');
   if (!['grass', 'dirt', 'wood', 'metal', 'water'].includes(s)) s = 'concrete';
   if (s === 'concrete' && x !== undefined && onCobble(x, z)) s = 'stone';
   const L = eng.listener, own = x !== undefined && Math.hypot(x - L.x, z - L.z) < 1.5;
-  play(eng, pick(bank(eng, 'step:' + s, 4, (i) => synthStep(SR2, s, 700 + i * 17 + s.length), SR2)), { x, z, range: 26, ref: 2.5, gain: (own ? 0.17 : 0.3) * (eng.indoor ? 1.2 : 1), rate: 0.92 + Math.random() * 0.16, rev: eng.indoor ? 0.12 : 0.04, cat: 'step', minD: own ? 1.5 : 0 });
+  // [ses S2] aynı varyant art arda çalmaz (son seçilen dışlanır) + ton/hız oynaması
+  const B = stepBank(eng, s, k), last = eng._lastStep || (eng._lastStep = {}), key = s + k;
+  let j = Math.floor(Math.random() * (B.length - 1)); if (j >= (last[key] ?? -1)) j++; if (j >= B.length) j = 0; last[key] = j;
+  const g0 = k === 2 ? 1.25 : k === 0 ? 0.5 : 1;
+  play(eng, B[j], { x, z, range: k === 2 ? 34 : 24, ref: 2.5, gain: (own ? 0.17 : 0.3) * g0 * (eng.indoor ? 1.2 : 1), rate: 0.9 + Math.random() * 0.18, rev: eng.indoor ? 0.12 : 0.04, cat: 'step', minD: own ? 1.5 : 0 });
 }
+const STEP_N = 6;
+function stepBank(eng, s, k) { return bank(eng, 'step:' + s + k, STEP_N, (i) => synthStep(SR2, s, 700 + i * 17 + s.length * 3 + k * 101, k), SR2); }
 
 // ---------------- kapı ----------------
 function synthDoor(sr, kind, open, seed) {
@@ -449,7 +473,7 @@ export function ambienceEvents(eng, dt, game) {
 
 export function worldPrewarm(eng) {
   return [
-    () => bank(eng, 'step:concrete', 4, (i) => synthStep(SR2, 'concrete', 700 + i * 17 + 8), SR2),
+    () => stepBank(eng, 'concrete', 1), () => stepBank(eng, 'concrete', 2),
     () => bank(eng, 'imp:concrete', 3, (i) => synthImpact(eng.ctx.sampleRate, 'concrete', 300 + i * 13 + 8)),
     () => bank(eng, 'imp:metal', 3, (i) => synthImpact(eng.ctx.sampleRate, 'metal', 300 + i * 13 + 5)),
     () => bank(eng, 'shell', 3, (i) => synthShell(eng.ctx.sampleRate, false, 500 + i * 3)),
@@ -459,7 +483,8 @@ export function worldPrewarm(eng) {
     () => bank(eng, 'rico', 3, (i) => synthRicochet(eng.ctx.sampleRate, 400 + i * 9)),
     ...['dirt', 'wood'].map((s) => () => bank(eng, 'imp:' + s, 3, (i) => synthImpact(eng.ctx.sampleRate, s, 300 + i * 13 + s.length))),
     () => bank(eng, 'shellP', 3, (i) => synthShell(eng.ctx.sampleRate, true, 500 + i * 3 + 1)),
-    ...['stone', 'grass', 'dirt', 'wood', 'metal', 'water'].map((s) => () => bank(eng, 'step:' + s, 4, (i) => synthStep(SR2, s, 700 + i * 17 + s.length), SR2)),
+    () => stepBank(eng, 'concrete', 0),
+    ...['stone', 'grass', 'dirt', 'wood', 'metal', 'water'].flatMap((s) => [0, 1, 2].map((k) => () => stepBank(eng, s, k))),
   ];
 }
 
@@ -477,7 +502,9 @@ addRender('steps_surfaces', async () => {
   ['concrete', 'stone', 'grass', 'dirt', 'wood', 'metal', 'water'].forEach((s, k) => { for (let j = 0; j < 2; j++) { const d = synthStep(sr, s, 700 + j * 17 + s.length); const o = Math.floor((k * 1.15 + j * 0.5) * sr); for (let i = 0; i < d.length && o + i < out.length; i++) out[o + i] += d[i] * 0.8; } });
   return { chans: [out], sr };
 });
-for (const s of ['concrete', 'stone', 'grass', 'wood']) addRender('step_' + s, one(() => synthStep(SR2, s, 700 + s.length)));
+for (const s of ['concrete', 'stone', 'grass', 'wood', 'metal']) addRender('step_' + s, one(() => synthStep(SR2, s, 700 + s.length)));
+addRender('step_concrete_run', one(() => synthStep(SR2, 'concrete', 711, 2)));
+addRender('step_concrete_crouch', one(() => synthStep(SR2, 'concrete', 712, 0)));
 addRender('door_open_close', async () => {
   const sr = SR2, a = synthDoor(sr, 'wood', true, 901), b = synthDoor(sr, 'wood', false, 902), out = new Float32Array(a.length + b.length);
   out.set(a); out.set(b, a.length); return { chans: [out], sr };
