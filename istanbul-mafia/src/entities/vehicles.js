@@ -16,7 +16,7 @@ import { Debris } from '../world/debris.js';
 import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
 import { terrainHeight } from '../world/terrain.js';
 import { BIKE_BUILDERS } from './two_wheelers.js';
-import { seatDriver } from './character.js';
+import { seatDriver, hideSeatRider } from './character.js';
 import { MIL_BUILDERS } from './military_vehicles.js';
 
 // ======================================================================
@@ -2645,7 +2645,7 @@ export class VehicleManager {
   ejectDriver(v) {
     const d = v.driver;
     if (!d) return;
-    v.driver = null;
+    v.driver = null; hideSeatRider(v); // [B1]
     const f = v.fwd;
     const rx = -f.z, rz = f.x;
     const off = v.def.wid / 2 + 0.7;

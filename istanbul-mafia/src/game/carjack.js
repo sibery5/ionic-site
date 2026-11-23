@@ -139,7 +139,7 @@ export class Carjack {
       n.heading = v.heading + Math.PI / 2 * S.s;
       n.ext = () => 0; n.static = true;
       S.driver = n;
-      v.ai = { empty: true }; // sürücü mankeni gizlenir, artık gerçek kişi
+      v.ai = { empty: true }; if (v.mesh.userData.seatRider) v.mesh.userData.seatRider.root.visible = false; // koltuktaki gövde gizlenir, artık yerde gerçek kişi
       g.ui.bark(n, police ? 'Polise mi el kaldırıyorsun?!' : ['Ne yapıyorsun be?!', 'Bırak beni! Arabam!', 'İmdat! Hırsız!'][Math.floor(Math.random() * 3)]);
     }
     if (S.driver && t < T_PULL + 0.05) {

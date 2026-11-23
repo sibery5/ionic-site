@@ -317,7 +317,9 @@ function playKeys(P, keys, snap, u) {
 }
 const GRIP_OFF = { shotgun: 0.33, sniper: 0.32, ak: 0.27, m4: 0.28, rpg: 0.24, cifte: 0.3 };
 const GRIP_UP = { cifte: 0.045 };
-export const SOCK = { x: 0.028, y: 0.07, z: 0.036 }; // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
+export const SOCK = { x: 0.028, y: 0.07, z: 0.036 };
+export const KNIFE_OFF = { x: 0, y: 0, z: -0.045 }; // [B3] bıçak sapı avuç ortasına (yuva uzayı, m); atölye --tutus ile ölçülür
+export const KNIFE_TILT = 0.45; // [B3] ağzın ileri eğimi (rad; 0 = başparmaktan dik yukarı) // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
 let PROPS = null;
@@ -493,6 +495,10 @@ export class CharacterModel {
     const w = buildWeaponModel(id);
     if (!w) return;
     w.rotation.x = Math.PI / 2;
+    // [B3] bıçak: tabancada kabza avuç boyunca (yuva -z, serçe parmak yönü) uzanır, namlu parmak yönündedir (yuva -y). Bıçağı aynı
+    // dönüşle takınca sap parmak yönünde kalıyor, ağız parmakların arasından çıkıyordu. Sap avucun içinden geçer, ağız başparmak
+    // tarafından çıkıp hafifçe ileri eğilir (dürtme tutuşu); sapın ortası kabza ortasına (avuç merkezi) oturur.
+    if (id === 'knife') { w.rotation.x = KNIFE_TILT; w.position.set(KNIFE_OFF.x, KNIFE_OFF.y, KNIFE_OFF.z); }
     this.arms[1].socket.add(w);
     this.weaponMesh = w;
   }
@@ -1025,6 +1031,22 @@ export class CharacterModel {
       mixP(P, Q, W.air);
       lock -= W.air;
     }
+    // [B5] zıplama hazırlığı: pelvis alçalır (IK dizleri büker), gövde hafif öne, kollar geriye çekilir
+    if (this.prepK > 0 && !st.air) {
+      const a = Math.sin(Math.PI * 0.5 * this.prepK);
+      pel.y -= 0.12 * a; pel.z -= 0.02 * a;
+      addJ(P, J.hips, 0.12 * a, 0, 0); addJ(P, J.spine, 0.12 * a, 0, 0);
+      addJ(P, J.shL, 0.45 * a, 0, 0.1 * a); addJ(P, J.shR, 0.45 * a, 0, 0.1 * a);
+    }
+    // [B5] koşu atlaması: havada adım açılır (öndeki diz yukarıda, arka bacak geride uzanır), kollar karşıt
+    if (this.longJump && W.air > 0.01) {
+      if (!st.air) this.longJump = false;
+      else {
+        const k = W.air * (1 - smR(-0.2, -0.8, clamp((st.vy || 0) / 5, -1, 1)) * 0.5);
+        addJ(P, J.hipL, -0.45 * k, 0, 0); addJ(P, J.knL, -0.25 * k, 0, 0); addJ(P, J.hipR, 0.55 * k, 0, 0); addJ(P, J.knR, 0.35 * k, 0, 0);
+        addJ(P, J.shL, 0.5 * k, 0, 0); addJ(P, J.shR, -0.6 * k, 0, 0); addJ(P, J.spine, 0.08 * k, 0, 0);
+      }
+    }
     // iniş esnemesi: pelvis çöker, IK dizleri büker
     if (this.landT < 0.6) {
       const a = this.landK * Math.exp(-this.landT * 7) * Math.min(1, this.landT * 30);
@@ -1277,6 +1299,14 @@ export class CharacterModel {
       lock = 0; ikW = 0;
       const mh = this.mantleHang || 0; // [hareket] duvara tutunma: kollar başın üstünde kenarda
       if (mh > 0) { setJ(P, J.shL, -2.75 * mh, 0, 0.12 * mh); setJ(P, J.shR, -2.75 * mh, 0, -0.12 * mh); setJ(P, J.elL, -0.35 * mh, 0, 0); setJ(P, J.elR, -0.35 * mh, 0, 0); }
+      // [B5] tırmanma: asılıyken bacaklar sarkar (hafif salınım), çekişin sonunda sol diz kenara atılır, sağ bacak iter
+      const kn = this.mantleKnee || 0, hangL = mh > 0.7 && kn < 0.05 ? (mh - 0.7) / 0.3 : 0;
+      if (hangL > 0 || kn > 0) {
+        const sw2 = 0.08 * Math.sin(this.time * 5) * hangL;
+        setJ(P, J.hipL, -0.15 * hangL + sw2 - 1.75 * kn, 0, 0.08); setJ(P, J.knL, 0.25 * hangL + 2.0 * kn, 0, 0); setJ(P, J.anL, 0.35 * hangL + 0.3 * kn, 0, 0);
+        setJ(P, J.hipR, -0.05 * hangL - sw2 - 0.35 * kn, 0, 0.08); setJ(P, J.knR, 0.15 * hangL + 0.6 * kn, 0, 0); setJ(P, J.anR, 0.35 * hangL + 0.2 * kn, 0, 0);
+        P[J.hips * 3 + 2] *= 1 - Math.max(hangL, kn); P[J.spine * 3 + 2] *= 1 - Math.max(hangL, kn);
+      }
     }
     let rollW = 0;
     if (st.roll > 0) {
@@ -1892,6 +1922,9 @@ export function seatDriver(v, dt, drv, want) {
   M.animate(dt, S);
   return true;
 }
+
+// sürücü inince/çekilince hemen gizle (boş araç her karede güncellenmeyebilir)
+export function hideSeatRider(v) { const r = v && v.mesh && v.mesh.userData.seatRider; if (r) r.root.visible = false; }
 
 // test/araç kancası (headless testler için)
 if (typeof window !== "undefined") window.__randomLook = randomLook;

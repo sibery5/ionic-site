@@ -30,6 +30,7 @@ module.exports = async (p, out) => {
     // giysi değişince araçtaki gövde de değişir
     const L2 = { ...pl.model.look, topColor: '#11aa22' }; pl.model.setLook(L2); sim(0.2);
     r.follow = !!(M && lk(M.look) === lk(pl.model.look));
+    g.vehicles.ejectDriver(v); r.exitHidden = !!(M && !M.root.visible); r.ownBack = pl.model.root.visible; g.enterVehicle(v, true); sim(0.3);
     window.__seatV = v;
     return r;
   }, [type]);
@@ -72,7 +73,7 @@ module.exports = async (p, out) => {
     return r;
   });
   if (npc) console.log('npc', JSON.stringify(npc));
-  const okP = res.every((r) => r.rider && r.visible && !r.dummy && r.same && r.mh && r.triRatio > 0.99 && r.triRatio < 1.01 && r.follow && r.hand.every((d) => d < 0.08) && r.hipSeat < 0.12);
+  const okP = res.every((r) => r.rider && r.visible && !r.dummy && r.same && r.mh && r.triRatio > 0.99 && r.triRatio < 1.01 && r.follow && r.exitHidden && r.ownBack && r.hand.every((d) => d < 0.08) && r.hipSeat < 0.12);
   const okN = !npc || (npc.rider && npc.visible && !npc.dummy && npc.mh && (!npc.jacked || (npc.sameLook && npc.riderHidden)));
   console.log(okP && okN ? 'KOLTUK TAMAM' : 'KOLTUK HATA');
 };
