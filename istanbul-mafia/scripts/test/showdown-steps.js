@@ -16,7 +16,8 @@ module.exports = async (p) => {
     const g = game; g.loop = () => {}; g.player.god = true;
     window.SD = {
       clear() {
-        const W = g.wanted; W.reset(); g.npcs.calmPolice();
+        const W = g.wanted, M = g.missions; if (M.active) M.cleanup(true); M.active = null; M.retry = { t: 1e9 }; // bekleyen 'tekrar dene' kaydı: ilk hikâye görevi kendiliğinden başlamasın
+        W.reset(); g.npcs.calmPolice();
         if (g.player.vehicle) g.vehicles.ejectDriver(g.player.vehicle);
         for (const n of g.npcs.list.slice()) if (!n.mission) g.npcs.remove(n);
         g.ui.closeAll(); g.mode = 'playing';
@@ -34,9 +35,9 @@ module.exports = async (p) => {
       try { M.start(def, { replay: true }); } catch (e) { out[id] = 'hata ' + e.message; continue; }
       sim(0.2); W.add(5, true); sim(0.2);
       out[id] = W.level;
-      M.cleanup(true); M.active = null; M.retry = null; W.reset(); sim(0.2);
+      M.cleanup(true); M.active = null; M.retry = { t: 1e9 }; W.reset(); sim(0.2);
     }
-    W.add(5, true); sim(0.1); out.free = W.level; W.reset();
+    sim(0.2); W.add(5, true); sim(0.1); out.free = W.level; out.freeActive = M.active && M.active.id; W.reset();
     SD.clear();
     return out;
   });

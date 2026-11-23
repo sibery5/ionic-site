@@ -87,7 +87,8 @@ export class Showdowns {
       g.ui.bigMessage('KARARGÂH BASKINI', `${this.gname(J.gang)} karargâhı. Siper al, liderlerini indir.`, 'red', 3.5);
     } else if (def.kind === 'convoy') {
       for (let c = 0; c < def.cars; c++) {
-        const v = c === 0 ? g.vehicles.spawnTraffic(p.pos.x, p.pos.z, 'suv') : null;
+        let v = null;
+        for (let k = 0; c === 0 && !v && k < 8; k++) v = g.vehicles.spawnTraffic(p.pos.x, p.pos.z, 'suv'); // yol bulunamazsa birkaç kez dene
         const lead = J.cars[0];
         const car = v || (lead ? g.vehicles.add('suv', lead.pos.x - lead.fwd.x * 11, lead.pos.z - lead.fwd.z * 11, lead.heading, '#151515') : null);
         if (!car) continue;

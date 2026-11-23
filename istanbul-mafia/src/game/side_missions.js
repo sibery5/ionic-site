@@ -26,10 +26,11 @@ export class MarkerSet {
     for (const m of this.meshes) m.parent && m.parent.remove(m);
     this.meshes = list.map((mk) => {
       const g = new THREE.Group();
-      const mat = new THREE.MeshBasicMaterial({ color: mk.color, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-      if (!mk.actor && !mk.vehicle) { const c = new THREE.Mesh(markerGeo, mat); c.position.y = 1.25; c.scale.setScalar((mk.r || 3) / 2.4); g.add(c); }
+      const mat = new THREE.MeshBasicMaterial({ color: mk.color, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+      if (!mk.actor && !mk.vehicle) { const c = new THREE.Mesh(markerGeo, mat); c.position.y = 0.6; c.scale.set((mk.r || 3) / 2.4, 0.48, (mk.r || 3) / 2.4); g.add(c); g.userData.ring = c; }
+      // [O4] hedef oku yönlendirme (guide.js) tarafından çizilir: görev/yanıp sönen işaretçide ikinci ok yok (en çok 2 ok)
       const a = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: mk.color }));
-      a.position.y = 4; g.add(a);
+      a.position.y = 4; a.visible = !(mk.story || mk.blink || mk.giver); g.add(a);
       g.userData.arrow = a;
       this.group.add(g);
       return g;
@@ -46,6 +47,13 @@ export class MarkerSet {
       if (mk.actor) { x = mk.actor.pos.x; z = mk.actor.pos.z; y = mk.actor.pos.y + 0.5; m.visible = !mk.actor.dead && !mk.actor.vehicle; }
       if (mk.vehicle) { x = mk.vehicle.pos.x; z = mk.vehicle.pos.z; y = mk.vehicle.def.hei; m.visible = !mk.vehicle.destroyed && g.player.vehicle !== mk.vehicle; }
       m.position.set(x, y, z);
+      // [O4] alan halkası kameraya yaklaşınca solar (yakında ekranı kaplayan sarı duvar olmasın); halkanın içindeyken gizli
+      const R = m.userData.ring;
+      if (R) {
+        const cp = g.camera.position, dc = Math.hypot(cp.x - x, cp.z - z) - (mk.r || 3);
+        const k = Math.max(0, Math.min(1, (dc - 2) / 8));
+        R.material.opacity = 0.22 * k; R.visible = k > 0.02;
+      }
       m.userData.arrow.position.y = 3.5 + Math.sin(t * 3) * 0.3;
       m.userData.arrow.rotation.y = t * 2;
     }
