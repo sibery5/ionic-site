@@ -134,7 +134,8 @@ export class Carjack {
     // sürücüyü çek
     if (t0 < T_OPEN && t >= T_OPEN) {
       const police = v.type === 'police' || v.type === 'polsuv' || v.type === 'swat';
-      const n = g.npcs.add(police ? 'police' : 'civilian', S.seatW.x, S.seatW.z, null, { state: 'ext' });
+      const aiL = v.mesh.userData.aiLook; // [B1] koltukta görünen sürücünün aynısı iner
+      const n = g.npcs.add(police ? 'police' : 'civilian', S.seatW.x, S.seatW.z, aiL ? { ...aiL } : null, { state: 'ext' });
       n.heading = v.heading + Math.PI / 2 * S.s;
       n.ext = () => 0; n.static = true;
       S.driver = n;

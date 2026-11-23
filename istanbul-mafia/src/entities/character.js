@@ -11,6 +11,7 @@ import { buildWeaponModel, WEAPONS } from '../game/weapons.js';
 import { BONES, BI, BONE_PARENT, RIG, rigFor, buildCharGeometry, mhPendingReady, lookKey, BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM, gearFit } from './charParts.js';
 export { BODY_TYPES, BODY_TYPE_NAMES, SKIRT_HEM };
 import { charMaterial, charDepthMaterial } from './charTex.js';
+import { RNG } from '../core/util.js';
 
 export const SKIN_TONES = ['#f1d0b5', '#e0b493', '#c99572', '#a8754f', '#7d5236', '#5a3a26'];
 export const HAIR_COLORS = ['#1a1410', '#3b2a1e', '#6b4a2e', '#a07040', '#d8b070', '#8a8a8a', '#5a1a10'];
@@ -395,6 +396,7 @@ export class CharacterModel {
 
   build() {
     const L = this.look;
+    this.lookVer = (this.lookVer || 0) + 1; // [B1] araçtaki kopya gövde (seatDriver) görünüş değişince yeniden kurulur
     const R = rigFor(L);
     this.rig = R;
     this.body.scale.setScalar(R.height);
@@ -1488,15 +1490,23 @@ export class CharacterModel {
     const sp = clamp((R.speed || 0) / 7, 0, 1), br = Math.sin(t * 1.6 + this.seed);
     // gövde: hıza göre öne eğilir, pedal çevrimiyle hafif yanal salınım; baş yolu görür
     const sway = Math.sin(R.crank || 0) * 0.035 * (0.4 + sp);
-    setJ(P, J.hips, 0.42 + 0.12 * sp, 0, sway);
-    setJ(P, J.spine, 0.18 + 0.06 * sp + 0.01 * br, (R.steer || 0) * 0.15, -sway * 0.6);
-    setJ(P, J.chest, 0.1 + 0.05 * sp, (R.steer || 0) * 0.12, -sway * 0.4);
-    setJ(P, J.neck, -0.32 - 0.1 * sp, -(R.steer || 0) * 0.2, 0); setJ(P, J.head, -0.3 - 0.08 * sp + this.lookPitch * 0.3, this.lookYaw * 0.4 - (R.steer || 0) * 0.2, 0);
+    if (R.car) {
+      // [B1] araba koltuğu: sırt hafif geride, baş yolda, direksiyonu çevirirken omuzlar az döner
+      setJ(P, J.hips, -0.12, 0, 0);
+      setJ(P, J.spine, 0.08 + 0.008 * br, (R.steer || 0) * 0.12, 0);
+      setJ(P, J.chest, 0.06, (R.steer || 0) * 0.1, 0);
+      setJ(P, J.neck, -0.02, -(R.steer || 0) * 0.15, 0); setJ(P, J.head, 0.02 + this.lookPitch * 0.3, this.lookYaw * 0.4 - (R.steer || 0) * 0.25, 0);
+    } else {
+      setJ(P, J.hips, 0.42 + 0.12 * sp, 0, sway);
+      setJ(P, J.spine, 0.18 + 0.06 * sp + 0.01 * br, (R.steer || 0) * 0.15, -sway * 0.6);
+      setJ(P, J.chest, 0.1 + 0.05 * sp, (R.steer || 0) * 0.12, -sway * 0.4);
+      setJ(P, J.neck, -0.32 - 0.1 * sp, -(R.steer || 0) * 0.2, 0); setJ(P, J.head, -0.3 - 0.08 * sp + this.lookPitch * 0.3, this.lookYaw * 0.4 - (R.steer || 0) * 0.2, 0);
+    }
     setJ(P, J.shL, -0.9, 0, 0.18); setJ(P, J.shR, -0.9, 0, 0.18); setJ(P, J.elL, -0.5, 0, 0); setJ(P, J.elR, -0.5, 0, 0);
     setJ(P, J.wrL, 0.25, 0, 0); setJ(P, J.wrR, 0.25, 0, 0);
     P[HP] = (R.seat[0] || 0) / sc; P[HP + 2] = (R.seat[2] + 0.02) / sc;
     this.pel.x = 0; this.pel.y = 0; this.pel.z = 0;
-    this.apply(P, 0, (R.seat[1] + 0.05) / sc, 0);
+    this.apply(P, 0, (R.seat[1] + (R.car ? 0 : 0.05)) / sc, 0);
     this.hips.updateMatrix();
     // bacaklar: bilek pedalın üstünde ve biraz arkasında; altta parmak ucu aşağı (bacak tam gerilmesin)
     for (let i = 0; i < 2; i++) {
@@ -1837,6 +1847,50 @@ export class CharacterModel {
       this.solveArm(this.arms[0], V.wT, V.pole, V.qL, leftW);
     }
   }
+}
+
+// ---------------- [B1] araç sürücüsü: gerçek gövde ----------------
+// Eskiden araba ve motosiklette sürücü kodla üretilmiş kaba bir maketti (vehicles.js dummyGeo / two_wheelers riderTorso): binince oyuncunun ve
+// NPC'nin gövdesi, giysisi, saçı "değişiyordu"; gasp edilen sürücü de kapı açılınca başka bir insana dönüşüyordu. Şimdi bisiklette olduğu gibi
+// sürücünün kendi görünüşüyle (oyuncu/NPC: model.look; trafik: araç başına sabit görünüş, gasp edilince aynı kişi iner) gerçek gövde koltuğa oturur.
+// Uzakta (> 45 m) maket kalır (iç görünmez, maliyet yok). Dönüş: gerçek gövde gösterildiyse true.
+const seatRng = new RNG(7311);
+const SEAT_N2 = 45 * 45, SEAT_F2 = 52 * 52;
+const LAW_TYPES = new Set(['police', 'polsuv', 'swat']);
+export function seatDriver(v, dt, drv, want) {
+  const ud = v.mesh.userData, T = ud.template, ch = ud.chassis;
+  if (!T || !ch || !(T.wheel || (T.riderPose && T.riderPose.pegs))) return false;
+  const live = ud.seatRider && ud.seatRider.root.visible;
+  const dx = v.pos.x - CAM.x, dz = v.pos.z - CAM.z, d2 = dx * dx + dz * dz;
+  if (!want || !(CAM.y > 1e4 || d2 < (live ? SEAT_F2 : SEAT_N2))) { if (live) ud.seatRider.root.visible = false; return false; }
+  const src = drv && drv.model ? drv.model : null;
+  const look = src ? src.look : (ud.aiLook || (ud.aiLook = randomLook(seatRng, LAW_TYPES.has(v.type) ? 'police' : 'civilian')));
+  const ver = src ? src.lookVer : 0;
+  if (!ud.seatRider) { ud.seatRider = new CharacterModel(look); ch.add(ud.seatRider.root); }
+  else if (ud.seatLook !== look || ud.seatVer !== ver) ud.seatRider.setLook(look);
+  ud.seatLook = look; ud.seatVer = ver;
+  const M = ud.seatRider; M.root.visible = true;
+  let S = ud.seatSt;
+  if (!S) {
+    const car = !!T.wheel, g = [new THREE.Vector3(), new THREE.Vector3()], gl = [];
+    let seat, ped;
+    if (car) {
+      const [wx, wy, wz, r] = T.wheel, sd = T.driver;
+      // direksiyon tutuşu saat 10 ve 2 (simit -0.45 rad sürücüye eğik): yerel noktalar
+      gl.push([wx + r * 0.82, wy + r * 0.52, wz - r * 0.25], [wx - r * 0.82, wy + r * 0.52, wz - r * 0.25]);
+      seat = [sd[0], sd[1], sd[2] + 0.02];
+      const fy = Math.max((T.S && T.S.cl || 0.15) + 0.06, sd[1] - 0.5);
+      ped = [[sd[0] + 0.11, fy, sd[2] + 0.66], [sd[0] - 0.13, fy, sd[2] + 0.62]];
+    } else {
+      const P = T.riderPose; seat = P.seat.slice(); ped = P.pegs.map((p) => p.slice()); gl.push(P.grips[0].slice(), P.grips[1].slice());
+    }
+    S = ud.seatSt = { speed: 0, gl, ride: { seat, pedals: ped, grips: g, crank: 0, steer: 0, lean: 0, speed: 0, car } };
+  }
+  ch.updateWorldMatrix(true, false);
+  for (let i = 0; i < 2; i++) { const p = S.gl[i]; ch.localToWorld(S.ride.grips[i].set(p[0], p[1], p[2])); }
+  S.ride.steer = v.steerAng || 0; S.ride.lean = v.lean || 0; S.ride.speed = Math.abs(v.fs || 0);
+  M.animate(dt, S);
+  return true;
 }
 
 // test/araç kancası (headless testler için)
