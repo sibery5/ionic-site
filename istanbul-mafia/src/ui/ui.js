@@ -468,8 +468,11 @@ export class UI {
       } else if (v.owned && v !== p.vehicle) {
         this._mmTo(v.pos.x, v.pos.z);
         c.drawImage(iconBitmap('car', '#6ab8ff'), this._sx - 12, this._sy - 12, 24, 24);
-      }
+      } else if (v.lawTank && g.wanted.level > 0) { this._mmTo(v.pos.x, v.pos.z); c.fillStyle = '#ff3a3a'; c.fillRect(this._sx - 9, this._sy - 6, 18, 12); } // [O] barikat tankı
     }
+    // [O] kolluk helikopteri: yanıp sönen eşkenar dörtgen
+    const Hh = g.wanted.heli;
+    if (Hh && !Hh.dying) { this._mmTo(Hh.pos.x, Hh.pos.z); const x = this._sx, y = this._sy; c.fillStyle = chaseCol; c.beginPath(); c.moveTo(x, y - 10); c.lineTo(x + 10, y); c.lineTo(x, y + 10); c.lineTo(x - 10, y); c.closePath(); c.fill(); }
     c.restore();
     // görev işaretçileri (kenara sabitlenir). Aktif hedef her zaman görünür: iğne + nabız halkası; harita dışındaysa
     // kenarda yön oku ve mesafe. Konaktan yeni çıkınca halka güçlenir ama iğne asla kaybolmaz.
