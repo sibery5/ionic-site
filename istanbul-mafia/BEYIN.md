@@ -200,3 +200,7 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
 - **Yazılımsal çizicide ikinci tuval okuması tarayıcıyı düşürüyor:** aynı sayfada `drawImage(webglCanvas)` + `getImageData` ikinci kez çağrılınca "Target crashed" (eski sürümde de). Görüntü başına ayrı koşu (`V2ONLY`) çözdü.
 - **İç mekândan dışarısı = bir kez çizilen küp görüntü:** canlı ikinci görünüm yerine girişte küp; yüzler kare kare (tek karede 6 şehir çizimi takılma yapar). Çok katlı iç mekânda `ctx.camMaxY` verilmezse kamera alt kata iner.
 - **Bellek sınırı villa testinde yakın:** ana dalda da son adımda düşüyor; şehre üçgen eklemek (kule taçları) düşmeyi öne çekebilir — üçgen artışını raporla.
+- **Wine çöktü (2.0, kapsayıcı çekirdeği değişince):** `wine cmd` bile "free(): invalid pointer" ile düşüyor; yeniden kurulum ve temiz önek düzeltmedi.
+  NSIS kurulum dosyası Linux'ta kaldırıcı üretmek için wine ister; wine'sız yalnız taşınabilir hedef çıkar
+  (`electron-builder --win portable --x64 -c.win.signAndEditExecutable=false`; exe simgesi gömülmez). Teslimden önce `wine cmd /c echo` ile denetle.
+- **node_modules depoya girdi:** bir ekip sembolik bağlantıyı commit'ledi, birleştirmede gerçek klasörün yerine geçti, derleme kırıldı. `.gitignore`'a eklendi; ekipler yalnız src/scripts/docs/assets ekler.

@@ -223,7 +223,8 @@ module.exports = async (p, out) => {
     });
     console.log('deck', JSON.stringify(r));
     const T = r.top;
-    check('H5 azami hız: sürat 24–28, motor yat 14–17, mega yat 9–11, balıkçı 5–6 m/s', T.surat >= 24 && T.surat <= 28 && T.yat >= 14 && T.yat <= 17 && T.megayat >= 9 && T.megayat <= 11 && T.balikci >= 5 && T.balikci <= 6, T);
+    // sahibinin isteğiyle (Plan 2.0 ek) tekne azami hızları +%15: aralıklar da %15 yukarı
+    check('H5 azami hız (+%15): sürat 27,5–32, motor yat 16–19,5, mega yat 10,3–12,7, balıkçı 5,7–6,9 m/s', T.surat >= 27.5 && T.surat <= 32.2 && T.yat >= 16 && T.yat <= 19.6 && T.megayat >= 10.3 && T.megayat <= 12.7 && T.balikci >= 5.7 && T.balikci <= 6.9, T);
     check('H4 tekneden kalkınca güvertede (suya düşmez)', r.exit.onBoat && !r.exit.swim && r.exit.dy > 1, r.exit);
     check('H4 tekne 10 sn sürüklenirken oyuncu güvertede yürür ve kalır', r.drift.off === 0 && r.drift.swim === 0 && r.drift.maxLx < r.drift.halfW && r.drift.moved > 20, r.drift);
     check('H4 küpeşteden atlayınca suya girer', !r.jump.onBoat && r.jump.swim, r.jump);
