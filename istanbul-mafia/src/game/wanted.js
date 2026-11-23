@@ -945,17 +945,20 @@ export class Wanted {
       const o = new THREE.Vector3(ox, oy, oz), dir = new THREE.Vector3(ax.x - ox, (v.aimY || 0) + 0.6 - oy, ax.z - oz).normalize();
       g.particles.explosion({ x: ox, y: oy - 0.3, z: oz }, 0.3);
       audio.gunshot('rpg', ox, oz); audio.explosion(ox, oz, 0.5);
+      this.noteWarn(v);
       g.combat.rocket(sh, o, dir, { dmg: 200, radius: 7, law: true });
       g.ui.bark(v, 'Tank ateş ediyor!');
       return;
     }
     if (Math.abs(diff) < 0.08 && v.reloadT <= 0 && d > 12) {
-      v.warnT = ROCKET_AIM.warn; v.aimX = tx.x; v.aimY = tx.y; v.aimZ = tx.z;
+      v.warnT = ROCKET_AIM.warn; v.warnAt = this.clockT || 0; v.aimX = tx.x; v.aimY = tx.y; v.aimZ = tx.z;
       audio.tone({ freq: 55, freq2: 90, dur: 1.2, type: 'sawtooth', gain: 0.25, x: v.pos.x, z: v.pos.z, range: 220 });
       g.ui.bark(v, 'Tank nişan alıyor!');
       if (d < 120) g.ui.notify('TANK NİŞAN ALIYOR — SİPERE GİR / KAÇ!', 'warn');
     }
   }
+  // [O] ölçüm: uyarıdan atışa geçen en kısa süre (test)
+  noteWarn(v) { const w = (this.clockT || 0) - (v.warnAt || 0), S = this.rocketStats; S.minWarn = S.minWarn === undefined ? w : Math.min(S.minWarn, w); }
   // [O] roket nişan noktası: çoğunlukla en az ROCKET_AIM.minMiss m öteye, ara sıra doğrudan (donmuş) noktaya
   rocketAim(x, z, d) {
     const R = this._ra || (this._ra = { x: 0, z: 0, direct: false });
@@ -1110,11 +1113,12 @@ export class Wanted {
           const ax = this.rocketAim(H.aimX, H.aimZ, d);
           const dir = new THREE.Vector3(ax.x - o.x, (H.aimY || 0) + 0.4 - o.y, ax.z - o.z).normalize();
           audio.gunshot('rpg', o.x, o.z);
+          this.noteWarn(H);
           g.combat.rocket(sh, o, dir, { dmg: 180, radius: 7, law: true });
         }
       } else if (H.rocketT <= 0 && d < 120) {
         H.rocketT = 10 + Math.random() * 5;
-        H.rocketWarn = ROCKET_AIM.warn; H.aimX = tgt.x; H.aimY = tgt.y || 0; H.aimZ = tgt.z;
+        H.rocketWarn = ROCKET_AIM.warn; H.warnAt = this.clockT || 0; H.aimX = tgt.x; H.aimY = tgt.y || 0; H.aimZ = tgt.z;
         for (let i = 0; i < 4; i++) audio.tone({ freq: 1800, dur: 0.08, type: 'square', gain: 0.08, delay: i * 0.35 });
         g.ui.notify('Helikopter roket kilitliyor — yer değiştir!', 'warn');
       }

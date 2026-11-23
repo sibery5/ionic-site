@@ -475,7 +475,7 @@ export class Missions {
     const g = this.g, r = this.retry;
     this.retry = null;
     const cpName = r.cp > 0 ? (r.def.steps[r.cp].cp || 'son kontrol noktası') : 'baştan';
-    g.ui.confirm('TEKRAR DENE?', `${r.def.title} — ${r.reason || ''} · Başlangıç: ${cpName}`, 'Tekrar dene', () => {
+    const go = (from) => {
       const p = g.player;
       if (r.snap) {
         for (const [id, w] of Object.entries(r.snap.weapons)) { if (!WEAPONS[id]) continue; if (WEAPONS[id].type === 'melee') p.giveWeapon(id); else p.weapons[id] = { mag: w.mag, ammo: w.ammo }; }
@@ -483,8 +483,14 @@ export class Missions {
       }
       p.hp = p.maxHp;
       g.wanted.reset(); g.npcs.calmPolice();
-      this.start(r.def, { fromStep: r.cp, replay: r.replay });
-    }, 'Vazgeç');
+      this.start(r.def, { fromStep: from, replay: r.replay });
+    };
+    // [O2] iki seçenek: yakın kontrol noktası (varsa) ya da görevin başlangıç noktası
+    const opts = [];
+    if (r.cp > 0) opts.push({ label: 'Kontrol noktasından: ' + cpName, cls: 'gold', action: () => go(r.cp) });
+    opts.push({ label: r.cp > 0 ? 'Baştan başla' : 'Tekrar dene', cls: r.cp > 0 ? '' : 'gold', action: () => go(0) });
+    opts.push({ label: 'Vazgeç' });
+    g.ui.choice('TEKRAR DENE?', `${r.def.title} — ${r.reason || ''}`, opts);
   }
   removeSpawned() {
     const g = this.g;

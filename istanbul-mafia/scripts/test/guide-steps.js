@@ -101,14 +101,15 @@ module.exports = async (p, out) => {
   const fr = await p.evaluate(() => {
     const g = game, P = g.player, Gd = g.ui.guide, B = g.social.bounties, M = g.missions;
     if (M.active) M.cleanup(true); M.active = null; g.setGps(null);
-    const saveLive = B.live, t = g.npcs.add('gang', P.pos.x, P.pos.z + 1);
-    B.live = { target: t, def: {} };
+    // ölçüm hedefi: kişi (görev hedefi gibi); ödül avı yakında yakalama akışına girdiği için doğrudan ana hedef yapılır
+    const t = g.npcs.add('civilian', P.pos.x, P.pos.z + 1, null, { state: 'idle' }); t.static = true;
+    const pm0 = Gd.pickMain; Gd.pickMain = function () { return this.setT(0, t.pos.x, t.pos.y, t.pos.z, 2.35, 'görev'); };
     const rows = []; let maxF = 0, nearShown = 0, personShown = 0;
     const v = P.pos.clone(), w = P.pos.clone();
     for (const d of [0, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 80, 120, 160, 200]) {
       t.pos.set(P.pos.x + Math.sin(P.camYaw) * d, P.pos.y, P.pos.z + Math.cos(P.camYaw) * d); t.state = 'idle';
       sim(0.15);
-      const i = Gd.T.findIndex((x) => x.on && x.kind === 'ödül avı'), A = Gd.arrows[i];
+      const A = Gd.arrows[0];
       if (!A || !A.visible) { rows.push(d + ':gizli'); continue; }
       g.camera.updateMatrixWorld();
       v.copy(A.position).project(g.camera); w.copy(A.position); w.y += 1.05 * A.scale.y; w.project(g.camera);
@@ -118,12 +119,11 @@ module.exports = async (p, out) => {
       if (d < 4) personShown++;
     }
     // aynı anda en çok 2 ok: 4 hedef kaydı açılsa da
-    const pm = Gd.pickMain;
+    const pm = pm0;
     Gd.pickMain = function () { for (let k = 1; k < 5; k++) this.setT(k, P.pos.x + 30 * k, P.pos.y, P.pos.z + 20, 2.0, 'görev'); return this.setT(0, P.pos.x - 40, P.pos.y, P.pos.z + 30, 2.0, 'görev'); };
     sim(0.1);
     const vis = Gd.arrows.filter((a) => a.visible).length;
-    Gd.pickMain = pm;
-    B.live = saveLive; g.npcs.remove(t); sim(0.2);
+    Gd.pickMain = pm0; g.npcs.remove(t); sim(0.2);
     return { maxF: +maxF.toFixed(3), rows: rows.join(' '), nearShown, personShown, vis };
   });
   console.log('OK EKRAN ORANI ' + JSON.stringify(fr));

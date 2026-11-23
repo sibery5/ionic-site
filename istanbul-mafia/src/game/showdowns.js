@@ -19,7 +19,7 @@ export const SHOWDOWN_CFG = { offerDt: 25, offerR: 4.5, offerLife: 240, engageR:
 
 export class Showdowns {
   constructor(M) {
-    this.M = M; this.g = M.g;
+    this.M = M; this.g = M.g; this.table = SHOWDOWNS;
     this.offer = null; this.job = null;
     this.offerT = 8; this.k = 0; this.done = 0;
     this.markers = M.addMarkerSet ? M.addMarkerSet(new MarkerSet(M.g, M.g.scene)) : new MarkerSet(M.g, M.g.scene);

@@ -94,11 +94,11 @@ module.exports = async (p) => {
     g.combat.explosion = (x, y, z, r, d, a, s) => { if (a && a.vehicle === tk) dist.push(+Math.hypot(x - pl.pos.x, z - pl.pos.z).toFixed(1)); return ex(x, y, z, r, d, a, s); };
     const rk = g.combat.rocket.bind(g.combat);
     g.combat.rocket = (a, oo, d, def) => { if (a && a.vehicle === tk) { if (warnStart >= 0) warns.push(+(t - warnStart).toFixed(2)); warnStart = -1; tk.reloadT = 0.5; } return rk(a, oo, d, def); };
-    const s0 = W.rocketStats.shots;
+    const s0 = W.rocketStats.shots; W.rocketStats.minWarn = undefined;
     sim(80, (i) => { t = i / 30; if (warnStart < 0 && tk.warnT > 0) warnStart = t; if (i % 15 === 0) W.spotted(); W.hold[5] = 99; });
     g.combat.explosion = ex; g.combat.rocket = rk;
     const direct = dist.filter((d) => d < 1.5).length;
-    const r = { D: Math.round(D), shots: W.rocketStats.shots - s0, booms: dist.length, direct, dist: dist.join(','), minWarn: Math.min(...warns), lvl: W.level };
+    const r = { D: Math.round(D), shots: W.rocketStats.shots - s0, booms: dist.length, direct, dist: dist.join(','), minWarn: +(W.rocketStats.minWarn || 0).toFixed(2), testWarn: Math.min(...warns), lvl: W.level };
     E.clear();
     return r;
   });
