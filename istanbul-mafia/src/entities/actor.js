@@ -89,7 +89,9 @@ export class Actor {
       this.fireCd = 1 / def.rate;
       this.model.punch();
       this.game.audio.swing(this.weapon); // [savaş entegrasyonu] bıçak/sopa savuruş sesi
-      this.game.combat.melee(this, def);
+      // [B2] hasar tık anında değil, yumruğun/bıçağın hedefe ulaştığı karede (animasyonun uzanma anı) verilir
+      const M = this.model, imp = (M.meleeDur || 0.36) * (M.meleeKind === 'hook' || M.meleeKind === 'bat' ? 0.62 : 0.55);
+      this.game.combat.queueMelee(this, def, imp);
       return true;
     }
     if (w.mag <= 0) {

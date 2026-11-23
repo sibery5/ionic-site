@@ -38,6 +38,9 @@ CAT['tutus:tabanca'] = holding('pistol', { aim: true });
 CAT['tutus:ak'] = holding('ak', { aim: true, twoHanded: true });
 CAT['tutus:ak-bosta'] = holding('ak', { twoHanded: true });
 CAT['tutus:bicak'] = holding('knife', {});
+// [B3] A/B: eski bıçak yerleşimi (tabanca dönüşü: sap parmak yönünde) ve saldırı anı
+CAT['tutus:bicak-eski'] = () => { const root = holding('knife', {})(); const m = root.userData.model; if (m && m.weaponMesh) { m.weaponMesh.rotation.x = Math.PI / 2; m.weaponMesh.position.set(0, 0, 0); } root.updateMatrixWorld(true); return root; };
+CAT['tutus:bicak-dur'] = () => { const mr = Math.random, r = new RNG(11); Math.random = () => r.next(); try { const m = new CharacterModel(defaultLook('m')); m.seed = 0.5; m.forceLod = 0; m.setLod(0); m.setWeapon('knife'); m.combo = 0; m.punch(); for (let i = 0; i < 14; i++) m.animate(0.016, { speed: 0, force: true }); m.root.userData.model = m; return m.root; } finally { Math.random = mr; } };
 CAT['tutus:eskisilah'] = () => { window.__noProps = true; return holding('pistol', { aim: true })(); };
 CAT['tutus:yumruk'] = () => { const root = holding('pistol', { aim: true })(); const m = root.userData.model; if (m) for (const A of m.arms) { A.fi.rotation.set(0, 0, -A.s * 1.5); A.fd.rotation.set(0, 0, -A.s * 1.45); } root.updateMatrixWorld(true); return root; };
 // [poz] hareket pozları denetimi (C2): koşu döngüsünün belirli anında dondurulmuş kare. f(i) -> animate durumu; n kare; sonra isteğe bağlı fn(m)
@@ -282,6 +285,19 @@ export function tutusOlc(id) {
       mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inv); acc.add(v); n++;
     }
     if (n) out[bn] = acc.divideScalar(n).toArray().map((x) => +x.toFixed(3));
+  }
+  if (id.startsWith('tutus:bicak') && out.fiR && out.fdR && out.thR) {
+    // [B3] avuç merkezi = parmaklar (işaret, orta) ve başparmak ağırlık merkezlerinin ortası; sap ortası bıçak uzayında (0, 0, -0.007)
+    const c = [0, 1, 2].map((j) => ((out.fiR[j] + out.fdR[j]) / 2 + out.thR[j]) / 2);
+    out.avuc = c.map((x) => +x.toFixed(3)); out.sapAvuc = +Math.hypot(c[0], c[1], c[2] + 0.007).toFixed(4);
+    // ağız (z > 0,058) bölgesine giren el köşesi sayısı (parmaklar ağzı kesmemeli)
+    let kes = 0; const ks = new Set(['fdR', 'fiR', 'thR', 'wrR'].map((b) => B.indexOf(b)));
+    for (let i = 0; i < si.count; i++) {
+      if (!ks.has(si.getX(i)) || sw.getX(i) < 0.4) continue;
+      mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inv);
+      if (v.z > 0.058 && v.z < 0.235 && Math.abs(v.x) < 0.004 && v.y > -0.014 && v.y < 0.013) kes++;
+    }
+    out.agizKesisim = kes;
   }
   return out;
 }

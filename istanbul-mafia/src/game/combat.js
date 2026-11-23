@@ -97,10 +97,13 @@ function tracerGeometry() {
 }
 
 const KD_KNEE = { mode: 'knee', k: 0.7 }, _kdBlast = { mode: 'blast', k: 0.6 }; // [tepki] devrilme kipleri (model.kdNext)
+const _mf = { x: 0, z: 0 }; // [B2] melee yönü (kare içinde ayırma yok)
 export class Combat {
   constructor(game) {
     this.game = game;
     this.projectiles = [];
+    this.meleeQ = []; // [B2] bekleyen yakın dövüş vuruşları (isabet karesi); nesneler yeniden kullanılır
+    this.meleeFree = [];
     this.scene = null;
     // --- izli mermiler (havuzlu InstancedMesh) ---
     this.tracerMax = 96;
@@ -742,10 +745,43 @@ export class Combat {
   }
 
   // ---------------- yakın dövüş ----------------
+  // [B2] vuruşu isabet karesine ertele (tıklamada animasyon başlar, hasar uzanma anında)
+  queueMelee(attacker, def, delay) {
+    const q = this.meleeFree.pop() || { a: null, def: null, t: 0 };
+    q.a = attacker; q.def = def; q.t = delay;
+    this.meleeQ.push(q);
+  }
+  updateMelee(dt) {
+    this.mclock = (this.mclock || 0) + dt;
+    const Q = this.meleeQ;
+    for (let i = Q.length - 1; i >= 0; i--) {
+      const q = Q[i];
+      q.t -= dt;
+      if (q.t > 0) continue;
+      Q[i] = Q[Q.length - 1]; Q.pop();
+      const a = q.a; q.a = null; this.meleeFree.push(q);
+      // saldırgan bu arada öldüyse, yere düştüyse ya da araca bindiyse vuruş boşa gider
+      const live = a && (a.isPlayer || !this.game.npcs || this.game.npcs.list.indexOf(a) >= 0); // kaldırılan NPC'nin bekleyen vuruşu düşer
+      if (live && !a.dead && !a.vehicle && !(a.kdT > 0) && !a.downed) this.melee(a, q.def);
+    }
+  }
+  // [B2] yakın dövüş yardımı (oyuncu): önündeki koni içinde 2,6 m'deki en yakın hedefe döner, menzil dışındaysa yarım adım atılır
+  meleeAssist(attacker, yaw) {
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), list = this.actors();
+    let best = null, bd = 2.6;
+    for (let n = 0; n < list.length; n++) {
+      const a = list[n];
+      if (a === attacker || a.dead || a.vehicle || a.passengerOf || a.downed || Math.abs(a.pos.y - attacker.pos.y) > 1.2) continue;
+      const dx = a.pos.x - attacker.pos.x, dz = a.pos.z - attacker.pos.z, d = Math.hypot(dx, dz);
+      if (d < bd && (dx * fx + dz * fz) / (d || 1) > 0.55) { bd = d; best = a; }
+    }
+    return best;
+  }
   melee(attacker, def) {
     const g = this.game;
-    const f = { x: Math.sin(attacker.heading), z: Math.cos(attacker.heading) };
-    const knife = def === WEAPONS.knife;
+    const f = _mf; f.x = Math.sin(attacker.heading); f.z = Math.cos(attacker.heading);
+    const knife = def === WEAPONS.knife, fist = attacker.weapon === 'fists';
+    const mk = attacker.model && attacker.model.meleeKind;
     attacker._combo = (attacker._combo || 0) + 1;
     const slash = knife && attacker._combo % 2 === 0;
     const minDot = slash ? (def.slashArc || 0.1) : knife ? 0.55 : 0.4;
@@ -774,8 +810,22 @@ export class Combat {
         const ax = attacker.pos.x - best.pos.x, az = attacker.pos.z - best.pos.z, al = Math.hypot(ax, az) || 1;
         if ((tx * ax + tz * az) / al < -0.3) { back = true; dmg *= def.backstab || 3; }
       }
+      // [B2] kombo: kroşe (üçüncü vuruş) daha ağır. Blok: sağ tık basılı ve saldırgana dönük hedef darbenin çoğunu kollarıyla keser
+      if (fist && mk === 'hook') dmg *= 1.6;
+      let blocked = false;
+      if (best.blocking && !knife) {
+        const tx = Math.sin(best.heading), tz = Math.cos(best.heading), ax = attacker.pos.x - best.pos.x, az = attacker.pos.z - best.pos.z, al = Math.hypot(ax, az) || 1;
+        if ((tx * ax + tz * az) / al > 0.3) { blocked = true; dmg *= 0.2; }
+      }
       best.takeDamage(dmg, attacker, 'melee', false);
       tmp.set(best.pos.x, best.pos.y + 1.25, best.pos.z);
+      // [B2] sersemleme birikimi: yumruk/sopa darbeleri birikir, eşiği aşınca yere düşer (sivil 3–5 yumruk, çeteci/polis daha dayanıklı)
+      if (!knife && !blocked && !best.dead && !best.god && best.knockdown) {
+        const now = this.mclock || 0, dz0 = best._daze || 0, el = Math.max(0, now - (best._dazeT || now));
+        best._daze = Math.max(0, dz0 - el * 0.5) + (mk === 'hook' ? 1.6 : attacker.weapon === 'bat' ? 2.2 : 1); best._dazeT = now;
+        const lim = best.isPlayer ? 7 : best.faction === 'civilian' || best.kind === 'civilian' ? 4 : 5.5;
+        if (best._daze >= lim) { best._daze = 0; best.knockdown(f.x, f.z, best.isPlayer ? 1.4 : 2.6); }
+      }
       if (knife) {
         // kesme: savuruş yönünde (sağdan sola), dürtme: ileri
         if (slash) _a.set(f.z, 0.1, -f.x); else _a.set(f.x, 0.05, f.z);
@@ -784,13 +834,13 @@ export class Combat {
         if (def.bleed) this.applyBleed(best, attacker, def.bleed.dps * (back ? 1.5 : 1), def.bleed.t * (slash ? 1 : 0.5));
         if (back && attacker.isPlayer) g.ui.notify && Math.random() < 0.3 && g.ui.notify('Arkadan bıçaklama!', 'good');
       } else {
-        audio.punch(best.pos.x, best.pos.z, attacker.weapon === 'bat' ? 1.4 : 1);
+        audio.punch(best.pos.x, best.pos.z, blocked ? 0.5 : attacker.weapon === 'bat' ? 1.4 : 1);
         // [C2] yumruk/sopa isabetinde baş savrulur (kroşe yana, düz geriye)
-        const mk = attacker.model && attacker.model.meleeKind;
         if (best.model && best.model.hitZone && !best.dead) best.model.hitZone('head', mk === 'hook' || mk === 'bat' ? -1 : mk === 'L' ? -1 : 1, mk === 'hook' || mk === 'bat' ? 1.3 : 1, mk === 'hook' || mk === 'bat' ? f.z : f.x, mk === 'hook' || mk === 'bat' ? -f.x : f.z);
         if (attacker.weapon !== 'fists') g.particles.blood(tmp, 6, null, best.pos.y + 0.005);
       }
-      const kb = def.knockback || 3;
+      // [B2] yumruk itmesi küçük (geri seker ~0,3 m): eskiden 3 m/sn itme hedefi menzilden atıyor, seri yumruklar boşa gidiyordu
+      const kb = (fist ? 1.1 : def.knockback || 3) * (blocked ? 0.4 : fist && mk === 'hook' ? 1.6 : 1);
       best.knock = { x: f.x * kb, z: f.z * kb, t: 0.2 };
       if (best.dead) this.startPool(best);
       if (best.isPlayer) g.ui.damageFlash(attacker);
@@ -958,6 +1008,7 @@ export class Combat {
   // ---------------- kare güncellemesi ----------------
   update(dt) {
     const g = this.game;
+    this.updateMelee(dt);
     this.hitMarkFrame = 0;
     this.sndBudget = 3;
     if (this.vocT > 0) this.vocT -= dt;

@@ -318,7 +318,7 @@ function playKeys(P, keys, snap, u) {
 const GRIP_OFF = { shotgun: 0.33, sniper: 0.32, ak: 0.27, m4: 0.28, rpg: 0.24, cifte: 0.3 };
 const GRIP_UP = { cifte: 0.045 };
 export const SOCK = { x: 0.028, y: 0.07, z: 0.036 };
-export const KNIFE_OFF = { x: 0, y: 0, z: -0.045 }; // [B3] bıçak sapı avuç ortasına (yuva uzayı, m); atölye --tutus ile ölçülür
+export const KNIFE_OFF = { x: 0.02, y: -0.005, z: -0.001 }; // [B3] bıçak sapı avuç ortasına (yuva uzayı, m); atölye --tutus ile ölçülür
 export const KNIFE_TILT = 0.45; // [B3] ağzın ileri eğimi (rad; 0 = başparmaktan dik yukarı) // [tutuş] gerçekçi gövdede silah yuvası; atölyede ayarlanabilir
 
 // küçük el aksesuarları (yalnız kullanılırken görünür)
@@ -970,7 +970,9 @@ export class CharacterModel {
     this.bobY = bobV + drop;
     // ivmelenme ve dönüş eğimi
     const accLean = clamp(this.acc * 0.022, -0.12, 0.14) * smR(0.2, 1.5, spB + 0.5);
-    this.bank = dmp(this.bank, clamp(-this.yawRate * spB * 0.03, -0.22, 0.22), 10, dt);
+    // [B4] dönüşte yana yatma yalnız koşuda (merkezcil ivme gerçekten büyükken); yürürken fareyle etrafa bakınmak gövdeyi
+    // 10°'ye kadar yatırıyor, "sarhoş, düşecek gibi" görünüyordu (ölçüm: walk-steps walkTurn). Yavaş sönümlenir (titremez).
+    this.bank = dmp(this.bank, clamp(-this.yawRate * spB * 0.022 * smR(2.6, 5, spB), -0.16, 0.16), 6, dt);
     const leanT = (lean + accLean) * (back ? -0.35 : 1) + 0.13 * smR(0.3, 1, age);
     const pel = this.pel;
     // [C2] çömelme: kalça gerçekten alçalır (baş ayaktakinin ~%66'sı), kalça geri, gövde öne (denge: ağırlık ayak üstünde)

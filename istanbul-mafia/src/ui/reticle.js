@@ -46,7 +46,10 @@ export class Reticle {
     if (mode !== 'none' && mode !== 'heli') {
       const fovR = (cam.fov * Math.PI / 180) / 2;
       const sp = p.spreadNow ? p.spreadNow(wd) : wd.spread || 0;
-      S.gap = Math.max(3, Math.min(H * 0.3, Math.tan(sp) / Math.tan(fovR) * (H / 2)));
+      // [B5] açıklık ateşte hızla açılır, toparlanırken yumuşakça kapanır (titremez)
+      const gT = Math.max(3, Math.min(H * 0.3, Math.tan(sp) / Math.tan(fovR) * (H / 2) + (p.camKick || 0) * 18)), now = performance.now(), dts = Math.min(0.1, (now - (this.gapAt || now)) / 1000);
+      this.gapAt = now;
+      S.gap = !(S.gapS > 0) || gT > S.gapS ? gT : S.gapS + (gT - S.gapS) * (1 - Math.exp(-14 * dts)); S.gapS = S.gap;
       const t = p.aimTarget;
       S.color = p.aimOnTarget ? COL.air : t && !t.dead && (t.faction !== 'civilian' || t.hostile) ? COL.enemy : COL.base;
       S.alpha = p.vehicle ? 1 : Math.max(0.55, Math.min(1, 0.55 + (p.adsK || 0)));
@@ -86,25 +89,27 @@ export class Reticle {
     if (S.mode === 'scope') { this.drawScope(x, W, H, cx, cy); this.drawHit(x, cx, cy); return; }
     x.globalAlpha = S.alpha;
     x.lineCap = 'butt';
-    const pistol = S.mode === 'pistol', gap = pistol ? Math.min(S.gap, 7) : S.gap, L = pistol ? 5 : 9;
+    // [B5] ince nişangâh: tabanca = nokta + üç kısa çizgi (üstte boşluk, gez-arpacık gibi), tüfek = dinamik artı, pompalı = saçma halkası
+    const pistol = S.mode === 'pistol', gap = pistol ? Math.max(4, Math.min(S.gap, 9)) : S.gap, L = pistol ? 5 : 7;
     // koyu kontur + açık çizgi (her zeminde okunur)
     for (const pass of [0, 1]) {
-      x.strokeStyle = pass ? S.color : 'rgba(0,0,0,0.65)';
-      x.lineWidth = pass ? 2 : 4;
+      x.strokeStyle = pass ? S.color : 'rgba(0,0,0,0.55)';
+      x.lineWidth = pass ? 1.5 : 3;
       if (S.mode === 'ring') {
         x.beginPath(); x.arc(cx, cy, gap + 2, 0, Math.PI * 2); x.stroke();
-        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; x.beginPath(); x.moveTo(cx + Math.cos(a) * (gap - 3), cy + Math.sin(a) * (gap - 3)); x.lineTo(cx + Math.cos(a) * (gap + 6), cy + Math.sin(a) * (gap + 6)); x.stroke(); }
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; x.beginPath(); x.moveTo(cx + Math.cos(a) * (gap - 2), cy + Math.sin(a) * (gap - 2)); x.lineTo(cx + Math.cos(a) * (gap + 5), cy + Math.sin(a) * (gap + 5)); x.stroke(); }
       } else {
         x.beginPath();
-        x.moveTo(cx, cy - gap); x.lineTo(cx, cy - gap - L);
+        if (!pistol) { x.moveTo(cx, cy - gap); x.lineTo(cx, cy - gap - L); }
         x.moveTo(cx, cy + gap); x.lineTo(cx, cy + gap + L);
         x.moveTo(cx - gap, cy); x.lineTo(cx - gap - L, cy);
         x.moveTo(cx + gap, cy); x.lineTo(cx + gap + L, cy);
         x.stroke();
       }
     }
-    x.fillStyle = 'rgba(0,0,0,0.65)'; x.beginPath(); x.arc(cx, cy, 2.6, 0, Math.PI * 2); x.fill();
-    x.fillStyle = S.color; x.beginPath(); x.arc(cx, cy, 1.5, 0, Math.PI * 2); x.fill();
+    const dr = pistol ? 1.6 : 1.1;
+    x.fillStyle = 'rgba(0,0,0,0.55)'; x.beginPath(); x.arc(cx, cy, dr + 1, 0, Math.PI * 2); x.fill();
+    x.fillStyle = S.color; x.beginPath(); x.arc(cx, cy, dr, 0, Math.PI * 2); x.fill();
     x.globalAlpha = 1;
     this.drawHit(x, cx, cy);
   }

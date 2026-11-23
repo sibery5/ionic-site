@@ -92,7 +92,7 @@ export function tryMantle(pl, dx, dz) {
 export function stepMantle(pl, V, dt) {
   V.t += dt;
   const t = V.t, p = pl.pos, m = pl.model;
-  let hang = 0;
+  let hang = 0, knee = 0;
   if (t < V.t1) { // zıpla: duvar önüne, asılma yüksekliğine
     const u = sm(t / V.t1);
     p.x = V.sx + (V.wx - V.sx) * u; p.z = V.sz + (V.wz - V.sz) * u;
@@ -106,6 +106,7 @@ export function stepMantle(pl, V, dt) {
     p.y = V.hy + (V.top - 0.55 - V.hy) * e;
     p.x = V.wx; p.z = V.wz;
     hang = 1 - 0.5 * u; pl.vaultT = 0.001 + 0.2 * u;
+    knee = sm(Math.max(0, (u - 0.35) / 0.65)); // [B5] diz kenara atılır
   } else if (t < V.t4) { // aş: bacaklar kenardan geçer, üstte duvarın ortasına
     if (V.razor && !V.cut) { // jiletli tel: bir kez hasar
       V.cut = true;
@@ -115,7 +116,7 @@ export function stepMantle(pl, V, dt) {
     const u = (t - V.t3) / (V.t4 - V.t3), e = sm(Math.max(0, (u - 0.3) / 0.7));
     p.x = V.wx + (V.ox - V.wx) * e; p.z = V.wz + (V.oz - V.wz) * e; // önce ayaklar kenara kalkar, sonra öne
     p.y = V.top - 0.55 + 0.62 * sm(Math.min(1, u / 0.45));
-    hang = 0.5 * (1 - u); pl.vaultT = 0.2 + 0.6 * u;
+    hang = 0.5 * (1 - u); pl.vaultT = 0.2 + 0.6 * u; knee = 1 - sm(Math.min(1, u / 0.6));
   } else { // in: öbür yana düşüş ya da üstte doğrulma
     const u = Math.min(1, (t - V.t4) / (V.dur - V.t4));
     const eo = 1 - (1 - u) * (1 - u) * (1 - u); // önce dışarı, sonra düş (duvarın içinden geçmez)
@@ -124,12 +125,12 @@ export function stepMantle(pl, V, dt) {
     p.y = V.over ? y0 + (V.ey - y0) * u * u : y0 + (V.ey - y0) * sm(u);
     pl.vaultT = 0.8 + 0.2 * u;
   }
-  if (m) { m.mantleHang = hang; m.mantleEdge = t < V.t4 ? V : null; }
+  if (m) { m.mantleHang = hang; m.mantleKnee = knee; m.mantleEdge = t < V.t4 ? V : null; }
   pl.vx = 0; pl.vz = 0; pl.vy = 0;
   if (t >= V.dur) {
     p.set(V.ex, V.ey, V.ez);
     pl.vault = null; pl.vaultT = 0; pl.grounded = true;
-    if (m) { m.mantleHang = 0; m.mantleEdge = null; }
+    if (m) { m.mantleHang = 0; m.mantleKnee = 0; m.mantleEdge = null; }
     if (V.over && V.top + 0.07 - V.ey > 1.2) pl.camDip = Math.min(0.3, (V.top - V.ey) * 0.08);
   }
 }
