@@ -485,10 +485,14 @@ class Rings {
     }
     this.idx = 0;
   }
-  emit(x, y, z, radius, dur = 0.45, alpha = 1, color = 0xffd8a0) {
+  // [deniz] foam: su yüzü köpük halkası — normal karışım (toplamalı mavi ton koyu suda "parlayan halka" gibi okunuyordu).
+  // Dönüş: halka ağı (çağıran dalga eğimine yatırabilir).
+  emit(x, y, z, radius, dur = 0.45, alpha = 1, color = 0xffd8a0, foam = false) {
     const r = this.list[this.idx]; this.idx = (this.idx + 1) % this.list.length;
-    r.m.position.set(x, y, z); r.t = 0; r.dur = dur; r.r = radius; r.a = alpha; r.m.visible = true;
+    r.m.position.set(x, y, z); r.m.rotation.set(0, 0, 0); r.t = 0; r.dur = dur; r.r = radius; r.a = alpha; r.m.visible = true;
     r.mat.color.setHex(color);
+    r.mat.blending = foam ? THREE.NormalBlending : THREE.AdditiveBlending;
+    return r.m;
   }
   update(dt) {
     for (const r of this.list) {
@@ -605,7 +609,7 @@ export class Particles {
     if (surface === 'water') {
       for (let i = 0; i < 10; i++) this.norm.emit(p.x, p.y, p.z, rnd(0.8), 2.5 + Math.random() * 3.5, rnd(0.8), 0.6, 0.06 + Math.random() * 0.05, 0.75, 0.85, 0.95, 0.75, 0, 9.8);
       this.norm.emit(p.x, p.y + 0.05, p.z, 0, 0.3, 0, 0.5, 0.25, 0.85, 0.9, 1, 0.45, 1.2);
-      this.rings.emit(p.x, p.y + 0.02, p.z, 0.25, 0.6, 0.35, 0xbfd8ff);
+      this.rings.emit(p.x, p.y + 0.06, p.z, 0.25, 0.6, 0.35, 0xeef3f4, true); // [deniz] köpük tonu
       return;
     }
     if (surface === 'metal') {
@@ -707,9 +711,9 @@ export class Particles {
   dust(p) {
     this.smokeSys.emit(p.x + rnd(0.5), p.y + 0.1, p.z + rnd(0.5), rnd(1), 0.4, rnd(1), 1.2, 0.5, 0.55, 0.5, 0.45, 0.3, 1.5);
   }
-  splash(p) {
+  splash(p, ring = true) {
     for (let i = 0; i < 30; i++) this.norm.emit(p.x, p.y, p.z, rnd(3), 2 + Math.random() * 4, rnd(3), 0.9, 0.1 + Math.random() * 0.15, 0.8, 0.9, 1, 0.8, 0.2, 9);
-    this.rings.emit(p.x, p.y + 0.02, p.z, 1.2, 0.9, 0.4, 0xbfd8ff);
+    if (ring) this.rings.emit(p.x, p.y + 0.08, p.z, 1.0, 0.9, 0.4, 0xeef3f4, true); // [deniz] köpük tonu, çap ≤ 2,5 m
   }
   money(p) {
     for (let i = 0; i < 10; i++) this.add.emit(p.x, p.y + 0.5, p.z, rnd(1), 2 + Math.random() * 2, rnd(1), 0.6, 0.2, 0.3, 1, 0.4, 1, 0, 6);

@@ -124,8 +124,18 @@ module.exports = async (p, out) => {
       // açık suya düş (Marmara sahili, kıyıdan 9 m)
       pl.pos.set(-200, 0.5, 829); pl.vy = 0; pl.swimming = false; pl.camYaw = Math.PI / 2; pl.heading = Math.PI / 2;
       let entered = false, minDive = 0;
-      sim(1.5, () => { if (pl.swimming) entered = true; minDive = Math.min(minDive, pl.pos.y - WY); });
+      // [deniz] D3: dalış halkası — en büyük çap, toplamalı (parlayan) halka var mı, renk doygunluğu (mavi tonu)
+      let ringD = 0, additive = 0, sat = 0;
+      const RL = g.particles.rings ? g.particles.rings.list : [];
+      sim(1.5, () => {
+        if (pl.swimming) entered = true; minDive = Math.min(minDive, pl.pos.y - WY);
+        for (const r of RL) if (r.m.visible && Math.hypot(r.m.position.x - pl.pos.x, r.m.position.z - pl.pos.z) < 4) {
+          ringD = Math.max(ringD, r.m.scale.x); if (r.mat.blending === 2) additive++;
+          const c = r.mat.color; sat = Math.max(sat, Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b));
+        }
+      });
       res.entered = entered; res.dive = +minDive.toFixed(2);
+      res.ring = { maxD: +ringD.toFixed(2), additive, sat: +sat.toFixed(2) };
       // boşta su çiğneme
       let headMin = 9, vert = 9, n = 0;
       sim(3, () => {
@@ -170,6 +180,7 @@ module.exports = async (p, out) => {
     });
     console.log('swim', JSON.stringify(r));
     check('suya düşünce yüzmeye geçer (dalış + yükselme)', r.entered && r.dive < -0.05, [r.entered, r.dive]);
+    check('dalış halkası köpük tonunda (toplamalı değil, doygunluk < 0,1) ve çapı ≤ 3 m', r.ring.maxD > 0 && r.ring.maxD <= 3 && !r.ring.additive && r.ring.sat < 0.1, r.ring);
     check('boşta: baş suyun üstünde, gövde dik', r.idle.swimming && r.idle.headAboveWater > 0.05 && r.idle.bodyUpright > 0.8, r.idle);
     check('kulaç: baş suyun üstünde', r.crawl.headAboveWater > 0.0, r.crawl);
     check('kulaç: kollar karşılıklı (ters fazlı) ve geniş', r.crawl.armCorr < -0.5 && r.crawl.armAmp > 0.5, r.crawl);

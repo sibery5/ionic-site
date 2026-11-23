@@ -9,6 +9,7 @@ import { WATER_Y, isLand, poolAt } from '../world/map.js';
 import { waveH } from './boats.js';
 import { clamp } from '../core/util.js';
 import * as THREE from 'three';
+import { SHARED, OCEAN } from '../world/shaders.js';
 
 const _p = { x: 0, y: 0, z: 0 };
 
@@ -21,12 +22,36 @@ export function swimVertical(p, dt, g) {
   p.pos.y += p.vy * dt;
 }
 
+// [deniz] Görünen deniz yüzü (shaders.js OCEAN_WAVES ile aynı dalgalar; yakın plan, yapı sönümü yok sayılır):
+// halka düz WATER_Y'ye konunca ±0,3 m dalgaların içinde kalıp parça parça "mavimsi leke" görünüyordu.
+// Dönüş: yükseklik; _wn: yüzey eğimi (dh/dx, dh/dz).
+const WV = [[0.8, 0.6, 24, 1, 0], [0.28, 0.96, 14, 0.6, 1.7], [0.95, -0.31, 9, 0.38, 4.1], [-0.5, 0.866, 5.5, 0.22, 2.3], [0.6, -0.8, 3.4, 0.1, 5.2], [-0.92, -0.39, 2.2, 0.055, 0.9]];
+const _wn = { x: 0, z: 0 };
+export function oceanH(x, z) {
+  const t = SHARED.uTime.value, A = OCEAN.uWave.value;
+  let h = 0; _wn.x = 0; _wn.z = 0;
+  for (const w of WV) {
+    const k = 6.2831853 / w[2], a = k * (w[0] * x + w[1] * z) - Math.sqrt(9.81 * k) * t + w[4];
+    h += Math.sin(a) * w[3]; const c = Math.cos(a) * w[3] * k; _wn.x += c * w[0]; _wn.z += c * w[1];
+  }
+  _wn.x *= A; _wn.z *= A;
+  return h * A;
+}
+// su yüzü köpük halkası: dalga yüksekliğine oturur, eğime yatar (çap = 0,5 + 2·r)
+function foamRing(P, x, z, r, dur, a) {
+  if (!P.rings) return;
+  const h = oceanH(x, z);
+  const m = P.rings.emit(x, WATER_Y + h + 0.06, z, r, dur, a, 0xeef3f4, true);
+  if (m) m.rotation.set(-Math.atan(_wn.z), 0, Math.atan(_wn.x));
+}
+
 // suya giriş sıçraması (düşüş hızına göre)
 export function enterWater(p, g) {
   const k = clamp(-p.vy / 6, 0.4, 1.6);
   g.audio.splash(p.pos.x, p.pos.z, k);
-  g.particles.splash({ x: p.pos.x, y: WATER_Y, z: p.pos.z });
-  if (g.particles.rings) g.particles.rings.emit(p.pos.x, WATER_Y + 0.03, p.pos.z, 1.6 * k, 1.4, 0.5, 0xbfd8ff);
+  g.particles.splash({ x: p.pos.x, y: WATER_Y + oceanH(p.pos.x, p.pos.z), z: p.pos.z }, false);
+  // [deniz] eskiden 1,6·k yarıçap (çap 5,6 m'ye dek), toplamalı mavi (0xbfd8ff) + splash'ın ikinci mavi halkası; şimdi tek köpük halkası, çap ≤ 3 m
+  foamRing(g.particles, p.pos.x, p.pos.z, 0.5 + 0.45 * k, 1.2, 0.55);
   p.vy = Math.max(p.vy, -6) * 0.55; // suyun direnci: dalış derinliği sınırlı
 }
 
@@ -39,7 +64,7 @@ export function swimEffects(p, dt, g) {
   const moving = si.mv > 0.4;
   if (p._swRing <= 0) {
     p._swRing = moving ? 0.45 : 1.3;
-    if (P.rings) P.rings.emit(p.pos.x, WATER_Y + 0.03, p.pos.z, moving ? 0.7 : 1.1, moving ? 1.0 : 1.8, moving ? 0.28 : 0.35, 0xcfe4ff);
+    foamRing(P, p.pos.x, p.pos.z, moving ? 0.6 : 0.9, moving ? 1.0 : 1.8, moving ? 0.22 : 0.28);
     if (moving && g.boats && g.boats.wakes) g.boats.wakes.spawn(p.pos.x - p.vx * 0.15, p.pos.z - p.vz * 0.15, 0.5, 1.1, 1.6, 0.22);
   }
   // kulaç: her kolun suya girişi (faz 0'dan geçerken) elin konumunda damlacık + küçük halka
@@ -50,7 +75,7 @@ export function swimEffects(p, dt, g) {
         m.arms[i].wr.getWorldPosition(_v3);
         const x = _v3.x, z = _v3.z;
         for (let k = 0; k < 7; k++) P.norm.emit(x, WATER_Y + 0.05, z, (Math.random() - 0.5) * 1.6, 1.4 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6, 0.55, 0.06 + Math.random() * 0.06, 0.85, 0.92, 1, 0.75, 0.15, 9);
-        if (P.rings) P.rings.emit(x, WATER_Y + 0.03, z, 0.45, 0.7, 0.35, 0xdcecff);
+        foamRing(P, x, z, 0.4, 0.7, 0.3);
       }
       // havadaki kolun damlaları (geri getiriş)
       if (ph > 0.6 && ph < 0.95 && Math.random() < dt * 10) {
