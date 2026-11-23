@@ -14,9 +14,13 @@ module.exports = async (p, out) => {
       pl.god = true; pl.giveWeapon(w); pl.setWeapon(w); g.input.mouse.right = true; sim(0.8);
       R.update(); const g0 = +R.state.gap.toFixed(1);
       let gMax = g0;
-      let shots = 0; if (w === 'ak') { const m0 = pl.wstate.mag; g.input.mouse.left = true; sim(0.4, () => { R.update(); gMax = Math.max(gMax, R.state.gap); }); g.input.mouse.left = false; shots = m0 - pl.wstate.mag; R.hit('body'); }
+      let shots = 0, why = null; if (w === 'ak') {
+        why = { blocking: !!(g.ui.blocking && g.ui.blocking()), mag: pl.wstate.mag }; pl.wstate.mag = 30; pl.wstate.ammo = 90; pl.reloadT = 0;
+        // tetik: player.js ateş yolunun aynısı (tryFire + kamera tepmesi); arayüz kapısı (hikâye yazısı) testte atlanır
+        sim(0.4, () => { const o = pl.pos.clone(); o.y += 1.45; if (pl.tryFire(o, pl.aimDir)) { shots++; pl.camKick = Math.min(1, (pl.camKick || 0) + 0.25); } R.update(); gMax = Math.max(gMax, R.state.gap); });
+        R.hit('body'); }
       R.key = ''; R.update();
-      return { mode: R.state.mode, gap: g0, gapFire: +gMax.toFixed(1), shots, shown: R.state.mode !== 'none' };
+      return { mode: R.state.mode, gap: g0, gapFire: +gMax.toFixed(1), shots, why, shown: R.state.mode !== 'none' };
     }, w);
     await p.screenshot({ path: out + '-xh-' + w + '.png', clip }).catch(() => {});
     if (w === 'ak') res.ak.gapBack = await p.evaluate(() => { const R = game.combat.reticle; sim(1.5, () => R.update()); return +R.state.gap.toFixed(1); });
