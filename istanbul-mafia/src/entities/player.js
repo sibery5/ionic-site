@@ -107,6 +107,14 @@ export class Player extends Actor {
   }
 
   mantle(dx, dz) { return tryMantle(this, dx, dz); }
+  // [B5] zıplamanın itiş anı (uzun: koşu atlaması)
+  launchJump(long) {
+    this.vy = long ? 5.9 : 6.4; this.grounded = false; this.coyote = 0;
+    if (long) { this.vx *= 1.12; this.vz *= 1.12; }
+    this.longJump = !!long; this.model.longJump = !!long;
+    this.crouch = false;
+    this.stamina = Math.max(0, this.stamina - (long ? 8 : 5));
+  }
 
   // Alçak engel (korkuluk, bank, çöp kutusu; 0.42-1.25 m) üzerinden atlama ya da üstüne tırmanma
   tryVault(dx, dz, allowWater) {
@@ -168,6 +176,9 @@ export class Player extends Actor {
     if (ml > 0.01) { mx /= ml; mz /= ml; }
     const busy = !!(this.vault || this.rollT > 0 || down);
     this.aiming = input.mouse.right && this.wdef.type !== 'melee' && !busy;
+    // [B2] yumrukla sağ tık: blok (gard yukarıda, kameraya döner, ağır yürür); önden gelen yumruk darbesinin %80'i kesilir
+    this.blocking = !!(input.mouse.right && this.weapon === 'fists' && !busy && !this.vehicle && !this.swimming);
+    if (this.blocking) { this.heading = this.camYaw; this.model.guardT = Math.max(this.model.guardT || 0, 0.3); }
     // [savaş nişan] dürbünde nefes tutma (Shift): salınım azalır, dayanıklılık harcanır
     this.holdBreath = this.aiming && this.wdef.scope && input.down('ShiftLeft') && this.stamina > 5;
     if (this.holdBreath) this.stamina = Math.max(0, this.stamina - dt * 14);
@@ -286,10 +297,17 @@ export class Player extends Actor {
       if (input.hit('Space')) this.jumpBuf = 0.15;
       this.jumpBuf = (this.jumpBuf || 0) - dt;
       this.coyote = this.grounded ? 0.12 : (this.coyote || 0) - dt;
-      if (this.jumpBuf > 0 && this.coyote > 0 && this.rollT <= 0 && !down) {
-        this.vy = 6.4; this.grounded = false; this.coyote = 0; this.jumpBuf = 0;
-        this.crouch = false;
-        this.stamina = Math.max(0, this.stamina - 5);
+      // [B5] zıplama: yürürken/dururken kısa hazırlık (dizler bükülür, 0,08 sn) sonra itiş; koşarken hazırlıksız uzun atlama
+      // (yatay hız korunur ve %12 artar, biraz daha alçak yay). Hazırlık sırasında yerde kalınır.
+      if (this.jumpBuf > 0 && this.coyote > 0 && this.rollT <= 0 && !down && !(this.jumpPrep > 0)) {
+        this.jumpBuf = 0;
+        if (sprint && this.speed > 4.5) this.launchJump(true);
+        else { this.jumpPrep = 0.08; this.coyote = 0.2; }
+      }
+      if (this.jumpPrep > 0) {
+        this.jumpPrep -= dt;
+        this.model.prepK = 1 - Math.max(0, this.jumpPrep) / 0.08;
+        if (this.jumpPrep <= 0) { this.jumpPrep = 0; this.model.prepK = 0; if (this.grounded && !down) this.launchJump(false); }
       }
       this.vy -= 20 * dt;
       this.pos.y += this.vy * dt;
@@ -316,7 +334,17 @@ export class Player extends Actor {
     const wantFire = def.auto ? input.mouse.left : input.mouse.leftPressed;
     if (wantFire && !this.swimming && !busy && !g.ui.blocking() && !(this.inInterior && this.inInterior.peaceful)) {
       if (this.animalBlock(def)) { /* [C8] hayvana saldırı yok: tetik çalışmaz */ }
-      else if (def.type === 'melee') { this.heading = this.camYaw; this.tryFire(this.pos, this.aimDir); }
+      else if (def.type === 'melee') {
+        this.heading = this.camYaw;
+        // [B2] hedefe dön, uzaksa yumrukla birlikte yarım adım at (seri yumruklar sersemleyip geri seken hedefe yetişir)
+        const T = this.fireCd <= 0 && g.combat.meleeAssist ? g.combat.meleeAssist(this, this.camYaw) : null;
+        if (T) {
+          this.heading = Math.atan2(T.pos.x - this.pos.x, T.pos.z - this.pos.z);
+          const d = Math.hypot(T.pos.x - this.pos.x, T.pos.z - this.pos.z), st = Math.min(4.5, Math.max(0, d - 1.05) * 6);
+          if (st > 0) { this.vx = Math.sin(this.heading) * st; this.vz = Math.cos(this.heading) * st; }
+        }
+        this.tryFire(this.pos, this.aimDir);
+      }
       else {
         if (!this.aiming) { this.heading = this.camYaw; this.aimYaw = 0; }
         tmp.set(this.pos.x, this.pos.y + 1.45 - (this.crouch ? 0.32 : 0), this.pos.z);

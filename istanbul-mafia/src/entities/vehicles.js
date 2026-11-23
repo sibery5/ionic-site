@@ -16,6 +16,7 @@ import { Debris } from '../world/debris.js';
 import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
 import { terrainHeight } from '../world/terrain.js';
 import { BIKE_BUILDERS } from './two_wheelers.js';
+import { seatDriver, hideSeatRider } from './character.js';
 import { MIL_BUILDERS } from './military_vehicles.js';
 
 // ======================================================================
@@ -1234,7 +1235,7 @@ function buildInterior(B, S, def) {
     for (const k of [-0.07, 0.07]) B.d(cyl(0.05, 0.05, 0.02, 12, 'z', dx + k, b + 0.1, ws - 0.39), 0x2a2a2a);
   }
   void def;
-  return { driver: [dx, seatY + 0.07, dz], seats };
+  return { driver: [dx, seatY + 0.07, dz], seats, wheel: [dx, sy, sz, S.st === 'bus' ? 0.24 : 0.18] }; // [B1] wheel: sürücünün elleri
 }
 
 // ---- özel donanımlar ----
@@ -1292,7 +1293,7 @@ function buildCarTemplate(type, def) {
   const fr = CAR_LIKE.has(S.st) ? buildFrontRearCar(B, S) : buildFrontRear(B, S);
   const inter = buildInterior(B, S, def);
   const { L, W, H, cl } = S;
-  const T = { S, decals: [], extras: [], plates: [], siren: false, wheelR: S.r, driver: inter.driver, seats: inter.seats };
+  const T = { S, decals: [], extras: [], plates: [], siren: false, wheelR: S.r, driver: inter.driver, seats: inter.seats, wheel: inter.wheel };
   const st = S.st;
   const liv = def.livery || st;
   // plakalar
@@ -2494,9 +2495,11 @@ export class Vehicle {
       o.kind = P.snd || 'car'; o.gear = this.gear; o.throttle = this.shiftT > 0 ? 0 : Math.max(0, throttle); o.speed = sp; o.surface = this.surface; o.slip = slip; o.rpm01 = this.rpm;
       if (g.audio && g.audio.setEngine) g.audio.setEngine(!this.destroyed && this.sinking <= 0 && !engineDead, 0.15 + r * 1.05, 0.09 + Math.abs(throttle) * 0.04 + this.rpm * 0.05, undefined, o);
     }
-    ud.driverDummy.visible = !!(this.driver && !this.driver.isPlayer) || !!(this.ai && !this.ai.empty) || isPlayer;
     this._ray = null;
     this.sync();
+    // [B1] sürücü: yakında gerçek gövde (sürücünün kendi görünüşü), uzakta maket
+    const wantDrv = !!this.driver || !!(this.ai && !this.ai.empty) || isPlayer;
+    ud.driverDummy.visible = wantDrv && !seatDriver(this, dt, this.driver, wantDrv && !this.destroyed);
     if (this.passengers.length) this.placePassengers();
   }
 
@@ -2642,7 +2645,7 @@ export class VehicleManager {
   ejectDriver(v) {
     const d = v.driver;
     if (!d) return;
-    v.driver = null;
+    v.driver = null; hideSeatRider(v); // [B1]
     const f = v.fwd;
     const rx = -f.z, rz = f.x;
     const off = v.def.wid / 2 + 0.7;

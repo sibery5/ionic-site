@@ -1108,9 +1108,14 @@ export class NPC extends Actor {
       return out;
     }
     if (melee) {
-      if (d > def.range * 0.8) { this.navTo(t.pos.x, t.pos.z, 5.0, dt, true); out.speed = this.speed; }
-      else this.heading = dampAngle(this.heading, want, 10, dt);
-      if (d < def.range && this.fireCd <= 0 && !(g.missions && g.missions.cutscene)) this.tryFire(this.pos, tmp2.set(0, 0, 1));
+      // [B] yakın dövüş YZ'si: menzile gir, yüzünü dön, 2–3'lü seriler (sağ-sol-kroşe) ve aralarında kısa soluklanma; yerdeyken saldırmaz
+      if (d > def.range * 0.75) { this.navTo(t.pos.x, t.pos.z, d > 4 ? 5.0 : 2.6, dt, true); out.speed = this.speed; }
+      else this.heading = dampAngle(this.heading, want, 12, dt);
+      let fa = Math.abs(want - this.heading) % (Math.PI * 2); if (fa > Math.PI) fa = Math.PI * 2 - fa;
+      if (d < def.range * 0.95 && fa < 0.45 && this.fireCd <= 0 && !(t.kdT > 0) && !(g.missions && g.missions.cutscene)) {
+        this.tryFire(this.pos, tmp2.set(0, 0, 1));
+        if (this.weapon === 'fists') { this.seriesN = (this.seriesN || 0) + 1; if (this.seriesN >= 2 + (Math.random() < 0.4 ? 1 : 0)) { this.seriesN = 0; this.fireCd += 0.5 + Math.random() * 0.6; } }
+      }
       if (d > 120) { this.state = this.restState(); this.target = null; }
       return out;
     }
