@@ -781,7 +781,7 @@ export class Wanted {
         this.roadblockT -= dt;
         if (this.roadblockT <= 0 && this.hold[3] >= ESC_DELAY.roadblock) {
           const ok = this.placeRoadblock();
-          this.roadblockT = ok ? 22 : 4;
+          this.roadblockT = ok ? 22 : 2; // [O] kademe süresi dolduysa yer bulunamayınca kısa aralıkla yeniden dene
           if (ok) this.radio(ok.tank ? 'Barikatta TANK mevzilendi!' : 'Barikat kuruldu: yollar kesildi.');
           if (this.roadblocks.length > 2) { const old = this.roadblocks.shift(); for (const v of old.cars) if (!v.driver) g.vehicles.remove(v); }
         }

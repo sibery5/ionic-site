@@ -154,9 +154,9 @@ module.exports = async (p, out) => {
     const s0 = m.stage || 0;
     pl.pos.set(m.zone.x1 - 3, 0, m.cz); sim(0.5);
     const s1 = m.stage;
-    sim(8.5);
+    sim(9.5);
     const s2 = m.stage;
-    sim(7); // [O5] 15 sn'de alarm + arama; asker görünce çatışma
+    sim(6); // [O5] 15 sn'de alarm + arama; asker görünce çatışma
     sim(6);
     const alert = m.alert, lvl = g.wanted.level;
     pl.pos.set(m.zone.x1 + 200, 0, m.cz); m.alertT = 1; sim(2);
