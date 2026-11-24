@@ -32,42 +32,56 @@ export class Interiors {
   enter(door) {
     const g = this.game;
     const b = door.building;
+    // [V3] kalıcı iç mekân (villa): bir kez kurulur (yükleme ekranında prepare), sonraki girişlerde aynı sahne kullanılır
+    let ctx = b.persist ? b._ctx : null;
+    if (!ctx) ctx = this.prepare(door);
+    ctx.door = door;
+    this.current = ctx;
+    // şehir NPC'lerini dondur
+    g.npcs.stash(ctx.npcGroup);
+    g.pickups.group = ctx.pickupGroup;
+    const spawn = (ctx.onEnter && ctx.onEnter(door)) || ctx.spawn; // [V3] giriş kapısına göre doğma noktası (villa: teras kapısı)
+    g.physics.setInterior(ctx.cols);
+    g.setActiveScene(ctx.scene);
+    const p = g.player;
+    p.pos.set(spawn.x, spawn.y || 0, spawn.z); p.vy = 0;
+    p.heading = spawn.h !== undefined ? spawn.h : Math.PI; p.camYaw = p.heading; p.camPitch = 0.2;
+    p.inInterior = ctx;
+    p.camInit = false;
+    g.audio && g.audio.door && g.audio.door(undefined, undefined, true); // [ses B2] kapı açılır
+    for (const n of g.npcs.list) n.inInterior = ctx;
+    ctx.scene.add(p.model.root);
+    g.ui.locationBanner(ctx.name);
+    g.missions.onEnter(ctx);
+    return ctx;
+  }
+
+  // İç mekân sahnesini kur (oyuncuyu taşımadan). [V3] Villa bunu yükleme ekranında bir kez çağırır (ilk giriş donması).
+  prepare(door) {
+    const g = this.game;
+    const b = door.building;
     const type = b.type;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     const cols = new Colliders();
     const ctx = {
       type, building: b, scene, cols, interact: [], door, rng: new RNG(typeof b.id === 'number' ? b.id * 7919 + 13 : hashStr(String(b.id))),
-      npcGroup: new THREE.Group(), pickupGroup: new THREE.Group(), name: placeName(type, b), peaceful: false,
+      npcGroup: new THREE.Group(), pickupGroup: new THREE.Group(), name: placeName(type, b), peaceful: false, persist: !!b.persist,
     };
     scene.add(ctx.npcGroup); scene.add(ctx.pickupGroup);
     // [V2] camlardan dışarısı: şehir henüz kapının önündeki hâliyle duruyorken bina içinden küp görüntü (outside_view.js)
-    {
+    // [V3] canlı iç mekân (b.live, villa): küp yok — şehir aynı karede dünya kamerasıyla arkaya çizilir (villa.js liveRender)
+    if (!b.live) {
       const dn = b.door || { nx: 0, nz: 1 };
       let at = b.view;
       if (!at && b.x0 !== undefined) { const h = b.h || 6; at = { x: (b.x0 + b.x1) / 2, y: Math.max(1.8, Math.min(h * 0.35, h - 1)), z: (b.z0 + b.z1) / 2 }; }
       if (!at) at = { x: door.x - (dn.nx || 0) * 3, y: 2, z: door.z - (dn.nz || 0) * 3 };
       ctx.outside = captureOutside(g, at, Math.atan2(dn.nx || 0, dn.nz === undefined ? 1 : dn.nz));
     }
-    this.current = ctx;
-    // şehir NPC'lerini dondur
-    g.npcs.stash(ctx.npcGroup);
-    g.pickups.group = ctx.pickupGroup;
     const builder = b.build || BUILDERS[type] || BUILDERS.apartment; // [villa] binanın kendi iç mekân kurucusu
-    const spawn = builder.call(this, ctx) || { x: 0, z: ctx.d / 2 - 1.6 };
-    { const u = ctx.update; ctx.update = (dt, t) => { stepOutside(); if (u) u(dt, t); }; } // [V2] dış görüntünün kalan yüzleri
-    g.physics.setInterior(cols);
-    g.setActiveScene(scene);
-    const p = g.player;
-    p.pos.set(spawn.x, 0, spawn.z);
-    p.heading = Math.PI; p.camYaw = Math.PI; p.camPitch = 0.2;
-    p.inInterior = ctx;
-    p.camInit = false;
-    g.audio && g.audio.door && g.audio.door(undefined, undefined, true); // [ses B2] kapı açılır
-    for (const n of g.npcs.list) n.inInterior = ctx;
-    scene.add(p.model.root);
-    g.ui.locationBanner(ctx.name);
-    g.missions.onEnter(ctx);
+    ctx.spawn = builder.call(this, ctx) || { x: 0, z: ctx.d / 2 - 1.6 };
+    if (!b.live) { const u = ctx.update; ctx.update = (dt, t) => { stepOutside(); if (u) u(dt, t); }; } // [V2] dış görüntünün kalan yüzleri
+    if (b.persist) b._ctx = ctx;
     return ctx;
   }
 
@@ -75,6 +89,7 @@ export class Interiors {
     const g = this.game;
     const ctx = this.current;
     if (!ctx) return;
+    const to = ctx.exitTo; ctx.exitTo = null; // [V3] villa: teras kapısından dünyadaki terasa çıkış
     // iç mekân eşyalarını temizle
     for (const pk of g.pickups.list.slice()) if (pk.mesh.parent === ctx.pickupGroup) g.pickups.remove(pk);
     g.pickups.group = g.pickups.cityGroup;
@@ -86,6 +101,7 @@ export class Interiors {
     const nz = d.building.door ? d.building.door.nz : 1;
     p.pos.set(d.x, 0, d.z + nz * 0.6);
     p.heading = nz > 0 ? 0 : Math.PI;
+    if (to) { p.pos.set(to.x, to.y || 0, to.z); p.heading = to.h || 0; p.vy = 0; }
     p.camYaw = p.heading;
     p.inInterior = null;
     p.camInit = false;
@@ -95,6 +111,8 @@ export class Interiors {
     g.missions.onExit(ctx);
     if (ctx.onExit) ctx.onExit(); // [şehir] AVM: silah sesi kancasını geri al
     if (ctx.mall) ctx.mall.crowd.clear(); // [şehir]
+    if (ctx.onExit2) ctx.onExit2(); // [V3]
+    if (ctx.persist) return; // [V3] kalıcı iç mekân: ağlar bir sonraki giriş için saklanır
     ctx.scene.traverse((o) => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); });
     if (ctx.winMat) ctx.winMat.dispose();
     if (ctx.dispose) ctx.dispose(); // [V2] villa: güvenlik kamerası hedefi

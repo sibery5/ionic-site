@@ -256,6 +256,29 @@ export function door(eng, x, z, open = true, kind = 'wood') {
   play(eng, pick(bank(eng, 'door:' + kind + open, 2, (i) => synthDoor(SR2, kind, open, 900 + i * 7 + kind.length + (open ? 1 : 0)), SR2)), { x, z, range: 40, ref: 3, gain: 0.45, rate: 0.95 + Math.random() * 0.1, rev: 0.2, cat: 'misc' });
 }
 
+// [V3] villa sürgülü kapısı: elektrik motoru uğultusu (dişli vızıltısı) + ray üstünde tekerlek gıcırtısı + sonda durma tıkırtısı
+function synthGateMotor(sr, seed) {
+  const R = rng(seed), N = Math.floor(1.8 * sr), d = new Float32Array(N);
+  const F = new BQ('bp', 900, 4, sr), G = new BQ('lp', 300, 0.7, sr);
+  let ph = 0, ph2 = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / sr, u = i / N;
+    const e = Math.min(1, t / 0.12) * Math.min(1, (1.65 - t) / 0.15);
+    if (e <= 0) continue;
+    ph += (50 + 4 * Math.sin(TAU * 0.7 * t)) / sr; ph2 += 1150 / sr;
+    const hum = Math.sin(TAU * ph) * 0.5 + Math.sin(TAU * ph * 2) * 0.3 + Math.sin(TAU * ph * 3) * 0.12;
+    const whine = Math.sin(TAU * ph2) * 0.05;
+    const roll = F.p(R.n()) * (0.15 + 0.1 * Math.sin(TAU * 7 * t + u));
+    d[i] += (G.p(hum) * 0.9 + whine + roll) * e;
+  }
+  modal(d, sr, 1.62, [[1900 + R() * 300, 0.02, 0.4], [3300, 0.01, 0.3], [180, 0.06, 0.5]], 0.6, R); // durma tıkırtısı
+  return normalize(d, 0.7);
+}
+export function gateMotor(eng, x, z) {
+  if (!eng.ctx || !eng._vp) return;
+  play(eng, bank(eng, 'gateMotor', 1, (i) => synthGateMotor(SR2, 2100 + i), SR2)[0], { x, z, range: 45, ref: 4, gain: 0.4, rev: 0.15, cat: 'misc' });
+}
+
 // ---------------- canlılar ----------------
 // martı: harmonik kaynak + pürüz (alt harmonik titreşimi) + iki geniz formantı; uzun "kiyaav" ya da gülüşe benzer "ha-ha-ha"
 function synthGull(sr, seed) {
@@ -485,6 +508,9 @@ export function worldPrewarm(eng) {
     () => bank(eng, 'shellP', 3, (i) => synthShell(eng.ctx.sampleRate, true, 500 + i * 3 + 1)),
     () => stepBank(eng, 'concrete', 0),
     ...['stone', 'grass', 'dirt', 'wood', 'metal', 'water'].flatMap((s) => [0, 1, 2].map((k) => () => stepBank(eng, s, k))),
+    // [V3] villa: kapı sesleri ilk girişte sentezleniyordu (~30 ms), sürgülü kapı motoru
+    ...[true, false].map((o) => () => bank(eng, 'door:wood' + o, 2, (i) => synthDoor(SR2, 'wood', o, 900 + i * 7 + 4 + (o ? 1 : 0)), SR2)),
+    () => bank(eng, 'gateMotor', 1, (i) => synthGateMotor(SR2, 2100 + i), SR2),
   ];
 }
 

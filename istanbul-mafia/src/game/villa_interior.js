@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { Kit, canvasPlane } from './interior_kit.js';
 import { sofa, bedDouble } from './home_interior.js';
 import { marbleTexture, woodTexture } from '../core/textures.js';
+import { VILLA_OFF, TERRACE } from './villa.js'; // [V3]
 
 export const VW = 24, VD = 16, FY = [0, 4.2, 8.4], VH = 12.6;
 const T = 0.3; // dış duvar kalınlığı
@@ -67,7 +68,7 @@ export function buildVillaInterior(VG, I, ctx) {
     for (const [c0, c1, sl, hd, open] of holes) {
       seg(a, c0, 0, h); seg(c0, c1, 0, sl); seg(c0, c1, hd, h);
       if (open) { a = c1; continue; } // kapı boşluğu
-      glass(c1 - c0, hd - sl, 0.04, (c0 + c1) / 2, y + sl, z);
+      VG.glass.pane(ctx, c1 - c0, hd - sl, 0.04, (c0 + c1) / 2, y + sl, z, y); // [V3] kırılan cam
       K.box(c1 - c0, 0.05, T + 0.08, (c0 + c1) / 2, y + sl - 0.05, z, C.stone, { rough: 0.4 }); // denizlik
       for (let m = c0 + 1.6; m < c1 - 0.4; m += 1.6) K.box(0.06, hd - sl, 0.1, m, y + sl, z, 0x2a2a2a, { metal: 0.7, rough: 0.3 }); // kayıt
       a = c1;
@@ -80,7 +81,7 @@ export function buildVillaInterior(VG, I, ctx) {
     for (const [c0, c1, sl, hd, open] of holes) {
       seg(a, c0, 0, h); seg(c0, c1, 0, sl); seg(c0, c1, hd, h);
       if (open) { a = c1; continue; } // kapı boşluğu
-      glass(0.04, hd - sl, c1 - c0, x, y + sl, (c0 + c1) / 2);
+      VG.glass.pane(ctx, 0.04, hd - sl, c1 - c0, x, y + sl, (c0 + c1) / 2, y); // [V3] kırılan cam
       K.box(T + 0.08, 0.05, c1 - c0, x, y + sl - 0.05, (c0 + c1) / 2, C.stone, { rough: 0.4 });
       for (let m = c0 + 1.6; m < c1 - 0.4; m += 1.6) K.box(0.1, hd - sl, 0.06, x, y + sl, m, 0x2a2a2a, { metal: 0.7, rough: 0.3 });
       a = c1;
@@ -109,7 +110,7 @@ export function buildVillaInterior(VG, I, ctx) {
   K.box(8.2, 0.06, 0.08, 8, FY[2] + 1.2, -ez, C.brass, BR); K.box(0.08, 0.06, 10.4, ex, FY[2] + 1.2, -2.8, C.brass, BR);
   cols.add(4, -hz - T, hx + T, -hz, FY[2], FY[2] + 1.25, 'rail'); cols.add(hx, -hz, hx + T, 2.4, FY[2], FY[2] + 1.25, 'rail');
   // terasla iç arasındaki cam bölme (x=4, z -8..2,4) ve kayar cam kapı boşluğu; merdiven holü ile teras arası (z=2,4)
-  wallX(4, -hz, 2.4, FY[2], FH, [[-7.6, -3.9, 0.1, 3.6], [-3.8, -2.4, 0, 2.7, true], [-2.3, 1.9, 0.1, 3.6]], C.plasterUp); // teras çıkışı: cam bölme + kapı boşluğu
+  wallX(4, -hz, 2.4, FY[2], FH, [[-7.6, -3.9, 0.1, 3.6], [-3.8, -2.4, 0.02, 2.7], [-2.3, 1.9, 0.1, 3.6]], C.plasterUp); // teras çıkışı: cam bölme + sürgülü cam kapı ([V3] kapı dünyadaki terasa açılır)
   const terDoor = [-3.8, -2.4];
   wallZ(2.4, 4, hx + T, FY[2], FH, [[5.0, 11.4, 0.6, 3.5]], C.plasterUp);
   void terDoor;
@@ -294,6 +295,7 @@ export function buildVillaInterior(VG, I, ctx) {
 
   // ---------- etkileşimler ----------
   const S = VG.securityCam(ctx, I);
+  ctx.tvRender = S.render; // [V3] yükleme sırasında bir kez çizilir (ilk çizim ~4,5 sn yazılımsal: yeni hedef + şehir malzemeleri)
   ctx.interact.push({ x: 7.0, z: -4.4, r: 1.7, label: 'Uyu ve Oyunu Kaydet', action: () => g.sleepAndSave(), cond: onFloor(1) });
   ctx.interact.push({ x: -2.6, z: -5.0, r: 1.6, label: 'Gardırop (kıyafet değiştir)', action: () => g.ui.openShop('wardrobe'), cond: onFloor(1) });
   ctx.interact.push({ x: -5.7, z: 6.6, r: 1.4, label: 'Kasa ve cephanelik (cephane doldur ₺)', action: () => g.ui.openShop('stash'), cond: onFloor(0) });
@@ -310,8 +312,12 @@ export function buildVillaInterior(VG, I, ctx) {
   };
   // kamera tavanı: bulunulan katın tavanının altında kalsın (yoksa kamera alt kata iner)
   ctx.camMaxY = (py) => (py > FY[2] - 0.8 ? VH : py > FY[1] - 0.8 ? FY[2] - SLAB : FY[1] - SLAB) - 0.25;
-  // dış görüntü (küp) arka plan: camlardan Boğaz, bahçe, gökyüzü
-  if (ctx.outside) s.background = ctx.outside;
+  // [V3] canlı dış görünüm: arka plan yok — şehir aynı karede dünya kamerasıyla arkaya çizilir (VillaGame.installLive)
+  s.background = null;
+  ctx.worldOff = VILLA_OFF;
+  ctx.onEnter = (door) => VG.onEnter(ctx, door);
+  // [V3] teras: sürgülü cam kapıdan gerçek dünyadaki terasa çıkılır (canlı şehir, deniz, gemiler; terastan ateş edilir)
+  ctx.interact.push({ x: 3.3, z: -3.1, r: 1.5, label: 'Terasa çık', action: () => { ctx.exitTo = TERRACE; I.exit(); }, cond: onFloor(2) });
   void canvasPlane;
   return { x: 0, z: hz - 1.6 };
 }

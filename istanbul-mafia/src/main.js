@@ -309,6 +309,7 @@ class Game {
       this.renderer.setPixelRatio(pr0); this.composer.setPixelRatio(pr0);
     } catch (e) { console.error(e); }
     this.scene.remove(warm);
+    if (this.villa) { try { this.villa.warm(); mark('Villa iç mekânı ' + this.villa.warmMs + ' ms'); } catch (e) { console.error(e); } } // [V3] ilk giriş donması
     for (const c of warm.children) { const ud = c.userData; if (ud && ud.lightsMat) ud.lightsMat.dispose(); if (ud && ud.plateGeo) ud.plateGeo.dispose(); }
     mark('Menü');
     this.ui.hideLoading();
@@ -1130,6 +1131,7 @@ class Game {
       if (this.flag) this.flag.rotation.y = Math.sin(t * 2) * 0.15;
       this.updateGps(false);
     } else {
+      if (p.inInterior.worldOff && this.villa) this.villa.worldTick(dt, t); // [V3] villa camlarından görünen dünya canlı kalır
       if (p.inInterior.update) p.inInterior.update(dt, t);
       p.inInterior.scene.traverse(this._spin);
     }

@@ -229,6 +229,7 @@ export class NPC extends Actor {
     }
     // [kanun] polis: ateş açan / saldıran çeteciye müdahale eder (yerdeki yaralıya değil)
     if (this.faction === 'police' && a.lawT > 0 && a.faction === 'gang' && !a.downed && !a.ally) return true;
+    if (this.villaGuard && (a.faction === 'police' || a.faction === 'military')) return false; // [V3] villa korumaları kolluğa ateş etmez
     if (this.ally) return a.hostile || (a.state === 'attack' && a.target && (a.target.isPlayer || a.target.ally)) || (a.faction === 'gang' && !a.ally && g.gangHostile(a.gang));
     if (a.ally) return this.hostile || (this.faction === 'gang' && g.gangHostile(this.gang));
     return false;
@@ -873,7 +874,7 @@ export class NPC extends Actor {
         if (this.handSpeed) { speed = this.handSpeed; this.handSpeed = 0; break; }
         if (this.home && Math.hypot(this.home.x - this.pos.x, this.home.z - this.pos.z) > 1.5) { this.navTo(this.home.x, this.home.z, 1.5, dt, true); speed = this.speed; }
         else if (this.faceYaw !== undefined) this.heading = dampAngle(this.heading, this.faceYaw, 4, dt);
-        this.talking = this.kind === 'gang' && Math.sin(performance.now() * 0.0005 + this.id) > 0.6;
+        this.talking = (this.kind === 'gang' && Math.sin(performance.now() * 0.0005 + this.id) > 0.6) || this.waveT > 0; // [V3] villa koruması el sallar
         break;
       }
       case 'sit': {

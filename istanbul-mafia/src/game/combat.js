@@ -7,6 +7,7 @@ import { inBridge, WATER_Y } from '../world/map.js';
 import { BI } from '../entities/charParts.js';
 import { resolveBullet, playerIncoming, playerBal, capBurst, knockHelmetOff, syncPlayerGear } from './body.js';
 import { GlassFx } from './glassfx.js';
+import { BULLET_SKIP } from './villa_glass.js'; // [V3]
 import { Reticle } from '../ui/reticle.js';
 const HIT_PRI = { body: 1, head: 2, kill: 3 };
 
@@ -350,7 +351,7 @@ export class Combat {
   trace(attacker, origin, dir, def, muzzle, k, depth, skip) {
     const g = this.game;
     const maxD = depth ? Math.min(def.range, 40) : def.range;
-    const st = g.physics.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxD);
+    const st = g.physics.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxD, BULLET_SKIP); // [V3] villa camı/korkuluğu mermiyi durdurmaz
     let t = st ? st.t : maxD;
     const ah = this.rayActors(origin, dir, t, attacker, skip);
     if (ah) t = ah.t;
@@ -358,6 +359,7 @@ export class Combat {
     if (vh) t = vh.t;
     // [savaş] ek hedefler (polis helikopteri vb.)
     const xh = this.rayTargets(origin, dir, t, attacker);
+    if (g.villa && g.villa.glass) g.villa.glass.ray(origin, dir, t); // [V3] geçtiği villa camları çatlar/kırılır
     if (xh) {
       t = xh.t;
       const hp2 = _hp.set(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
@@ -387,6 +389,8 @@ export class Combat {
       if (attacker.isPlayer) g.wanted.onAttackVehicle(v);
     } else if (ah) {
       this.bodyHit(attacker, ah, hp, dir, def, k, depth, loud);
+    } else if (st && st.box && st.box.tag === 'villaHouse' && g.villa && g.villa.glass && g.villa.glass.worldHit(hp, dir, g.villa.off)) {
+      // [V3] dışarıdan villa camına isabet: cam efekti (iç camın durumu da değişir)
     } else if (st) {
       _n.set(st.nx, st.ny, st.nz);
       const surf = this.surfaceOf(st.box, hp);

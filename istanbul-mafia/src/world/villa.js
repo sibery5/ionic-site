@@ -30,7 +30,9 @@ const TRAV = { color: 0xd9cfbd, rough: 0.75 }; // traverten döşeme
 
 export function buildPlayerVilla(city) {
   const cols = city.physics.city, q = city.quality;
-  const B = { props: new GeoBuilder(), plaster: new GeoBuilder(), stone: new GeoBuilder(), glass: new GeoBuilder(), water: new GeoBuilder() };
+  const mkB = () => ({ props: new GeoBuilder(), plaster: new GeoBuilder(), stone: new GeoBuilder(), glass: new GeoBuilder(), water: new GeoBuilder() });
+  const BW = mkB(), BH = mkB(); // [V3] BH: ana bina gövdesi ayrı ağ grubu (içeriden canlı dünya çizilirken gizlenir)
+  let B = BW;
   const solids = []; // çarpışma denetimi için: [x, z, yarıçap, yükseklik, ad]
   const box = (k, x0, y0, z0, x1, y1, z1, o = {}) => B[k].box(x1 - x0, y1 - y0, z1 - z0, { ...o, x: (x0 + x1) / 2, y: y0, z: (z0 + z1) / 2 });
   const col = (x0, z0, x1, z1, y0, y1, tag, name) => { cols.add(x0, z0, x1, z1, y0, y1, tag); if (name) solids.push([(x0 + x1) / 2, (z0 + z1) / 2, Math.min(x1 - x0, z1 - z0) / 2, y1, name]); };
@@ -92,6 +94,7 @@ export function buildPlayerVilla(city) {
 
   // ---------- ana bina ----------
   const H = VL.house;
+  B = BH;
   box('stone', H.x0 - 0.6, 0, H.z0 - 0.6, H.x1 + 0.6, 0.3, H.z1 + 0.6); // subasman
   const FL = [
     { x0: H.x0, x1: H.x1, z0: H.z0, z1: H.z1, y: 0.3 },
@@ -136,6 +139,7 @@ export function buildPlayerVilla(city) {
   { const f = FL[2], y = f.y + FH + 0.45; box('plaster', f.x0 - 0.2, y, f.z0 - 0.2, f.x1 + 0.2, y + 0.8, f.z0 + 0.2); box('plaster', f.x0 - 0.2, y, f.z1 - 0.2, f.x1 + 0.2, y + 0.8, f.z1 + 0.2);
     box('plaster', f.x0 - 0.2, y, f.z0, f.x0 + 0.2, y + 0.8, f.z1); box('plaster', f.x1 - 0.2, y, f.z0, f.x1 + 0.2, y + 0.8, f.z1); box('plaster', 114, y, -834, 122, y + 2.4, -828);
     box('props', 113.6, y + 2.4, -834.4, 122.4, y + 2.6, -827.6, WHITE); }
+  B = BW;
   // sütunlu giriş: iki kat yüksekliğinde 6 sütun, saçaklık, alınlık, basamaklar, kapı
   const PZ = -812.6;
   for (let i = 0; i < 6; i++) {
@@ -156,7 +160,19 @@ export function buildPlayerVilla(city) {
   for (const x of [121.6, 122.4]) box('props', x - 0.03, 1.4, -817.85, x + 0.03, 2.0, -817.75, { color: 0xc8a050, metal: 0.95, rough: 0.2 });
   box('props', 120.4, 3.4, -818.05, 123.6, 4.0, -817.9, WARM_GLASS);
   for (const x of [119.2, 124.8]) { box('props', x - 0.2, 2.4, -817.85, x + 0.2, 2.9, -817.45, { color: 0xffe0a8, emis: 1.4 }); } // aplik
-  col(H.x0 - 0.6, H.z0 - 0.6, H.x1 + 0.6, H.z1 + 0.15, 0, 12.6, 'villaHouse', 'ana bina');
+  // [V3] basamaklı çarpışma: zemin kat, 1. kat (çatısı terası: y 8,1), 2. kat + çatı; teras korkulukları (cam, küpeşte 1,12 m).
+  // Teras yürünür: içeriden "Terasa çık" ile oyuncu gerçek dünyadaki bu terasa çıkar (canlı şehir, ateş edilebilir).
+  col(H.x0 - 0.6, H.z0 - 0.6, H.x1 + 0.6, H.z1 + 0.15, 0, 4.2, 'villaHouse', 'ana bina');
+  { const f1 = FL[1], f2 = FL[2];
+    cols.add(f1.x0 - 0.6, f1.z0 - 0.6, f1.x1 + 0.6, f1.z1 + 0.6, 4.2, 8.1, 'villaHouse');
+    cols.add(f2.x0, f2.z0, f2.x1, f2.z1, 8.1, 12.8, 'villaHouse');
+    cols.add(f2.x1, -834, f2.x1 + 3.2, -826, 7.75, 8.1, 'villaHouse'); // konsol balkon döşemesi
+    const R = (x0, z0, x1, z1, y) => cols.add(x0 - 0.06, z0 - 0.06, x1 + 0.06, z1 + 0.06, y, y + 1.12, 'villaRail');
+    const y1 = FL[2].y, y0 = FL[1].y;
+    R(f1.x0 - 0.6, f1.z0 - 0.6, f1.x1 + 0.6, f1.z0 - 0.6, y1); R(f1.x0 - 0.6, f1.z1 + 0.6, f1.x1 + 0.6, f1.z1 + 0.6, y1);
+    R(f1.x1 + 0.6, f1.z0 - 0.6, f1.x1 + 0.6, f1.z1 + 0.6, y1); R(f1.x0 - 0.6, f1.z0 - 0.6, f1.x0 - 0.6, f1.z1 + 0.6, y1);
+    R(H.x1 + 0.6, H.z0 - 0.6, H.x1 + 0.6, H.z1 + 0.6, y0); R(H.x1 - 4, H.z0 - 0.6, H.x1 + 0.6, H.z0 - 0.6, y0); R(H.x1 - 4, H.z1 + 0.6, H.x1 + 0.6, H.z1 + 0.6, y0);
+  }
 
   // ---------- yükseltilmiş sonsuzluk havuzu ----------
   const D = VL.deck, PL = VL.pool;
@@ -297,13 +313,14 @@ export function buildPlayerVilla(city) {
     stone: pbrMaterial(ashlarPBR(q), { color: 0xefe6d6, scale: 0.35 }),
     glass: glassMat, water: waterMat,
   };
-  for (const k of Object.keys(B)) {
-    if (!B[k].parts.length) continue;
-    const m = new THREE.Mesh(B[k].build(), mats[k]);
+  const house = new THREE.Group(); house.name = 'playerVilla:house'; group.add(house);
+  for (const [BB, par] of [[BW, group], [BH, house]]) for (const k of Object.keys(BB)) {
+    if (!BB[k].parts.length) continue;
+    const m = new THREE.Mesh(BB[k].build(), mats[k]);
     m.name = 'villa:' + k;
     m.castShadow = k !== 'glass' && k !== 'water' && q !== 'low'; m.receiveShadow = k !== 'glass';
     if (k === 'glass' || k === 'water') m.renderOrder = 2;
-    group.add(m);
+    par.add(m);
   }
   // sürgülü kapı (ayrı ağ: açılırken kayar)
   const gb = new GeoBuilder();
@@ -315,7 +332,7 @@ export function buildPlayerVilla(city) {
   group.add(gate);
   city.group.add(group);
   solids.push([V.gate.x, V.z1 - 0.9, 0.2, 2.5, 'kapı']);
-  return { group, gate, gateX0: gate.position.x, solids, layout: VL, cols };
+  return { group, house, gate, gateX0: gate.position.x, solids, layout: VL, cols };
 }
 
 // Zemin maskesine (R asfalt, G kaldırım, B çim, A arnavut kaldırımı) dikdörtgen/halka boyar.
