@@ -134,7 +134,8 @@ export function lightize(g, lens, emi, ch) {
   return g;
 }
 export function bx(w, h, d, x, y, z) { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; }
-export function rbx(w, h, d, r, x, y, z) { const g = new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3)); g.translate(x, y, z); return g; }
+// [deniz] D5: küçük parçada (kol, ayna, koltuk) 2 kademeli yuvarlatma 300 üçgen; 1 kademe 108 ve bu boyda farkı görünmez
+export function rbx(w, h, d, r, x, y, z) { const rr = Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3); const g = rr < 0.015 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, Math.max(w, h, d) < 1.2 || rr < 0.03 ? 1 : 2, rr); g.translate(x, y, z); return g; }
 // eksen: 'x' | 'y' | 'z'
 export function cyl(rt, rb, h, seg, axis, x, y, z, open) {
   const g = new THREE.CylinderGeometry(rt, rb, h, seg, 1, !!open);
@@ -321,16 +322,16 @@ export function wheelGeo(r, w, kind) {
   const hw = w / 2;
   // [araç] lastik: yanaklı (dışa bombeli) dönel profil; yol lastiğinde sırtta üç boyuna oluk, arazi/askerî türde tırtık blokları
   const prof = [], P = (rad, ax) => prof.push(new THREE.Vector2(rad, ax));
-  const side = (sg) => { const h = r - ri; return [[ri, 0.86], [ri + h * 0.25, 0.97], [ri + h * 0.55, 1.02], [ri + h * 0.82, 0.99], [r - 0.012, 0.9], [r - 0.002, 0.8]].map(([a, b]) => [a, sg * b * hw]); };
+  const side = (sg) => { const h = r - ri; return [[ri, 0.86], [ri + h * 0.4, 1.0], [ri + h * 0.8, 1.0], [r - 0.006, 0.86]].map(([a, b]) => [a, sg * b * hw]); }; // [deniz] D5: 6 -> 4 nokta
   for (const [a, b] of side(-1)) P(a, b);
   if (!knob && !moto) {
-    for (const g of [-0.42, 0, 0.42]) { const gw = 0.045 * hw * 2; P(r, (g - 0.08) * hw - gw / 2); P(r - 0.008, (g - 0.08) * hw); P(r - 0.008, (g + 0.08) * hw); P(r, (g + 0.08) * hw + gw / 2); }
+    P(r, -0.12 * hw); P(r - 0.008, 0); P(r, 0.12 * hw); // tek orta oluk
   } else P(r, 0);
   for (const [a, b] of side(1).reverse()) P(a, b);
-  const tire = new THREE.LatheGeometry(prof, moto ? 22 : 24); tire.rotateZ(-Math.PI / 2);
+  const tire = new THREE.LatheGeometry(prof, 16); tire.rotateZ(-Math.PI / 2);
   parts.push(colorize(tire, 0x151515));
   if (knob || moto) {
-    const nT = moto ? 16 : 22;
+    const nT = moto ? 14 : 12;
     for (let i = 0; i < nT; i++) {
       const a = (i / nT) * Math.PI * 2;
       for (const sg of [-1, 1]) {
@@ -343,17 +344,17 @@ export function wheelGeo(r, w, kind) {
   const face = hw * 0.78;
   const silver = kind === 'steel' ? 0x5c6250 : kind === 'black' ? 0x2a2a2a : kind === 'sport' ? 0x9a9ea4 : 0xbfc2c6;
   // jant: iç çanak (koyu), dış dudak, göbek, bijonlar
-  parts.push(colorize(cyl(ri, ri, w * 0.8, 24, 'x', -0.01, 0, 0, true), 0x2c2c2c));
-  parts.push(colorize(new THREE.TorusGeometry(ri - 0.006, 0.012, 6, 30).rotateY(Math.PI / 2).translate(face, 0, 0), silver));
+  parts.push(colorize(cyl(ri, ri, w * 0.8, 16, 'x', -0.01, 0, 0, true), 0x2c2c2c));
+  parts.push(colorize(new THREE.TorusGeometry(ri - 0.006, 0.012, 3, 16).rotateY(Math.PI / 2).translate(face, 0, 0), silver));
   if (moto) {
     for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; parts.push(colorize(beam(0, 0, 0, 0, Math.cos(a) * ri, Math.sin(a) * ri, 0.008, 0.008, true), 0xc0c0c0)); }
     parts.push(colorize(cyl(0.05, 0.05, w, 10, 'x', 0, 0, 0), 0xa0a0a0));
     parts.push(colorize(cyl(r * 0.45, r * 0.45, 0.01, 18, 'x', face - 0.02, 0, 0), 0x8a8a8a));
   } else {
     const hub = ri * 0.24, dish = kind === 'sport' ? 0.035 : 0.022;
-    parts.push(colorize(cyl(hub, hub * 1.08, 0.04, 14, 'x', face - dish, 0, 0), silver));
-    parts.push(colorize(cyl(hub * 0.5, hub * 0.5, 0.012, 12, 'x', face - dish + 0.024, 0, 0), 0x1c1c1c));
-    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; parts.push(colorize(cyl(0.011, 0.011, 0.02, 6, 'x', face - dish + 0.02, Math.cos(a) * hub * 0.68, Math.sin(a) * hub * 0.68), 0x8a8a8a)); }
+    parts.push(colorize(cyl(hub, hub * 1.08, 0.04, 12, 'x', face - dish, 0, 0), silver));
+    parts.push(colorize(cyl(hub * 0.5, hub * 0.5, 0.012, 8, 'x', face - dish + 0.024, 0, 0), 0x1c1c1c));
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; parts.push(colorize(cyl(0.011, 0.011, 0.02, 3, 'x', face - dish + 0.02, Math.cos(a) * hub * 0.68, Math.sin(a) * hub * 0.68), 0x8a8a8a)); }
     // kollar: tür başına sayı ve çift kol; göbekten dudağa dışa doğru kavisli (çanak)
     const spec = { sport: [7, 2, 0.02], suv: [6, 1, 0.05], car: [5, 2, 0.026], offroad: [6, 1, 0.055], black: [5, 1, 0.06], steel: [0], bus: [0] }[kind] || [5, 2, 0.026];
     const [nS, pair, sw] = spec;
@@ -369,9 +370,9 @@ export function wheelGeo(r, w, kind) {
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; parts.push(colorize(cyl(0.02, 0.02, 0.03, 6, 'x', face - 0.01, Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3), 0x9a9a9a)); }
     }
     // fren diski (havalandırmalı halka görünümü) + kaliper
-    parts.push(colorize(cyl(ri * 0.82, ri * 0.82, 0.026, 26, 'x', face - 0.075, 0, 0), 0x7d7f82));
-    parts.push(colorize(cyl(ri * 0.42, ri * 0.42, 0.03, 16, 'x', face - 0.07, 0, 0), 0x3a3a3a));
-    parts.push(colorize(rbx(0.05, ri * 0.42, ri * 0.32, 0.012, face - 0.055, ri * 0.58, ri * 0.18), kind === 'sport' ? 0xb01218 : 0x3c3c40));
+    parts.push(colorize(cyl(ri * 0.82, ri * 0.82, 0.026, 16, 'x', face - 0.075, 0, 0, true), 0x7d7f82));
+    parts.push(colorize(cyl(ri * 0.42, ri * 0.42, 0.03, 10, 'x', face - 0.07, 0, 0), 0x3a3a3a));
+    parts.push(colorize(bx(0.05, ri * 0.42, ri * 0.32, face - 0.055, ri * 0.58, ri * 0.18), kind === 'sport' ? 0xb01218 : 0x3c3c40));
   }
   const g = mergeGeometries(parts);
   wheelCache.set(key, g);
@@ -702,13 +703,13 @@ function planOutline(S) {
   const Rc = box ? 0.14 : Math.min(0.42, S.W * 0.2);
   const arches = S.arches.map((z) => ({ z, r: S.archR, y: S.archY }));
   const cols = [];
-  const NF = 5, NA = 8, NR = 5;
+  const NF = 3, NA = 5, NR = 3; // [deniz] D5: yakın LOD ≤ 12 k üçgen bütçesi (eski 5/8/5, 0,09 m adım: binek ~26 k)
   for (let i = 0; i < NF; i++) cols.push({ k: 'f', t: i / NF });
   for (let i = 0; i < NA; i++) cols.push({ k: 'af', t: i / NA });
   const z0 = zF - Rc, z1 = zR + Rc, zs = new Set();
-  const nS = Math.ceil((z0 - z1) / 0.09);
+  const nS = Math.ceil((z0 - z1) / Math.max(0.2, S.L / 22));
   for (let i = 0; i <= nS; i++) zs.add(+(z0 + (z1 - z0) * (i / nS)).toFixed(4));
-  for (const a of arches) for (let k = 0; k <= 14; k++) { const z = a.z - a.r + (2 * a.r * k) / 14; if (z < z0 && z > z1) zs.add(+z.toFixed(4)); }
+  for (const a of arches) for (let k = 0; k <= 8; k++) { const z = a.z - a.r + (2 * a.r * k) / 8; if (z < z0 && z > z1) zs.add(+z.toFixed(4)); }
   const zl = [...zs].sort((a, b) => b - a);
   const zf = zl.filter((z, i) => i === 0 || zl[i - 1] - z > 0.02);
   for (const z of zf) cols.push({ k: 's', z });
@@ -773,7 +774,7 @@ function bodyShell(S, lo = false) {
     for (const a of arches) { const d = Math.abs(z - a.z); if (d < a.r) return Math.max(cl, a.y + Math.sqrt(a.r * a.r - d * d)); }
     return cl;
   };
-  const NW = lo ? 3 : 11, NC = lo ? 4 : 12, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
+  const NW = lo ? 3 : 7, NC = lo ? 4 : 6, crown = 0.03, tuck = box ? 0.025 : 0.045, sh = box ? 0.06 : 0.1;
   const pos = [], idx = [], xz = [0, 0, 0, 0];
   const rows = NW + NC + 1;
   for (const c of cols) {
@@ -1207,9 +1208,10 @@ function buildInterior(B, S, def) {
   const seats = [];
   // koltuk: minder + sırt + başlık. seats listesine oturma noktası (minder üstü, yerel) eklenir
   const seat = (x, z, wide, y = seatY, n = 1) => {
-    B.d(rbx(wide ? W * 0.62 : 0.48, 0.14, 0.48, 0.05, x, y, z), ic);
+    // [deniz] D5: otobüste 28 koltuk düz kutu (her biri 108 yerine 12 üçgen)
+    B.d(S.st === 'bus' ? bx(0.48, 0.14, 0.48, x, y, z) : rbx(wide ? W * 0.62 : 0.48, 0.14, 0.48, 0.05, x, y, z), ic);
     B.d(beam(x, y + 0.05, z - 0.25, x, y + (open && wide ? 0.24 : 0.62), z - 0.34, 0.1, wide ? W * 0.62 : 0.46), ic);
-    if (!wide) B.d(rbx(0.24, 0.16, 0.08, 0.03, x, y + 0.72, z - 0.36), ic);
+    if (!wide) B.d(S.st === 'bus' ? bx(0.24, 0.16, 0.08, x, y + 0.72, z - 0.36) : rbx(0.24, 0.16, 0.08, 0.03, x, y + 0.72, z - 0.36), ic);
     if (wide && n > 1) for (let i = 0; i < n; i++) seats.push({ x: (i - (n - 1) / 2) * W * 0.26, y: y + 0.07, z });
     else seats.push({ x, y: y + 0.07, z });
   };
@@ -2450,12 +2452,13 @@ export class Vehicle {
     } else if (offRoad && sp > 6 && Math.random() < 0.3) g.particles.dust({ x: this.pos.x - fx * def.len * 0.45, y: 0.1, z: this.pos.z - fz * def.len * 0.45 });
 
     // konum + statik çarpışma (alt adımlı OBB çözücü)
+    const px0 = this.pos.x, pz0 = this.pos.z;
     integrateVehicle(this, dt, phys, isPlayer);
+    // [deniz] D2: köprü genleşme derzi — yalnız tabliye ucundaki gerçek derzde iki dingil "ka-tunk" (eskiden ses yoktu; tık tık ayak sesinden)
+    if (isPlayer && sp > 2 && this.kind === 'car' && bridgeJointCrossed(px0, pz0, this.pos.x, this.pos.z)) { const a = g.audio || audio; if (a.bridgeJoint) a.bridgeJoint(sp, (this.T && this.T.wheelbase) || def.len * 0.6); }
     // köprü tabliyesi: yükseklik ve eğim (Boğaz köprüsü ~20 m, Galata 4.2 m)
     if (this.kind === 'car' && !this.sinking && !this.vy && !(this.destroyed && this.pos.y > (this.groundY || 0) + 0.01)) {
       const by = phys.interiorMode ? null : bridgeHeightAt(this.pos.x, this.pos.z);
-    // [deniz] D2: köprü genleşme derzi — yalnız tabliye ucundaki gerçek derzde iki dingil "ka-tunk" (eskiden ses yoktu; tık tık ayak sesinden)
-    if (isPlayer && sp > 2 && this.kind === 'car' && bridgeJointCrossed(px0, pz0, this.pos.x, this.pos.z)) { const a = g.audio || audio; if (a.bridgeJoint) a.bridgeJoint(sp, (this.T && this.T.wheelbase) || def.len * 0.6); }
       // [dağ] araçlar arazi yüksekliğini hiç okumuyordu (köprü dışı her yer 0): dağa çıkılamıyordu. Arazi bölgesinde yükseklik + eğim
       const th = by === null && !phys.interiorMode && this.pos.x > 900 ? terrainHeight(this.pos.x, this.pos.z) : null;
       this.groundY = by !== null ? by : th !== null ? th : 0;

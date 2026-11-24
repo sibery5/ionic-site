@@ -17,6 +17,43 @@ export const AIR_TYPES = {
   ucak: { name: 'Özel Uçak', price: 4000000, maxSpeed: 70, accel: 9, len: 8.4, wid: 2.2, hei: 2.8, span: 11, hp: 1200, stall: 24, colors: ['#f2f2f2', '#c81010', '#1d3d6e'], style: 'plane' },
 };
 
+// [deniz] D5: kaburga loft — kesitler [z, yMerkez, yarıGenişlik, yarıYükseklik, üs]; süper elips |x/a|^n + |y/b|^n = 1.
+// a0..a1: yalnız bir yay (cam/şerit için, uç kapağı yok); cap: tam kesitte uçları kapat.
+function loft(S, seg = 24, a0 = 0, a1 = Math.PI * 2, cap = true) {
+  const full = a1 - a0 >= Math.PI * 2 - 1e-6, nA = full ? seg : seg + 1, pos = [], idx = [];
+  for (const [z, yc, hw, hh, n] of S) for (let j = 0; j < nA; j++) {
+    const a = a0 + (a1 - a0) * j / seg, c = Math.cos(a), sn = Math.sin(a), e = 2 / n;
+    pos.push(Math.sign(c) * hw * Math.abs(c) ** e, yc + Math.sign(sn) * hh * Math.abs(sn) ** e, z);
+  }
+  for (let i = 0; i < S.length - 1; i++) for (let j = 0; j < seg; j++) {
+    const a = i * nA + j, b = i * nA + (full ? (j + 1) % seg : j + 1), c2 = a + nA, d2 = b + nA;
+    idx.push(a, c2, b, b, c2, d2);
+  }
+  if (full && cap) for (const [i, fl] of [[0, false], [S.length - 1, true]]) {
+    const ci = pos.length / 3; pos.push(0, S[i][1], S[i][0]);
+    for (let j = 0; j < seg; j++) { const a = i * nA + j, b = i * nA + (j + 1) % seg; if (fl) idx.push(ci, b, a); else idx.push(ci, a, b); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+const _bladeC = new Map();
+function bladeGeo(rr) {
+  if (_bladeC.has(rr)) return _bladeC.get(rr);
+  const sh = new THREE.Shape(); // üstten: x kiriş, y açıklık (z'ye döner)
+  sh.moveTo(-0.08, 0.12); sh.lineTo(0.08, 0.12); sh.lineTo(0.08, 0.42); sh.lineTo(0.15, 0.55); sh.lineTo(0.14, rr - 0.25); sh.lineTo(0.06, rr); sh.lineTo(-0.15, rr - 0.05); sh.lineTo(-0.15, 0.55); sh.lineTo(-0.08, 0.42); sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 1 });
+  g.rotateX(Math.PI / 2); g.translate(0, 0.02, 0); // y açıklığı -> +z, kalınlık y
+  _bladeC.set(rr, g);
+  return g;
+}
+const HUB_GEO = (() => {
+  const parts = [colorize(new THREE.CylinderGeometry(0.17, 0.2, 0.14, 16), 0x2a2a2a), colorize(new THREE.CylinderGeometry(0.06, 0.09, 0.12, 10).translate(0, 0.13, 0), 0x3a3a3a)];
+  for (let i = 0; i < 4; i++) { const g = colorize(new THREE.BoxGeometry(0.11, 0.08, 0.36).translate(0, 0, 0.2), 0x4a4a4a); g.rotateY(i * Math.PI / 2); parts.push(g); }
+  return mergeGeometries(parts);
+})();
+
 // ---- askerî: taarruz helikopteri (tandem kokpit, kanatçık, roket kovanı, burun topu) ----
 function attackParts(d) {
   const paint = [], dark = [], chrome = [], glass = [], lights = [];
@@ -117,32 +154,71 @@ function airParts(type) {
   if (d.model === 'attack' || d.model === 'jet') {
     ({ paint, dark, chrome, glass, lights } = d.model === 'jet' ? jetParts(d) : attackParts(d));
   } else if (d.style === 'heli') {
-    // gövde: kalıp çıkarılmış damla profil
-    const prof = new THREE.Shape();
-    prof.moveTo(2.3, 0.75); prof.quadraticCurveTo(2.6, 1.4, 1.8, 2.15); prof.lineTo(-0.9, 2.2); prof.quadraticCurveTo(-1.6, 2.0, -1.9, 1.5); prof.lineTo(-1.9, 0.75); prof.quadraticCurveTo(0, 0.55, 2.3, 0.75);
-    const body = new THREE.ExtrudeGeometry(prof, { depth: 1.7, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.22, bevelOffset: -0.22, bevelSegments: 4, curveSegments: 10 });
-    body.rotateY(-Math.PI / 2); body.translate(0.85, 0, 0);
-    paint.push(prep(body));
-    paint.push(prep(beam(0, 1.6, -1.8, 0, 1.95, -6.0, 0.45, 0.35)));
-    paint.push(prep(rbx(0.08, 1.2, 0.8, 0.04, 0, 2.3, -5.9)));
-    paint.push(prep(rbx(1.4, 0.06, 0.4, 0.02, 0, 1.95, -5.4)));
-    dark.push(colorize(rbx(1.0, 0.45, 1.4, 0.15, 0, 2.4, -0.4), 0x2a2a2a));
-    dark.push(colorize(cyl(0.12, 0.12, 0.5, 8, 'y', 0, 2.75, 0), 0x222222));
-    // kızaklar
-    for (const s of [1, -1]) {
-      dark.push(colorize(beam(s * 1.05, 0.05, -1.6, s * 1.05, 0.05, 1.9, 0.08, 0.08, true), 0x222222));
-      dark.push(colorize(beam(s * 1.05, 0.05, 1.9, s * 1.05, 0.25, 2.25, 0.08, 0.08, true), 0x222222));
-      for (const z of [-0.9, 1.1]) dark.push(colorize(beam(s * 1.05, 0.05, z, s * 0.75, 0.75, z, 0.06, 0.06, true), 0x222222));
+    // [deniz] D5: sivil hafif helikopter (kurgusal): süper elips kesitli gövde (kaburga loft), ayrı burun camı + tavan camı +
+    // kapı camları, kapı çizgileri ve kolları, motor kaportası (hava girişi ızgarası, iki egzoz), rotor direği kaportası,
+    // konik kuyruk bumu, süpürülmüş dikey dengeleyici + alt yüzgeç, uç plakalı yatay dengeleyici, kuyruk rotoru göbeği,
+    // kavisli kızak boruları, basamak, iniş farı, anten; içeride iki koltuk, arka sıra, gösterge paneli, kumanda kolları.
+    // Ölçüler eski modelle aynı zarf (burun z≈+2,6, tavan y≈2,2, kuyruk rotoru [0.18, 2.25, -5.9]): koltuk/rotor konumları korunur.
+    const F = [ // z, yMerkez, yarıGenişlik, yarıYükseklik, üs (2 = elips, 4+ = köşeli)
+      [2.62, 1.30, 0.10, 0.10, 2.2], [2.55, 1.32, 0.48, 0.42, 2.4], [2.35, 1.40, 0.78, 0.62, 2.8], [2.0, 1.45, 0.98, 0.72, 3.2],
+      [1.5, 1.47, 1.08, 0.75, 3.8], [0.8, 1.48, 1.12, 0.76, 4.2], [0.0, 1.48, 1.12, 0.76, 4.2], [-0.8, 1.50, 1.08, 0.74, 4.0],
+      [-1.4, 1.58, 0.92, 0.64, 3.4], [-1.85, 1.70, 0.62, 0.46, 2.8], [-2.1, 1.78, 0.42, 0.34, 2.4],
+    ];
+    paint.push(prep(loft(F, 28)));
+    // kuyruk bumu (koni) ve kuyruk ucu
+    paint.push(prep(loft([[-2.0, 1.78, 0.38, 0.32, 2], [-3.5, 1.9, 0.26, 0.24, 2], [-5.4, 2.05, 0.15, 0.15, 2], [-5.95, 2.1, 0.12, 0.13, 2]], 16)));
+    // motor kaportası + rotor direği kaportası
+    paint.push(prep(loft([[0.9, 2.18, 0.05, 0.02, 2], [0.75, 2.3, 0.42, 0.16, 3], [0.1, 2.42, 0.5, 0.24, 3.2], [-0.9, 2.42, 0.5, 0.24, 3.2], [-1.6, 2.32, 0.4, 0.18, 3], [-1.95, 2.2, 0.12, 0.06, 2]], 20)));
+    paint.push(prep(cyl(0.2, 0.3, 0.3, 14, 'y', 0, 2.75, 0)));
+    // dikey dengeleyici (süpürülmüş) + alt yüzgeç, yatay dengeleyici + uç plakaları
+    const fin = (pts, t, x = 0) => { const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) sh.lineTo(q[0], q[1]); const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 }); g.rotateY(-Math.PI / 2); g.translate(x + t / 2, 0, 0); return g; };
+    paint.push(prep(fin([[-5.2, 2.15], [-5.75, 3.05], [-6.15, 3.1], [-6.0, 2.1]], 0.08)));
+    paint.push(prep(fin([[-5.4, 2.0], [-5.95, 1.55], [-6.12, 1.6], [-5.95, 2.05]], 0.07)));
+    paint.push(prep(rbx(1.9, 0.05, 0.42, 0.02, 0, 1.98, -4.85)));
+    for (const sx of [1, -1]) paint.push(prep(rbx(0.05, 0.42, 0.5, 0.02, sx * 0.95, 2.02, -4.88)));
+    // camlar: burun/ön cam (gövde kesitinin üst yayı, 1,5 cm dışarıda), çene camı (alt burun), kapı camları
+    glass.push(prep(loft(F.slice(1, 6).map((r) => [r[0], r[1], r[2] + 0.015, r[3] + 0.015, r[4]]), 28, Math.PI * 0.08, Math.PI * 0.92, false)));
+    glass.push(prep(loft(F.slice(1, 3).map((r) => [r[0], r[1], r[2] + 0.016, r[3] + 0.016, r[4]]), 28, -Math.PI * 0.55, -Math.PI * 0.45, false)));
+    for (const sx of [1, -1]) {
+      glass.push(prep(rbx(0.02, 0.62, 0.9, 0.01, sx * 1.125, 1.72, 0.55)));
+      glass.push(prep(rbx(0.02, 0.56, 0.8, 0.01, sx * 1.125, 1.72, -0.55)));
+      // kapı çizgileri (koyu ince şerit) ve kollar
+      for (const z of [1.08, 0.02, -1.08]) dark.push(colorize(bx(0.012, 1.18, 0.018, sx * 1.128, 1.45, z), 0x111111));
+      dark.push(colorize(bx(0.012, 0.018, 2.16, sx * 1.128, 0.86, 0), 0x111111));
+      for (const z of [0.2, -0.9]) chrome.push(prep(rbx(0.03, 0.035, 0.16, 0.012, sx * 1.14, 1.32, z)));
+      // basamak
+      dark.push(colorize(bx(0.2, 0.03, 0.7, sx * 1.15, 0.5, 0.25), 0x2a2a2a));
+      // egzoz çıkışları (motorun iki yanında, geriye bakar)
+      dark.push(colorize(cyl(0.085, 0.1, 0.32, 10, 'z', sx * 0.36, 2.42, -1.75, true), 0x3a3633));
+      // hava girişi ızgarası
+      for (let k = 0; k < 4; k++) dark.push(colorize(bx(0.012, 0.03, 0.42, sx * 0.505, 2.32 + k * 0.05, 0.05), 0x151515));
     }
-    // camlar
-    const cp = new THREE.Shape(); cp.moveTo(2.32, 0.9); cp.quadraticCurveTo(2.62, 1.45, 1.82, 2.12); cp.lineTo(0.9, 2.15); cp.lineTo(0.6, 1.0); cp.lineTo(2.32, 0.9);
-    const cg = new THREE.ExtrudeGeometry(cp, { depth: 2.18, bevelEnabled: false, curveSegments: 8 }); cg.rotateY(-Math.PI / 2); cg.translate(1.09, 0, 0);
-    glass.push(prep(cg));
-    for (const s of [1, -1]) glass.push(prep(bx(0.02, 0.7, 1.0, s * 1.11, 1.55, -0.3)));
-    lights.push(lightize(new THREE.SphereGeometry(0.08, 8, 6).translate(1.1, 1.2, -0.5), 0x501010, 0xff2020, 3));
-    lights.push(lightize(new THREE.SphereGeometry(0.08, 8, 6).translate(-1.1, 1.2, -0.5), 0x105010, 0x20ff40, 3));
-    lights.push(lightize(new THREE.SphereGeometry(0.1, 8, 6).translate(0, 2.95, -5.9), 0x601010, 0xff2020, 5));
-    lights.push(lightize(cyl(0.12, 0.12, 0.05, 10, 'z', 0, 0.75, 2.2), 0xdfe6ea, 0xfff2d8, 0));
+    // gövde alt koyu bant (dikiş) ve burun ızgarası
+    dark.push(colorize(loft(F.slice(2, 9).map((r) => [r[0], r[1], r[2] + 0.004, r[3] + 0.004, r[4]]), 28, -Math.PI * 0.62, -Math.PI * 0.38, false), 0x2a2d30));
+    // rotor göbeği altı: eğik plaka + direk
+    chrome.push(prep(cyl(0.18, 0.18, 0.06, 16, 'y', 0, 2.92, 0)));
+    dark.push(colorize(cyl(0.07, 0.08, 0.32, 10, 'y', 0, 2.98, 0), 0x2a2a2a));
+    // kızaklar: kavisli ön uç + iki çapraz boru
+    for (const sx of [1, -1]) {
+      dark.push(colorize(beam(sx * 1.05, 0.06, -1.6, sx * 1.05, 0.06, 1.75, 0.075, 0.075, true), 0x26282a));
+      dark.push(colorize(beam(sx * 1.05, 0.06, 1.75, sx * 1.05, 0.14, 2.1, 0.075, 0.075, true), 0x26282a));
+      dark.push(colorize(beam(sx * 1.05, 0.14, 2.1, sx * 1.05, 0.3, 2.28, 0.075, 0.075, true), 0x26282a));
+      for (const z of [-0.95, 1.05]) {
+        dark.push(colorize(beam(sx * 1.05, 0.06, z, sx * 1.0, 0.55, z, 0.07, 0.07, true), 0x26282a));
+        dark.push(colorize(beam(sx * 1.0, 0.55, z, sx * 0.7, 0.8, z, 0.07, 0.07, true), 0x26282a));
+      }
+    }
+    // iç mekân: iki ön koltuk + arka sıra, gösterge paneli (siper), kumanda kolları
+    for (const sx of [0.45, -0.45]) { dark.push(colorize(rbx(0.5, 0.1, 0.5, 0.03, sx, 0.98, 0.55), 0x2b2a2c)); dark.push(colorize(rbx(0.48, 0.7, 0.1, 0.03, sx, 1.35, 0.27), 0x2b2a2c)); dark.push(colorize(cyl(0.012, 0.016, 0.45, 6, 'y', sx, 1.2, 0.95), 0x111111)); }
+    dark.push(colorize(rbx(1.6, 0.1, 0.5, 0.03, 0, 0.98, -0.65), 0x2b2a2c)); dark.push(colorize(rbx(1.6, 0.65, 0.1, 0.03, 0, 1.33, -0.92), 0x2b2a2c));
+    dark.push(colorize(rbx(1.3, 0.28, 0.4, 0.05, 0, 1.45, 1.55), 0x141516));
+    // ışıklar: seyir (yeşil sağ/kırmızı sol), kuyruk ucu beyaz, dengeleyici ve gövde altında çakar, burun altı iniş farı
+    lights.push(lightize(new THREE.SphereGeometry(0.06, 8, 6).translate(0.97, 2.05, -4.88), 0x105010, 0x20ff40, 3));
+    lights.push(lightize(new THREE.SphereGeometry(0.06, 8, 6).translate(-0.97, 2.05, -4.88), 0x501010, 0xff2020, 3));
+    lights.push(lightize(new THREE.SphereGeometry(0.08, 8, 6).translate(0, 3.15, -6.1), 0x601010, 0xff2020, 5));
+    lights.push(lightize(new THREE.SphereGeometry(0.07, 8, 6).translate(0, 0.7, -0.6), 0x601010, 0xff2020, 5));
+    lights.push(lightize(cyl(0.1, 0.1, 0.05, 12, 'z', 0, 0.86, 2.35), 0xdfe6ea, 0xfff2d8, 0));
+    dark.push(colorize(cyl(0.012, 0.012, 0.5, 5, 'y', 0, 2.45, -2.4), 0x111111));
   } else {
     const prof = new THREE.Shape();
     prof.moveTo(3.4, 1.0); prof.quadraticCurveTo(3.5, 1.4, 2.8, 1.6); prof.lineTo(1.4, 2.25); prof.lineTo(-0.6, 2.2); prof.lineTo(-4.5, 1.7); prof.lineTo(-4.6, 1.45); prof.lineTo(-1.0, 0.75); prof.lineTo(2.5, 0.7); prof.quadraticCurveTo(3.3, 0.75, 3.4, 1.0);
@@ -193,7 +269,10 @@ export function buildAircraftModel(type, color) {
   if (d.style === 'heli') {
     const ry = d.rotorY || 3.02, rr = d.rotorR || 5.6, tp = d.tailPos || [0.18, 2.25, -5.9];
     rotor = new THREE.Group(); rotor.position.set(0, ry, 0);
-    for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, rr).translate(0, 0, rr / 2), bladeMat); b.rotation.y = (i * Math.PI) / 2; rotor.add(b); }
+    // [deniz] D5: pal (kökten uca hafif incelen, ucu süpürülmüş), pal kökü tutucusu, göbek
+    const bg = bladeGeo(rr);
+    for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(bg, bladeMat); b.rotation.y = (i * Math.PI) / 2; rotor.add(b); }
+    rotor.add(new THREE.Mesh(HUB_GEO, darkMat));
     disc = new THREE.Mesh(new THREE.CircleGeometry(rr, 32).rotateX(-Math.PI / 2), discMat); disc.position.y = ry;
     tail = new THREE.Group(); tail.position.set(tp[0], tp[1], tp[2]);
     for (let i = 0; i < 2; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.3, 0.14), bladeMat); b.rotation.x = (i * Math.PI) / 2; tail.add(b); }
