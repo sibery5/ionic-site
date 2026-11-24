@@ -240,6 +240,64 @@ function buildTanker(rng) {
   return { g: finish(P, W, N), L, B, kind: 'tanker' };
 }
 
+// [deniz] D4 Dökme yük gemisi (bulker): yüksek bordalı gövde, beş büyük ambar (yükseltilmiş mezarna + kapak), ambarlar
+// arasında dört güverte vinci (kule + eğik bum, köprü altına sığacak kadar yatık), kıç üst yapısı, baş kasarası.
+function buildBulk(rng) {
+  const L = 88, B = 15;
+  const top = rng.pick([0x2a2a2a, 0x6a1c14, 0x1a3a5a, 0x2e4a2a]);
+  const H = shipHull({ L, B, D: 5.4, F: 4.4, bow: 0.16, stern: 0.84, flare: 0.16, sheer: 0.32, bulb: 4.6, cTop: top, cStripe: 0xe8e8e8 });
+  const P = [...H.parts], W = [], N = [];
+  P.push(vc(H.deck, 0x6a6058));
+  const dy = 4.4, hatchC = rng.pick([0x8a2a1a, 0x2a4a6a, 0x3a5a3a]);
+  // beş ambar: mezarna (yükseltilmiş çerçeve) + iki parçalı kapak, ortada derz
+  for (let i = 0; i < 5; i++) {
+    const z = -L * 0.22 + i * 12.2;
+    P.push(vc(B3(B * 0.66, 1.5, 9.4, 0, dy + 0.75, z), 0x8a8478));
+    P.push(vc(B3(B * 0.64, 0.5, 9.2, 0, dy + 1.75, z), hatchC));
+    P.push(vc(B3(0.08, 0.52, 9.22, 0, dy + 1.76, z), 0x222222));
+    for (let k = -3; k <= 3; k++) P.push(vc(B3(B * 0.645, 0.08, 0.12, 0, dy + 2.02, z + k * 1.3), 0x5a2a1a));
+    // ambarlar arası vinç: kule + kabin + yatık bum (tepe ≤ su hattından 13 m)
+    if (i < 4) {
+      const cz = z + 6.1, sx = (i % 2 ? -1 : 1) * B * 0.18;
+      P.push(vc(CY(0.85, 1.0, 5.2, 10, sx, dy + 2.6, cz), 0xe8c020));
+      P.push(vc(B3(2.2, 1.8, 2.4, sx, dy + 6.0, cz), 0xe8c020));
+      W.push(B3(1.6, 0.7, 0.06, sx, dy + 6.2, cz + 1.22));
+      P.push(vc(rod(sx, dy + 5.6, cz, -sx * 0.6, dy + 8.2, cz + (i % 2 ? -1 : 1) * 10.5, 0.28), 0xe8c020));
+      P.push(vc(rod(sx, dy + 7.2, cz, -sx * 0.6, dy + 8.2, cz + (i % 2 ? -1 : 1) * 10.5, 0.05), 0x333333));
+    }
+  }
+  // baş kasarası + dalgakıran + ırgat
+  P.push(vc(B3(B * 0.82, 1.8, 8, 0, H.deckY(0.95) + 0.9, L * 0.43), top));
+  P.push(vc(B3(B * 0.68, 1.3, 0.3, 0, dy + 2.4, L * 0.385), 0xd8d8d8));
+  for (const s of [-1, 1]) P.push(vc(CY(0.5, 0.5, 0.8, 10, s * 2.2, dy + 2.1, L * 0.44, 'x'), 0x2a2a2a));
+  for (const s of [-1, 1]) P.push(vc(CY(0.55, 0.55, 0.3, 10, s * B * 0.42, dy - 0.6, L * 0.44, 'x'), 0x0a0a0a));
+  // kıç üst yapısı (dört kat), köprüüstü kanatları, baca
+  const sz = -L * 0.4;
+  for (let k = 0; k < 3; k++) {
+    const w = B * 0.8 - k * 0.6, d = 9.5 - k * 0.5;
+    P.push(vc(B3(w, 2.45, d, 0, dy + 1.25 + k * 2.5, sz), 0xf0f0ea));
+    P.push(vc(B3(w + 0.3, 0.1, d + 0.3, 0, dy + 2.5 + k * 2.5, sz), 0xc8c8c0));
+    winRowX(W, sz + d / 2 + 0.01, dy + 1.4 + k * 2.5, -w * 0.42, w * 0.42, 7, 0.9, 0.8);
+    winRow(W, w / 2 + 0.01, dy + 1.4 + k * 2.5, sz - d * 0.4, sz + d * 0.4, 4, 0.9, 0.8);
+  }
+  const by = dy + 8.6;
+  P.push(vc(B3(B * 0.7, 2.2, 6, 0, by, sz + 0.6), 0xf0f0ea));
+  P.push(vc(B3(B * 1.04, 0.35, 2.6, 0, by + 0.7, sz + 2.4), 0xf0f0ea));
+  P.push(vc(B3(B * 0.75, 0.15, 6.4, 0, by + 1.15, sz + 0.6), 0x2a2a2a));
+  W.push(B3(B * 0.66, 1.0, 0.06, 0, by + 0.3, sz + 3.62));
+  railing(P, 0xd8d8d8, -B * 0.52, sz + 3.5, B * 0.52, sz + 3.5, by + 0.88, 0.9, 1.2);
+  P.push(vc(CY(0.12, 0.15, 2.4, 6, 0, by + 2.35, sz), 0xd8d8d8));
+  P.push(vc(B3(2.6, 0.12, 0.3, 0, by + 2.9, sz), 0x333333));
+  P.push(vc(B3(3.0, 3.4, 3.4, 0, dy + 9.4, sz - 3.8), top));
+  P.push(vc(B3(3.05, 0.9, 3.45, 0, dy + 9.9, sz - 3.8), rng.pick([0xe8e8e8, 0xe8a020, 0x1d5aa8])));
+  P.push(vc(CY(0.05, 0.05, 3, 5, 0, H.deckY(0.02) + 1.5, -L * 0.49), 0xdddddd));
+  N.push(lightize(new THREE.SphereGeometry(0.3, 8, 6).translate(B * 0.52, by + 0.75, sz + 2.4), 0x501010, 0xff2020, 0));
+  N.push(lightize(new THREE.SphereGeometry(0.3, 8, 6).translate(-B * 0.52, by + 0.75, sz + 2.4), 0x105010, 0x20ff40, 0));
+  N.push(lightize(new THREE.SphereGeometry(0.32, 8, 6).translate(0, by + 3.7, sz), 0xdddddd, 0xffffff, 0));
+  N.push(lightize(new THREE.SphereGeometry(0.32, 8, 6).translate(0, dy + 3.4, L * 0.45), 0xdddddd, 0xffffff, 0));
+  return { g: finish(P, W, N), L, B, kind: 'bulk' };
+}
+
 // Ahşap balıkçı teknesi (gırgır tipi): renkli bordalı gövde, kaptan köşkü, direk + bum, ağ yığını, şamandıralar,
 // gece parlak lamba.
 function buildFishing(rng) {
@@ -349,7 +407,7 @@ export class ShipTraffic {
     const n = 7;
     const segs = this.routeSegs(big), total = segs.reduce((a, b) => a + b.len, 0);
     for (let i = 0; i < n; i++) {
-      const m = i % 3 === 1 ? buildTanker(this.rng) : buildCargo(this.rng);
+      const m = i % 3 === 1 ? buildTanker(this.rng) : i % 3 === 2 ? buildBulk(this.rng) : buildCargo(this.rng); // [deniz] D4: konteyner, tanker, dökme yük
       let at = this.routePoint(big, segs, (total * (i + 0.37)) / n);
       if (at.z > GATE.z0 - 120 && at.z < GATE.z1 + 120 && at.x > 240 && at.x < 400) at = this.routePoint(big, segs, (total * (i + 0.37)) / n + 400);
       const s = this.addShip(m, at.x, at.z, at.h, { route: big, idx: at.idx, cruise: 5.4 + (i % 3) * 0.25, turnR: 120, loop: true, type: 'big', lane: true });
@@ -363,7 +421,7 @@ export class ShipTraffic {
     });
     // demir yeri: rüzgâra/akıntıya göre yavaşça salınan demirli gemiler
     ANCHORAGE.forEach(([x, z, h], i) => {
-      const m = i % 2 ? buildTanker(this.rng) : buildCargo(this.rng);
+      const m = i % 3 === 1 ? buildTanker(this.rng) : i % 3 === 2 ? buildBulk(this.rng) : buildCargo(this.rng);
       this.addShip(m, x, z, h, { mode: 'anchor', h0: h, type: 'anchor' });
     });
     // balıkçılar ve yatlar (kıyı bantlarında)
@@ -494,7 +552,7 @@ export class ShipTraffic {
     // geçiş bitti mi? (çıkış noktasını L/2 + 15 m geçince bırak)
     if (G.owner === s) {
       const out = G.north ? s.pos.z < GATE.z0 - s.L / 2 - 15 : s.pos.z > GATE.z1 + s.L / 2 + 15;
-      if (out) { G.owner = null; this.stats.gatePasses = (this.stats.gatePasses || 0) + 1; }
+      if (out) { G.owner = null; this.stats.gatePasses = (this.stats.gatePasses || 0) + 1; const k = G.north ? 'gateN' : 'gateS'; this.stats[k] = (this.stats[k] || 0) + 1; }
       return desired;
     }
     const tg = r[s.idx];

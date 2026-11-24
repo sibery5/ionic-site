@@ -16,9 +16,9 @@ module.exports = async (p, out) => {
       const run = (sec) => {
         let minR = 1e9, minPair = null, literal = 0, clearMin = 1e9, under = 0;
         const st0 = { ...S.stats };
-        const t0 = performance.now();
+        const t0 = performance.now(); let tu = 0;
         for (let i = 0; i < sec * 30; i++) {
-          S.update(dt);
+          const u0 = performance.now(); S.update(dt); tu += performance.now() - u0;
           for (let a = 0; a < L.length; a++) {
             const A = L[a];
             const c = S.bridgeClearance(A); if (c !== null) { under++; clearMin = Math.min(clearMin, c); }
@@ -30,10 +30,12 @@ module.exports = async (p, out) => {
             }
           }
         }
-        return { sec, ms: +((performance.now() - t0) / (sec * 30)).toFixed(3), minRatioHalf: +minR.toFixed(3), minPair, literalPairTicks: literal, pushes: S.stats.pushes - st0.pushes, groundings: S.stats.groundings - st0.groundings, gateHolds: S.stats.gateHolds - st0.gateHolds, docks: S.stats.docks - st0.docks, gatePasses: S.stats.gatePasses - st0.gatePasses, stalled: L.filter((s) => s.mode === 'sail' && s.speed < 0.3).length, bridgePassTicks: under, bridgeClearMin: +clearMin.toFixed(2) };
+        return { sec, ms: +((performance.now() - t0) / (sec * 30)).toFixed(3), updMsPerShip: +(tu / (sec * 30) / L.length).toFixed(4), gateN: (S.stats.gateN || 0) - (st0.gateN || 0), gateS: (S.stats.gateS || 0) - (st0.gateS || 0), minRatioHalf: +minR.toFixed(3), minPair, literalPairTicks: literal, pushes: S.stats.pushes - st0.pushes, groundings: S.stats.groundings - st0.groundings, gateHolds: S.stats.gateHolds - st0.gateHolds, docks: S.stats.docks - st0.docks, gatePasses: S.stats.gatePasses - st0.gatePasses, stalled: L.filter((s) => s.mode === 'sail' && s.speed < 0.3).length, bridgePassTicks: under, bridgeClearMin: +clearMin.toFixed(2) };
       };
       res.n = L.length;
       res.kinds = L.reduce((m, s) => { m[s.type] = (m[s.type] || 0) + 1; return m; }, {});
+      res.bigKinds = L.filter((s) => s.type === 'big').reduce((m, s) => { m[s.kind] = (m[s.kind] || 0) + 1; return m; }, {});
+      res.maxAir = +Math.max(...L.filter((s) => s.type === 'big').map((s) => s.air)).toFixed(1);
       res.r120 = run(120);
       res.r900 = run(900);
       res.speeds = L.filter((s) => s.mode !== 'anchor').map((s) => s.type[0] + ':' + s.speed.toFixed(1)).join(' ');
@@ -46,6 +48,9 @@ module.exports = async (p, out) => {
     check('900 sn: trafik akıyor (vapur yanaşmaları, köprü geçişleri)', r.r900.docks >= 6 && r.r900.gatePasses >= 4, [r.r900.docks, r.r900.gatePasses]);
     check('900 sn: son güvence itmesi yok', r.r900.pushes === 0, r.r900.pushes);
     console.log('info: kıyıda durdurma (pruva karaya değmeden, yanaşma manevrası) 120 sn / 900 sn:', r.r120.groundings, r.r900.groundings, '| gerçek sınır yorumu: (Li+Lj) tam boy altına inen çift-tik sayısı', r.r120.literalPairTicks);
+    check('D4: Boğaz devresinde konteyner + tanker + dökme yük', r.bigKinds.cargo > 0 && r.bigKinds.tanker > 0 && r.bigKinds.bulk > 0, r.bigKinds);
+    check('D4: köprü altından iki yönde geçiş (900 sn)', r.r900.gateN >= 1 && r.r900.gateS >= 1, [r.r900.gateN, r.r900.gateS]);
+    check('D4: gemi başına güncelleme ≤ 0,05 ms', r.r900.updMsPerShip <= 0.05, r.r900.updMsPerShip);
     check('köprü altı serbest yükseklik > 0', r.r900.bridgeClearMin > 0.5 || r.r900.bridgePassTicks === 0, r.r900.bridgeClearMin);
   }
 

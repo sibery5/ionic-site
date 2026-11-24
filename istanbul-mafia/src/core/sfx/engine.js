@@ -5,7 +5,7 @@
 // Yöntem: her sınıf için 4 devir noktası x 2 yük (gazda / boşta) = 8 kısa döngü önceden çizilir (tam sayıda çevrim -> dikişsiz).
 // Çalarken komşu iki devir noktası eşit güçle karıştırılır, her döngünün hızı gerçek devire oranlanır (en çok ~%20 perde kayması).
 // Ateşleme frekansı = devir/60 x silindir/2 (dört zamanlı).
-import { BQ, rng, toBuffer } from './dsp.js';
+import { BQ, rng, toBuffer, normalize, fadeOut } from './dsp.js';
 
 const SR = 22050;
 // cyl: silindir, idle/max: devir, modes: egzoz/gövde rezonansları [Hz, Q, kazanç], lp: gazda parlaklık, rough: silindirler arası
@@ -126,4 +126,76 @@ export function makeEngineBank(ctx, kind) {
     },
     stop() { for (const s of srcs) { try { s.stop(); } catch (e) { /* bitti */ } } setTimeout(() => out.disconnect(), 50); },
   };
+}
+
+// ---------------- [deniz] D7: vites kesmesi, egzoz patlaması, turbo boşaltma (önceden örneklenir) ----------------
+// Neden: eski gearShift 70 ms kare dalga "bip" + gürültüydü (vitesten çok arayüz sesi gibi), egzoz patlaması süzülmüş gürültü,
+// turbo tek süpürmeli gürültü. Artık motorla aynı darbe modeli: kesme anında birkaç ateşleme darbesi kesilip söner + şanzıman
+// "tık"ı; patlama = egzozda yanma (sert ön cephe, boru rezonansı, çatırtı kuyruğu); turbo = kelebek vana titremesi (flutter).
+// Tamponlar audio._sfxBank ile sınıf başına bir kez, boşta ön örnekleme kuyruğunda üretilir (oyun anında sentez yok).
+const pipeRes = (S, sr) => S.modes.map(([f, q, g]) => [new BQ('bp', f, q, sr), g]);
+// vites kesmesi: yüksek devirden ateşleme kesilir (darbeler 40 ms'de söner) + debriyaj/şanzıman tıkı + düşük devirde yeniden bağlanış
+export function synthShiftCut(sr, kind = 'car', up = true, v = 0) {
+  const S = ENGINE_SYN[kind] || ENGINE_SYN.car, R = rng(71 + v * 13 + kind.length);
+  const N = Math.floor(0.34 * sr), d = new Float32Array(N), ex = new Float32Array(N);
+  const rpm0 = S.max * (up ? 0.86 : 0.55), rpm1 = S.max * (up ? 0.62 : 0.8);
+  let ph = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / sr;
+    // devir: kesmede 0,09 sn içinde düşer (yukarı vites) / gaz vuruşuyla çıkar (aşağı vites); arada 50 ms boşluk
+    const u = Math.min(1, t / 0.09), rpm = rpm0 + (rpm1 - rpm0) * u * u * (3 - 2 * u);
+    const ff = rpm / 60 * S.cyl / 2; ph += ff / sr;
+    const on = t < 0.035 ? 1 - t / 0.05 : t < 0.085 ? 0.08 : Math.min(1, (t - 0.085) / 0.05) * 0.75;
+    if (ph >= 1) { ph -= 1; const a = on * (0.8 + R() * 0.4); for (let k = 0; k < 40 && i + k < N; k++) ex[i + k] += a * Math.sin(Math.PI * k / 40) + a * 0.4 * R.n() * Math.exp(-k / 20); }
+  }
+  const res = pipeRes(S, sr), LP = new BQ('lp', S.lp * 0.8, 0.7, sr), CL = new BQ('bp', 2400 + R() * 600, 5, sr), MB = new BQ('bp', 340, 4, sr);
+  for (let i = 0; i < N; i++) {
+    let y = LP.p(ex[i]) * 0.6; for (const [b, g] of res) y += b.p(ex[i]) * g;
+    // şanzıman/debriyaj tıkı (kesmenin ortasında) — metalik, kısa
+    const tc = i / sr - 0.045; if (tc > 0 && tc < 0.03) { const n = R.n(); y += CL.p(n) * 2.2 * Math.exp(-tc / 0.004) + MB.p(n) * 1.4 * Math.exp(-tc / 0.012); }
+    d[i] = y;
+  }
+  fadeOut(d, Math.floor(0.06 * sr));
+  return normalize(d, 0.85);
+}
+// egzoz patlaması: 2–6 düzensiz "pat" (sert ön cephe + boru rezonansı) ve aralarda çıtırtı; v8 daha boğuk, moto daha keskin
+export function synthBackfire(sr, kind = 'sport', v = 0) {
+  const S = ENGINE_SYN[kind] || ENGINE_SYN.sport, R = rng(131 + v * 29 + kind.length);
+  const N = Math.floor(0.7 * sr), d = new Float32Array(N);
+  const res = pipeRes(S, sr), LP = new BQ('lp', kind === 'v8' ? 1800 : kind === 'moto' ? 4200 : 3000, 0.8, sr), CR = new BQ('bp', 3500, 1.2, sr);
+  const ex = new Float32Array(N);
+  const n = 2 + Math.floor(R() * (kind === 'v8' ? 3 : 5));
+  let t = 0.01;
+  for (let k = 0; k < n && t < 0.55; k++) {
+    const i0 = Math.floor(t * sr), a = (0.6 + R() * 0.5) * (1 - k / (n + 2));
+    for (let i = 0; i < 0.025 * sr && i0 + i < N; i++) { const e = Math.exp(-i / (0.0025 * sr)); ex[i0 + i] += a * (i < 12 ? 1 : R.n() * 0.9) * e; }
+    // çıtırtı: patlama sonrası seyrek kısa tıklar
+    for (let c = 0; c < 6; c++) { const j = i0 + Math.floor((0.008 + R() * 0.05) * sr); if (j < N) ex[j] += (R() - 0.5) * a * 1.2; }
+    t += 0.04 + R() * 0.1;
+  }
+  for (let i = 0; i < N; i++) { const x = ex[i]; let y = LP.p(x) * 1.2 + CR.p(x) * 0.5; for (const [b, g] of res) y += b.p(x) * g * 0.8; d[i] = Math.tanh(y * 2.2); }
+  fadeOut(d, Math.floor(0.05 * sr));
+  return normalize(d, 0.9);
+}
+// turbo boşaltma: basınçlı hava hışırtısı (yükselip sönen bant) + kelebek vana titremesi (~22 Hz genlik kıyması)
+export function synthBlowoff(sr, v = 0) {
+  const R = rng(211 + v * 7), N = Math.floor(0.55 * sr), d = new Float32Array(N);
+  const B1 = new BQ('bp', 3400 + v * 300, 2.2, sr), B2 = new BQ('bp', 6200, 3, sr), HP = new BQ('hp', 900, 0.7, sr);
+  const fl = 18 + v * 4 + R() * 4;
+  for (let i = 0; i < N; i++) {
+    const t = i / sr, env = Math.min(1, t / 0.012) * Math.exp(-t / 0.16);
+    const flut = t > 0.06 ? 0.55 + 0.45 * Math.sin(Math.PI * 2 * fl * t) ** 2 : 1;
+    const n = R.n();
+    d[i] = HP.p(B1.p(n) * 1.0 + B2.p(n) * 0.5) * env * flut;
+  }
+  return normalize(d, 0.8);
+}
+// ön örnekleme görevleri (index.js kuyruğuna eklenir); a: AudioEngine (_sfxBankStep)
+export function engineSfxPrewarm(a) {
+  const T = [];
+  const add = (key, n, fn) => { for (let i = 0; i < n; i++) T.push(() => a._sfxBankStep(key, n, fn)); };
+  for (const k of ['car', 'sport', 'v8', 'small', 'moto', 'old']) { add('shiftU_' + k, 2, (sr, v) => synthShiftCut(sr, k, true, v)); add('shiftD_' + k, 2, (sr, v) => synthShiftCut(sr, k, false, v)); }
+  for (const k of ['sport', 'v8', 'moto']) add('bfire_' + k, 3, (sr, v) => synthBackfire(sr, k, v));
+  add('blowoff', 2, (sr, v) => synthBlowoff(sr, v));
+  return T;
 }
