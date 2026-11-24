@@ -9,7 +9,7 @@ import { speak, prerenderLines, MEGA_LINES, HELI_LINES } from './announce.js';
 import { gunshot, weaponPrewarm, whiz, dryFire } from './weapons.js';
 import * as WD from './world.js';
 import { uiSound, uiPrewarm } from './ui.js';
-import { enginePrewarm } from './engine.js';
+import { enginePrewarm, engineSfxPrewarm } from './engine.js';
 import { crash, scrape, crashPrewarm } from './crash.js';
 import { installMusic } from '../music.js';
 import { makeLab } from './lab.js';
@@ -39,6 +39,7 @@ export function installSfx(AudioEngine) {
       this._prewarm.push(...weaponPrewarm(this), ...crashPrewarm(this), ...WD.worldPrewarm(this));
       if (this.glassPrewarm) this._prewarm.push(...this.glassPrewarm()); // [B1] cam/et bankaları
       this._prewarm.push(...enginePrewarm(this.ctx)); // [donma] motor döngü bankaları
+      this._prewarm.push(...engineSfxPrewarm(this)); // [deniz] D7: vites kesmesi, egzoz patlaması, turbo
       this._prewarmStep();
       // bekçi: oyun güncellemesi durunca (menü/duraklatma) sirenleri sustur
       setInterval(() => { if (this.ctx && this.ctx.currentTime - this.lastUpdate > 0.5) stopAllSirens(this); }, 500);

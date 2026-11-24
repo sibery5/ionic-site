@@ -6,6 +6,8 @@
 
 import { installSfx } from './sfx/index.js';
 import { addRender } from './sfx/lab.js';
+// [deniz] D7: motor ses sınıfı -> vites kesmesi bankası
+const SHIFT_K = { car: 'car', sport: 'sport', v8: 'v8', small: 'small', moto: 'moto', old: 'old', diesel: 'old', truck: 'old' };
 import { ENGINE_SYN, makeEngineBank } from './sfx/engine.js';
 
 // Motor ses sınıfları: base/span rölanti ve devir aralığı (Hz), h2 alt harmonik, fire ateşleme titreşimi çarpanı,
@@ -511,6 +513,10 @@ export class AudioEngine {
   // vites değişimi: debriyaj tıkırtısı + kısa emme
   gearShift(up = true, kind = 'car') {
     if (!this.ctx || kind === 'bike') return;
+    this._countSfx('gearShift');
+    // [deniz] D7: önceden örneklenmiş vites kesmesi (ateşleme kesilir + şanzıman tıkı); bank hazır değilse eski kısa ses
+    const B = this._bank, k = SHIFT_K[kind] || 'car', L = B && B[(up ? 'shiftU_' : 'shiftD_') + k];
+    if (L) { this._playBank(L, undefined, undefined, 0, 0.06, 0.5, 1); return; }
     const o = this.spatial(undefined, undefined, 0, 0.05); if (!o) return;
     const t = this.ctx.currentTime;
     this.osc(o.node, t, { freq: up ? 160 : 120, freq2: up ? 90 : 160, dur: 0.07, type: 'square', gain: 0.035 });
@@ -519,6 +525,8 @@ export class AudioEngine {
   // turbo boşaltma (gaz kesince "pışşt")
   turbo(k = 1) {
     if (!this.ctx) return;
+    this._countSfx('turbo');
+    if (this._bank && this._bank.blowoff) { this._playBank(this._bank.blowoff, undefined, undefined, 0, 0.1, 0.32 * k, 1); return; } // [deniz] D7: kelebek vana titremeli boşaltma
     const o = this.spatial(undefined, undefined, 0, 0.1); if (!o) return;
     const t = this.ctx.currentTime;
     this.nz(o.node, t, { dur: 0.38, freq: 3200, q: 3, type: 'bandpass', gain: 0.22 * k, sweep: 1400 });
@@ -527,6 +535,9 @@ export class AudioEngine {
   // [B1] egzoz patlamaları: yüksek devirde gaz kesilince (spor/V8/motosiklet) birkaç düzensiz boğuk "pat"
   exhaustPops(kind = 'sport', k = 1) {
     if (!this.ctx) return;
+    this._countSfx('exhaustPops');
+    const BF = this._bank && this._bank['bfire_' + (kind === 'v8' || kind === 'moto' ? kind : 'sport')];
+    if (BF) { this._playBank(BF, undefined, undefined, 0, 0.14, 0.7 * k, 1); return; } // [deniz] D7: egzozda yanma + çıtırtı
     const o = this.spatial(undefined, undefined, 0, 0.12); if (!o) return;
     const t0 = this.ctx.currentTime, n = 2 + Math.floor(Math.random() * (kind === 'v8' ? 3 : 4));
     const f = kind === 'v8' ? 420 : kind === 'moto' ? 900 : 650;

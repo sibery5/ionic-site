@@ -1736,7 +1736,9 @@ const PHYS = {
   tank: { grip: 30, cs: 20, steer: 0, gears: 3, rev: 0.5, soft: 0.3, snd: 'tank', horn: 'truck', offroad: true },
 };
 // [A2] egzoz alevi atan motor sesi sınıfları -> audio.exhaustPops türü
-const FLAME_SND = { sport: 'sport', v8: 'v8', moto: 'moto', car: 'sport', small: 'sport' };
+// [deniz] D7: alev yalnız spor/V8/motosiklet ve tuning (motor yükseltmesi) araçlarda; sıradan binek alev atmaz
+const FLAME_SND = { sport: 'sport', v8: 'v8', moto: 'moto' };
+const flameOf = (P, g) => FLAME_SND[P.snd] || (g.state && g.state.carUpgrade && (P.snd === 'car' || P.snd === 'small') ? 'sport' : null);
 const rnd = (k = 1) => (Math.random() * 2 - 1) * k;
 
 // birleşik geometriden etiket aralığını ayrı geometri olarak kopyala
@@ -2387,7 +2389,8 @@ export class Vehicle {
       if (a.gearShift) a.gearShift(this.gear > g0, P.snd);
       if (this.gear > g0 && P.turbo && a.turbo && throttle > 0.5 && this.rpm > 0.7) a.turbo(0.8);
       // [A2] egzoz alevi: vites yükseltmede (gazdayken) ve düşürmede kısa alev + patlama
-      if (FLAME_SND[P.snd] && (this.gear < g0 ? fs > 6 : throttle > 0.5 && this.rpm > 0.6)) { this.flameT = 0.16; this.flameK = this.gear > g0 ? 1 : 0.7; if (a.exhaustPops) a.exhaustPops(FLAME_SND[P.snd], 0.6); }
+      const fk = flameOf(P, g);
+      if (fk && (this.gear < g0 ? fs > 6 : throttle > 0.5 && this.rpm > 0.6)) { this.flameT = 0.16; this.flameK = this.gear > g0 ? 1 : 0.7; if (a.exhaustPops) a.exhaustPops(fk, 0.6); }
       // [B1] vites küçültmede devir eşleme gazı (blip): devir anında yükselir
       if (this.gear < g0 && fs > 3) this.rpm = Math.min(1.05, this.rpm + 0.22);
     }
@@ -2399,8 +2402,9 @@ export class Vehicle {
       const a = g.audio || audio;
       if (P.turbo && a.turbo) a.turbo(0.6); // turbo boşaltma "pışşt"
       // [B1] egzoz patlamaları: spor/V8/motosiklet sınıfı gaz kesince
-      if ((P.snd === 'sport' || P.snd === 'v8' || P.snd === 'moto') && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(P.snd, Math.min(1, this.rpm));
-      if (FLAME_SND[P.snd]) { this.flameT = 0.22; this.flameK = 0.85; } // [A2] gaz kesince yüksek devirde alev
+      const fk = flameOf(P, g);
+      if (fk && a.exhaustPops && Math.random() < 0.8) a.exhaustPops(fk, Math.min(1, this.rpm));
+      if (fk) { this.flameT = 0.22; this.flameK = 0.85; } // [A2] gaz kesince yüksek devirde alev
     }
     // [B1] devir sınırlayıcı: vites sonunda tam gazda devir titrer (son vites hariç)
     if (throttle > 0.8 && this.gear === nG - 1 && sp > max * 0.97) rpmT = Math.min(rpmT, 0.97);
