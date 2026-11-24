@@ -13,7 +13,7 @@ import { integrateVehicle, collideAllVehicles, driveDynamics } from './vehicle_p
 const _drvIn = { throttle: 0, steer: 0, hb: false, canDrive: false, offRoad: false, fs: 0, ls: 0, max: 1, wet: 1 };
 import { driveVehicleAI, maybePark, maybeUnpark } from '../world/traffic_ai.js';
 import { Debris } from '../world/debris.js';
-import { bridgeHeightAt, bridgeSlopeAt } from '../world/bridge_profile.js';
+import { bridgeHeightAt, bridgeSlopeAt, bridgeJointCrossed } from '../world/bridge_profile.js';
 import { terrainHeight } from '../world/terrain.js';
 import { BIKE_BUILDERS } from './two_wheelers.js';
 import { seatDriver, hideSeatRider } from './character.js';
@@ -2454,6 +2454,8 @@ export class Vehicle {
     // köprü tabliyesi: yükseklik ve eğim (Boğaz köprüsü ~20 m, Galata 4.2 m)
     if (this.kind === 'car' && !this.sinking && !this.vy && !(this.destroyed && this.pos.y > (this.groundY || 0) + 0.01)) {
       const by = phys.interiorMode ? null : bridgeHeightAt(this.pos.x, this.pos.z);
+    // [deniz] D2: köprü genleşme derzi — yalnız tabliye ucundaki gerçek derzde iki dingil "ka-tunk" (eskiden ses yoktu; tık tık ayak sesinden)
+    if (isPlayer && sp > 2 && this.kind === 'car' && bridgeJointCrossed(px0, pz0, this.pos.x, this.pos.z)) { const a = g.audio || audio; if (a.bridgeJoint) a.bridgeJoint(sp, (this.T && this.T.wheelbase) || def.len * 0.6); }
       // [dağ] araçlar arazi yüksekliğini hiç okumuyordu (köprü dışı her yer 0): dağa çıkılamıyordu. Arazi bölgesinde yükseklik + eğim
       const th = by === null && !phys.interiorMode && this.pos.x > 900 ? terrainHeight(this.pos.x, this.pos.z) : null;
       this.groundY = by !== null ? by : th !== null ? th : 0;

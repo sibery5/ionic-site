@@ -63,3 +63,11 @@ export function bridgeSlopeAt(x, z, out = { x: 0, z: 0 }) {
 }
 // Gemiler için: Boğaz köprüsü altındaki serbest yükseklik (su seviyesinden, tabliye altı ~2.6 m kalın)
 export function bridgeClearanceAt(x) { return bosphorusDeckY(x) - 2.6 - WATER_Y; }
+// [deniz] D2: genleşme derzleri yalnız tabliye uçlarında (asma köprüde gerçek derz kule/ayak uçlarındadır).
+// (px,pz)->(x,z) adımı bir derz çizgisini geçtiyse true (araç tekerlek "ka-tunk" sesi için).
+const crossed = (a, b, c) => (a - c) * (b - c) < 0;
+export function bridgeJointCrossed(px, pz, x, z) {
+  if (BOS && z >= BOS.z0 && z <= BOS.z1 && (crossed(px, x, BAR_X0) || crossed(px, x, BAR_X1))) return true;
+  if (GAL && x >= GAL.x0 && x <= GAL.x1 && (crossed(pz, z, GAL_BZ0) || crossed(pz, z, GAL_BZ1))) return true;
+  return false;
+}

@@ -522,6 +522,17 @@ export class AudioEngine {
     this.osc(o.node, t, { freq: up ? 160 : 120, freq2: up ? 90 : 160, dur: 0.07, type: 'square', gain: 0.035 });
     this.nz(o.node, t, { dur: 0.05, freq: 1800, q: 2, type: 'bandpass', gain: 0.06 });
   }
+  // [deniz] D2: köprü genleşme derzi: ön ve arka dingil ayrı ayrı (aralık = dingil mesafesi / hız), boğuk lastik darbesi + hafif metal
+  bridgeJoint(speed = 10, wb = 2.7) {
+    if (!this.ctx) return;
+    this._countSfx('bridgeJoint');
+    const o = this.spatial(undefined, undefined, 0, 0.08); if (!o) return;
+    const t0 = this.ctx.currentTime, k = Math.min(1, 0.35 + speed / 30), dt = Math.min(0.4, wb / Math.max(2, speed));
+    for (const [d, g] of [[0, 1], [dt, 0.8]]) {
+      this.osc(o.node, t0 + d, { freq: 95, freq2: 55, dur: 0.07, type: 'sine', gain: 0.22 * k * g, attack: 0.002 });
+      this.nz(o.node, t0 + d, { dur: 0.04, freq: 520, q: 1.2, type: 'bandpass', gain: 0.07 * k * g, attack: 0.001 });
+    }
+  }
   // turbo boşaltma (gaz kesince "pışşt")
   turbo(k = 1) {
     if (!this.ctx) return;

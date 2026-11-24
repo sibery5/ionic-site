@@ -324,7 +324,8 @@ export class Combat {
     const g = this.game;
     if (g.player && g.player.inInterior) return 'wood';
     if (g.physics.inWater(x, z)) return 'water';
-    if (inBridge(x, z)) return 'metal';
+    // [deniz] D2: köprü tabliyesi asfalt/beton; 'metal' her adımda metalik tık çıkarıyordu (köprüde "tık tık")
+    if (inBridge(x, z)) return 'concrete';
     const parks = g.map && g.map.parks;
     if (parks) for (let i = 0; i < parks.length; i++) { const b = parks[i]; if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) return 'grass'; }
     return 'concrete';
