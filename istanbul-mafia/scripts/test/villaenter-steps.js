@@ -24,6 +24,8 @@ module.exports = async (p) => {
     wrap(R, 'compile', 'renderer.compile'); wrap(g, 'render', 'game.render');
     wrap(g.npcs, 'update', 'npcs.update'); wrap(g.npcs, 'unstash', 'npcs.unstash'); wrap(g.npcs, 'stash', 'npcs.stash');
     for (const k of ['door', 'glassBreak', 'glassCrack']) wrap(g.audio, k, 'audio.' + k);
+    for (const k of ['player', 'seating', 'cityLife', 'env', 'combat', 'particles', 'pickups', 'wanted', 'law', 'missions', 'social', 'life', 'ui', 'city', 'perf']) if (g[k]) wrap(g[k], 'update', k + '.update');
+    wrap(g, 'autosaveTick', 'autosaveTick'); wrap(g.ui, 'locationBanner', 'ui.locationBanner'); wrap(g.missions, 'onEnter', 'missions.onEnter');
     if (g.villaGlass) for (const k of ['hit', 'update']) wrap(g.villaGlass, k, 'villaGlass.' + k);
     const top = () => Object.entries(prof).sort((a, b) => b[1].max - a[1].max).slice(0, 7).map(([k, e]) => `${k}: max ${e.max.toFixed(1)} ms, ${e.n}x`);
     const reset = () => { for (const k in prof) delete prof[k]; };
