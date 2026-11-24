@@ -335,7 +335,9 @@ export function driveDynamics(v, dt, I) {
   // 1.5 (oyuncu: "frenler tutmuyor"): basınç ~0,05 sn'de dolar; binek ~1,5 g, spor ~1,6 g, ağır araç ~0,85 g.
   // 100 km/s'den duruş ~35 m'den ~26 m'ye iner (gerçekçi sınırın biraz üstü, oyun hissi için).
   v.brakeP = (v.brakeP || 0) + (brakeWant - (v.brakeP || 0)) * Math.min(1, dt * (brakeWant > (v.brakeP || 0) ? 20 : 16));
-  v.brakeDecel = Math.min(muGrip * 1.15, heavy ? 8.5 : 16);
+  // [deniz] D6 (3.0): binek ~1,6 g (24 m) gerçek dışıydı; ABS'li gerçek fren ~0,95-1,05 g: 100 km/s'den 38-45 m.
+  // Spor araç (yüksek tutuş) üst sınırda, motosiklet ayrı (ön/arka fren dengesi, ~0,9 g), ağır araç değişmedi.
+  v.brakeDecel = heavy ? Math.min(muGrip * 1.15, 8.5) : P.snd === 'moto' ? Math.min(muGrip * 0.6, 8.6) : clamp(muGrip * 0.66, 7.5, 9.4);
   if (throttle > 0) {
     if (fs < -0.5) fs += v.brakeDecel * throttle * dt; // geri giderken ileri gaz = fren
     else {
@@ -350,7 +352,7 @@ export function driveDynamics(v, dt, I) {
   } else if (throttle < 0) {
     // [A2] ABS: direksiyon kırıkken fren gücünün bir kısmı yanal tutuşa bırakılır (sürtünme çemberi) -> fren + dönüş birlikte
     const absK = 1 - 0.3 * Math.min(1, Math.abs(v.steerAng) / Math.max(0.05, P.steer / (1 + (fs * fs) / 520)));
-    if (fs > 0.5) fs -= Math.min(fs, (v.brakeDecel + Math.min(1.5, sp * 0.04)) * v.brakeP * absK * dt);
+    if (fs > 0.5) fs -= Math.min(fs, (v.brakeDecel + Math.min(0.6, sp * 0.02)) * v.brakeP * absK * dt);
     else if (fs > -max * 0.3) fs += def.accel * 0.35 * throttle * dt;
   } else fs -= Math.sign(fs) * Math.min(Math.abs(fs), (0.7 + sp * 0.012 + (offRoad ? 1.5 : 0)) * dt); // motor freni + yuvarlanma
   if (throttle >= 0) v.brakeP *= Math.exp(-dt * 16);

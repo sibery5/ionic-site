@@ -94,6 +94,9 @@ function measure(type) {
     o.cbSlip = +sm.toFixed(1); o.cbKmh = +kmh(v).toFixed(0); }
   // slalom: 80 km/s'de 0,6 sn'de bir sol/sağ tam direksiyon, 3 sn; azami kayma
   { at(v, 80 / 3.6); let sm = 0; for (let i = 0; i < N(3); i++) { step(v, hold(v, 80 / 3.6), Math.floor(i * DT / 0.6) % 2 ? -1 : 1, false); sm = Math.max(sm, slip(v)); } o.slalom = +sm.toFixed(1); }
+  // [deniz] D6: 60 km/s'de 90° viraj (klavye: tam direksiyon, gaz hızı korur) — azami kayma açısı ve virajın yarıçapı
+  { at(v, 60 / 3.6); let sm = 0, t9 = 0; while (Math.abs(v.heading) < Math.PI / 2 && t9 < 6) { step(v, hold(v, 60 / 3.6), 1, false); sm = Math.max(sm, slip(v)); t9 += DT; }
+    o.turn90slip = +sm.toFixed(1); o.turn90R = +(Math.hypot(v.x, v.z) / Math.SQRT2).toFixed(0); o.turn90kmh = +kmh(v).toFixed(0); }
   return o;
 }
 const types = process.argv.slice(2).length ? process.argv.slice(2) : ['sedan', 'gt', 'suv', 'motor', 'bus'];
