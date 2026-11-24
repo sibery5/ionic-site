@@ -1131,6 +1131,7 @@ class Game {
       if (this.flag) this.flag.rotation.y = Math.sin(t * 2) * 0.15;
       this.updateGps(false);
     } else {
+      if (p.inInterior.worldOff && this.villa) this.villa.worldTick(dt, t); // [V3] villa camlarından görünen dünya canlı kalır
       if (p.inInterior.update) p.inInterior.update(dt, t);
       p.inInterior.scene.traverse(this._spin);
     }

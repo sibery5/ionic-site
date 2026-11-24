@@ -204,3 +204,12 @@ Standart böyle yükselir. Hedef: iş başına araç çağrısı ve yeniden iş 
   NSIS kurulum dosyası Linux'ta kaldırıcı üretmek için wine ister; wine'sız yalnız taşınabilir hedef çıkar
   (`electron-builder --win portable --x64 -c.win.signAndEditExecutable=false`; exe simgesi gömülmez). Teslimden önce `wine cmd /c echo` ile denetle.
 - **node_modules depoya girdi:** bir ekip sembolik bağlantıyı commit'ledi, birleştirmede gerçek klasörün yerine geçti, derleme kırıldı. `.gitignore`'a eklendi; ekipler yalnız src/scripts/docs/assets ekler.
+
+### V3 dersleri (villa donması)
+- **Donmayı adıyla bul, sonra çöz:** villaya ilk giriş 5,3 sn'ydi; sarmalayıcı 4,9 sn'yi küp görüntünün ilk yüzlerine (şehir 6 yöne ilk kez çizilince
+  binanın arkasındaki malzemelerin gölgelendiricileri derleniyor) verdi. `renderer.compile` yetmedi (24 yeni program): ilk kareyi küçük çözünürlükte
+  gerçekten çizmek (birkaç yön) gerekiyor. Yeni program sayısını `renderer.info.programs` farkıyla ölç.
+- **Testte kare = giriş işi + güncelleme + çizim:** giriş/çıkış çağrısını ölçülen karenin dışında bırakmak donmayı gizler.
+- **Ayrı sahneli iç mekânda dünyayı göstermenin ucuz yolu:** şehri aynı kamerayla (dünyaya kaydırılmış) çiz, derinliği temizle, iç mekânı üstüne çiz.
+  Küp/panorama yok; pencere ve teras gerçekten canlı.
+- **Bekleme döngüsünde geniş `pgrep -f` deseni başka oturumun bekleme kabuğunu yakalayıp sonsuza dek bekletir:** `node [^ ]*(play|atolye)` gibi dar desen kullan.

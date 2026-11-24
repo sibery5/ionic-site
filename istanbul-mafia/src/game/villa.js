@@ -198,6 +198,26 @@ export class VillaGame {
     return null;
   }
 
+  // [V3] Villa içindeyken dış dünya durmaz: trafik, tekneler, gemiler, sokak ışıkları ilerler (pencereden görünen hareket).
+  // Bu sistemler oyuncu/kamera konumunu dünya çerçevesinde bekler: o süre için konumlar dünyaya kaydırılır, fizik şehir
+  // çarpışmasına, NPC listesi saklı şehir listesine döner; sonra hepsi geri alınır. İç mekândaki NPC'ler etkilenmez.
+  worldTick(dt, t) {
+    const g = this.g, p = g.player, ctx = p.inInterior, o = ctx.worldOff, ph = g.physics, N = g.npcs, cam = g.camera.position;
+    const act = ph.active, im = ph.interiorMode, L = N.list, G = N.group;
+    p.pos.add(o); cam.add(o);
+    ph.active = ph.city; ph.interiorMode = false;
+    N.list = N.saved || []; N.group = N.cityGroup;
+    p.inInterior = null;
+    try {
+      g.vehicles.update(dt); g.traffic.update(dt); g.boats.update(dt); g.ships.update(dt);
+      if (g.nightLights) g.nightLights.update(dt, cam);
+    } catch (e) { console.warn('villa dünya adımı', e); }
+    p.inInterior = ctx;
+    N.list = L; N.group = G;
+    ph.active = act; ph.interiorMode = im;
+    p.pos.sub(o); cam.sub(o);
+  }
+
   // [V3] Canlı dış görünüm: villa içindeyken çizim geçişi önce ŞEHRİ aynı kamerayla (dünyaya kaydırılmış) çizer — bina gövdesi gizli —,
   // sonra derinliği temizleyip iç mekânı üstüne çizer. Pencereler ve teras gerçekten dünyaya açılır: trafik, deniz, gemiler,
   // gün saati ve hava canlıdır; küp yakalama ve onun ilk-giriş donması yoktur. Ek maliyet: dışarıdaki tek şehir çizimi kadar.
@@ -314,6 +334,10 @@ export class VillaGame {
       if (!n || n.dead || n.downed || (n.state === 'attack' && n.target && !n.target.dead)) continue;
       if (this.alertT > 0 && !p.vehicle && this.inside) { if (n.state !== 'follow') { n.state = 'follow'; n.leader = p; n.side = n.post % 2 ? 1 : -1; } }
       else if (n.state === 'follow' || (n.state === 'attack' && (!n.target || n.target.dead))) { n.state = n.restState(); n.target = null; n.leader = null; }
+    }
+    // hedefi dünyadan kalkmış (silinmiş/uzaklaşmış) korumalar görevine döner
+    if (this.scanT === 0.4) for (const n of this.guards) {
+      if (n && !n.dead && n.state === 'attack' && n.target && !n.target.isPlayer && g.npcs.list.indexOf(n.target) < 0) { n.state = n.restState(); n.target = null; }
     }
   }
 

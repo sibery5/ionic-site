@@ -229,6 +229,7 @@ export class NPC extends Actor {
     }
     // [kanun] polis: ateş açan / saldıran çeteciye müdahale eder (yerdeki yaralıya değil)
     if (this.faction === 'police' && a.lawT > 0 && a.faction === 'gang' && !a.downed && !a.ally) return true;
+    if (this.villaGuard && (a.faction === 'police' || a.faction === 'military')) return false; // [V3] villa korumaları kolluğa ateş etmez
     if (this.ally) return a.hostile || (a.state === 'attack' && a.target && (a.target.isPlayer || a.target.ally)) || (a.faction === 'gang' && !a.ally && g.gangHostile(a.gang));
     if (a.ally) return this.hostile || (this.faction === 'gang' && g.gangHostile(this.gang));
     return false;

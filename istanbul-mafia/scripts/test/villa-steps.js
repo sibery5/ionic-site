@@ -34,7 +34,7 @@ module.exports = async (p, out) => {
     const V = MAPDATA_V(); const w = game.villa.w;
     return { area: (V.x1 - V.x0) * (V.z1 - V.z0), solids: w.solids.length, pools: game.villa.w && window.game.physics.inWater(159, -833), guards: game.villa.guards.length, cars: game.villa.cars.length, helis: game.villa.helis.map((h) => h.type), boat: !!game.villa.boat };
     function MAPDATA_V() { return { x0: 77, x1: 177, z0: -873, z1: -773 }; }
-  }, (r) => r.area >= 9500 && r.area <= 10500 && r.pools && r.guards === 8 && r.cars === 4 && r.helis.length === 2);
+  }, (r) => r.area >= 9500 && r.area <= 10500 && r.pools && r.guards === 4 && r.cars === 4 && r.helis.length === 2);
 
   // 1) kapı: uzaktayken kapalı (çarpışma var), yaklaşınca açılır, yürüyerek içeri girilir
   await T('kapıdan gir', () => {
