@@ -840,6 +840,7 @@ export function oceanMaterial(quality) {
     defines: { MAX_SHIPS, MAX_OBS, HIQ: hi, HARBOR_A: 'vec2(' + HARBOR_BOX[0].toFixed(1) + ',' + HARBOR_BOX[1].toFixed(1) + ')', HARBOR_B: 'vec2(' + HARBOR_BOX[2].toFixed(1) + ',' + HARBOR_BOX[3].toFixed(1) + ')' },
     vertexShader: `
       uniform float uTime, uWave; uniform vec2 uCenter;
+      uniform vec4 uShipP[MAX_SHIPS]; uniform vec4 uShipD[MAX_SHIPS];
       varying vec3 vW; varying float vDist; varying float vCrest;
       ${OCEAN_WAVES}
       #include <fog_pars_vertex>
@@ -864,10 +865,26 @@ export function oceanMaterial(quality) {
         float dist = length(p.xz - cameraPosition.xz);
         float fade = 1.0 - smoothstep(120.0, 520.0, dist);
         fade *= mix(0.12, 1.0, smoothstep(0.0, 38.0, structD(p.xz)));
-        vec3 w = waves(p.xz, uTime) * uWave * fade;
+        // [deniz] D1: tekne/gemi gövdesi içinde su yüzü çizilmesin. Tekne JS dalgasıyla (boats.waveH) yüzer, görünen deniz
+        // başka dalgalarla ±0,3-1 m oynar: tepe, açık kokpit/güverte zemininin üstüne çıkıp teknenin içinde gökyüzünü yansıtan
+        // "şeffaf/yansıma parçası" gibi görünüyordu. Gövde ayak izinde (süper elips) dalga sönümlenir ve yüz 0,6 m aşağı iner.
+        float hullK = 0.0, hullIn = 0.0;
+        for (int i = 0; i < MAX_SHIPS; i++) {
+          vec4 s = uShipP[i]; vec4 sd = uShipD[i];
+          vec2 dd = p.xz - s.xy;
+          if (abs(dd.x) + abs(dd.y) > sd.x + sd.y + 10.0) continue;
+          float lz = dot(dd, s.zw), lx = dd.x * s.w - dd.y * s.z;
+          float u = lz / max(sd.x, 0.5);
+          float wf = u > 0.3 ? sqrt(max(0.0, 1.0 - (u - 0.3) * (u - 0.3) / 0.49)) : 1.0; // pruva sivrilir (gövde dışı su çökmez)
+          vec2 q = abs(vec2(lx / max(sd.y * max(wf, 0.05), 0.3), u));
+          float e = pow(pow(q.x, 4.0) + pow(q.y, 4.0), 0.25);
+          hullK = max(hullK, 1.0 - smoothstep(0.9, 1.7, e));
+          hullIn = max(hullIn, 1.0 - smoothstep(0.82, 0.98, e));
+        }
+        vec3 w = waves(p.xz, uTime) * uWave * fade * (1.0 - 0.85 * hullK);
         // Gerstner: tepelere doğru yatay sıkışma
         p.xz -= vec2(w.y, w.z) * 1.0;
-        p.y += w.x;
+        p.y += w.x - 0.6 * hullIn;
         vCrest = w.x / max(uWave, 0.01);
         vW = p; vDist = dist;
         vec4 mvPosition = viewMatrix * vec4(p, 1.0);
